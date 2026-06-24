@@ -27,7 +27,11 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	if err != nil {
 		m.log.Error("offer decrypt call key", "err", err)
 	}
-	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
+	// The offer carries its relay endpoints in a <relay> block (<te2>/<token>/
+	// <key>/<hbh_key>), the same structure as the offer-ack — so use the parser
+	// that already works for outgoing calls. The legacy ExtractRelayEndpoints only
+	// understood a <relay ip=.. token=..> attribute form and returned 0 here.
+	parsedRelay := signaling.ParseRelayFromAck(info.InnerNode)
 
 	mediaType := core.CallMediaTypeAudio
 	if isVideo {
@@ -39,8 +43,15 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	if callKey != nil {
 		call.EncryptionKey = callKey
 	}
-	if len(relays) > 0 {
-		call.RelayData = &core.RelayData{Endpoints: relays}
+	if len(parsedRelay.Relays) > 0 {
+		call.RelayData = &core.RelayData{
+			Endpoints:       parsedRelay.Relays,
+			ParticipantJids: parsedRelay.ParticipantJids,
+			UUID:            parsedRelay.UUID,
+			SelfPid:         parsedRelay.SelfPid,
+			PeerPid:         parsedRelay.PeerPid,
+			HbhKey:          parsedRelay.HbhKey,
+		}
 	}
 	m.currentCall = call
 	m.initialTransportSent = false
@@ -67,7 +78,7 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.mu.Lock()
 	m.emitState()
 	m.mu.Unlock()
-	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "video", isVideo, "relays", len(relays))
+	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "video", isVideo, "relays", len(parsedRelay.Relays))
 }
 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
@@ -94,6 +105,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 
 	m.mu.Lock()
 	_ = call.ApplyTransition(Transition{Type: TransitionRemoteAccepted})
+	m.cancelRingTimeoutLocked() // answered — stop the no-answer timer
 	m.emitState()
 	m.acceptedByJid = peerJid.String()
 	if m.peerSsrcs == nil || !m.actualPeerSet {

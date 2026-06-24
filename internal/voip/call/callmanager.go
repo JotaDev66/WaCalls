@@ -41,6 +41,7 @@ type CallManager struct {
 
 	lastCaptureAt time.Time
 	keepaliveStop chan struct{}
+	ringTimer     *time.Timer
 
 	OnStateChange func(*CallInfo)
 	OnIncoming    func(*CallInfo)
@@ -120,6 +121,7 @@ func (m *CallManager) StartCall(ctx context.Context, peerJid types.JID, isVideo 
 	m.mu.Lock()
 	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionOfferSent})
 	m.emitState()
+	m.startRingTimeoutLocked(callID, ringTimeout)
 	m.mu.Unlock()
 
 	if ackNode != nil {
@@ -148,14 +150,20 @@ func (m *CallManager) AcceptCall(ctx context.Context, callID string) error {
 	creator := wanode.MustJID(call.CallCreator)
 	isVideo := call.MediaType == core.CallMediaTypeVideo
 	relayData := call.RelayData
+	// Incoming path: derive SRTP keys now. Without this m.srtpSession stays nil
+	// and no audio flows even after the relay connects.
+	m.initSrtpKeysLocked()
 	m.mu.Unlock()
 
 	if key != nil {
 		acceptNode, err := signaling.BuildAcceptStanza(ctx, m.sock, callID, key, peer, creator, isVideo)
 		if err != nil {
 			m.log.Error("build accept failed", "err", err)
-		} else if _, err := m.sock.Query(ctx, acceptNode); err != nil {
-			m.log.Error("accept query error", "err", err)
+		} else if err := m.sock.SendNode(ctx, acceptNode); err != nil {
+			// Fire-and-forget: a <call> ack is NOT routed back to Query, so using
+			// Query here stalls ~15s on timeout and delays the relay connect until
+			// after the caller has given up. Send and move straight to the relay.
+			m.log.Error("send accept error", "err", err)
 		}
 	}
 
@@ -202,6 +210,42 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 	}
 	m.cleanupMedia()
 	return nil
+}
+
+// ringTimeout is how long an outgoing call rings before it auto-ends if the
+// peer never answers (mirrors WhatsApp's own caller timeout).
+const ringTimeout = 60 * time.Second
+
+// startRingTimeoutLocked (re)arms the no-answer timer for an outgoing call.
+// Must be called with m.mu held.
+func (m *CallManager) startRingTimeoutLocked(callID string, d time.Duration) {
+	if m.ringTimer != nil {
+		m.ringTimer.Stop()
+	}
+	m.ringTimer = time.AfterFunc(d, func() { m.onRingTimeout(callID) })
+	m.log.Debug("ring timeout armed", "call_id", callID, "after", d.String())
+}
+
+// cancelRingTimeoutLocked stops the no-answer timer. Must be called with m.mu held.
+func (m *CallManager) cancelRingTimeoutLocked() {
+	if m.ringTimer != nil {
+		m.ringTimer.Stop()
+		m.ringTimer = nil
+	}
+}
+
+// onRingTimeout ends the call if it is still ringing (unanswered) when the timer
+// fires. A call that was answered or already ended is left untouched.
+func (m *CallManager) onRingTimeout(callID string) {
+	m.mu.Lock()
+	call := m.currentCall
+	if call == nil || call.CallID != callID || !call.IsRinging() {
+		m.mu.Unlock()
+		return
+	}
+	m.mu.Unlock()
+	m.log.Info("call ring timeout — no answer", "call_id", callID)
+	_ = m.EndCall(context.Background(), core.EndCallReasonTimeout)
 }
 
 func (m *CallManager) ownCredJid() string {

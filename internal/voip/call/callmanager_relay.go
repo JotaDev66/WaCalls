@@ -77,6 +77,7 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 
 func (m *CallManager) cleanupMedia() {
 	m.mu.Lock()
+	m.cancelRingTimeoutLocked()
 	codec := m.codec
 	m.codec = nil
 	if m.keepaliveStop != nil {
