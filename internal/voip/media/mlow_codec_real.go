@@ -51,6 +51,14 @@ const (
 
 var globalInitOnce sync.Once
 
+// codecCallMu serializes ALL calls into the opus_mlow C library. The bundled
+// MLow/SMPL build is not thread-safe: concurrent Encode/Decode on a codec
+// corrupts native state and crashes the process ("fatal error: semasleep on
+// Darwin signal stack"). In a live call Encode (uplink) and Decode (downlink)
+// run on different goroutines, so every C entry point must hold this lock.
+// Each call is sub-millisecond, so serializing them has no practical cost.
+var codecCallMu sync.Mutex
+
 type mlowCodec struct {
 	encoder unsafe.Pointer
 	decoder unsafe.Pointer
@@ -63,6 +71,8 @@ func NewMLowCodec(opts CodecOptions) (Codec, error) {
 	if opts.Complexity == 0 {
 		opts.Complexity = DefaultCodecOptions.Complexity
 	}
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	globalInitOnce.Do(func() { C.opus_global_create() })
 
 	c := &mlowCodec{}
@@ -97,6 +107,8 @@ func (c *mlowCodec) Encode(pcm []float32) ([]byte, error) {
 	if len(pcm) == 0 {
 		return nil, nil
 	}
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	in := make([]C.int16_t, len(pcm))
 	for i, s := range pcm {
 		if s > 1 {
@@ -119,6 +131,8 @@ func (c *mlowCodec) Encode(pcm []float32) ([]byte, error) {
 }
 
 func (c *mlowCodec) Decode(frame []byte) ([]float32, error) {
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	out := make([]C.int16_t, mlowMaxOut)
 	var n C.int
 	if frame == nil {
@@ -141,6 +155,8 @@ func (c *mlowCodec) FrameSize() int  { return mlowFrameSize }
 func (c *mlowCodec) SampleRate() int { return mlowSampleRate }
 
 func (c *mlowCodec) Close() {
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	if c.decoder != nil {
 		C.opus_decoder_destroy(c.decoder)
 		c.decoder = nil
@@ -159,6 +175,8 @@ type opusGeneric struct {
 }
 
 func NewOpusCodec(sampleRate, frameSize int) (Codec, error) {
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	globalInitOnce.Do(func() { C.opus_global_create() })
 	c := &opusGeneric{sampleRate: sampleRate, frameSize: frameSize}
 
@@ -182,6 +200,8 @@ func (c *opusGeneric) Encode(pcm []float32) ([]byte, error) {
 	if len(pcm) == 0 {
 		return nil, nil
 	}
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	in := make([]C.int16_t, len(pcm))
 	for i, s := range pcm {
 		if s > 1 {
@@ -204,6 +224,8 @@ func (c *opusGeneric) Encode(pcm []float32) ([]byte, error) {
 }
 
 func (c *opusGeneric) Decode(frame []byte) ([]float32, error) {
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	maxOut := c.sampleRate / 1000 * 120
 	out := make([]C.int16_t, maxOut)
 	var n C.int
@@ -227,6 +249,8 @@ func (c *opusGeneric) FrameSize() int  { return c.frameSize }
 func (c *opusGeneric) SampleRate() int { return c.sampleRate }
 
 func (c *opusGeneric) Close() {
+	codecCallMu.Lock()
+	defer codecCallMu.Unlock()
 	if c.decoder != nil {
 		C.opus_decoder_destroy(c.decoder)
 		c.decoder = nil
