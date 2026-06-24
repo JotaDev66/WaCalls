@@ -69,6 +69,12 @@ func (s *Session) wireCallManager() {
 			rec.Owner = existing.Owner
 			rec.StartedAt = existing.StartedAt
 		}
+		// ConnectedAt is set once, when the call is answered (state ACTIVE);
+		// the UI measures call duration from this, not from the dial time.
+		if c.StateData.ConnectedAt != nil {
+			ms := c.StateData.ConnectedAt.UnixMilli()
+			rec.ConnectedAt = &ms
+		}
 		if c.IsEnded() {
 			s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 			return

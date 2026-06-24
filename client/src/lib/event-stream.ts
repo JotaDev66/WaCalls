@@ -8,6 +8,7 @@ type CallListRow = {
   direction: "outbound" | "inbound";
   peer: string;
   startedAt: number;
+  connectedAt?: number | null;
   status: CallStatus;
   endedAt?: number;
   endReason?: string;
@@ -18,7 +19,7 @@ export type BrokerEvent =
   | { type: "session-qr"; sessionId: string; qr: string }
   | { type: "auth-state"; sessionId: string; paired: boolean; state: SessionState; qr?: string }
   | { type: "call-list"; calls: CallListRow[] }
-  | { type: "call-status"; sessionId: string; id: string; owner: string | null; status: CallStatus; peer: string; startedAt: number }
+  | { type: "call-status"; sessionId: string; id: string; owner: string | null; status: CallStatus; peer: string; startedAt: number; connectedAt?: number | null }
   | { type: "call-ended"; sessionId: string; id: string; owner: string | null; reason: string; endedAt: number }
   | { type: "incoming"; sessionId: string; id: string; peer: string; offeredAt: number }
   | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };

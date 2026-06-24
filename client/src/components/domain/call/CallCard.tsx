@@ -76,7 +76,7 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
           <div className="min-w-0">
             <p className="truncate font-medium">{call.peer}</p>
             <Badge variant={statusVariant[call.status]} className="mt-1">
-              {formatCallDuration(call.startedAt, call.status)}
+              {formatCallDuration(call)}
             </Badge>
           </div>
           <Tooltip>

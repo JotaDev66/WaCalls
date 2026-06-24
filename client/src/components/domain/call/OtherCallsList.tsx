@@ -20,7 +20,7 @@ export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
                 <p className="truncate text-sm font-medium">{c.peer}</p>
                 <p className="text-xs text-muted-foreground">{c.direction}</p>
               </div>
-              <Badge variant="muted">{formatCallDuration(c.startedAt, c.status)}</Badge>
+              <Badge variant="muted">{formatCallDuration(c)}</Badge>
             </CardContent>
           </Card>
         ))}

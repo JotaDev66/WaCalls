@@ -17,15 +17,16 @@ const (
 )
 
 type CallRecord struct {
-	SessionID string     `json:"sessionId"`
-	CallID    string     `json:"callId"`
-	Owner     *string    `json:"owner"`
-	Direction string     `json:"direction"`
-	Peer      string     `json:"peer"`
-	StartedAt int64      `json:"startedAt"`
-	Status    CallStatus `json:"status"`
-	EndedAt   *int64     `json:"endedAt,omitempty"`
-	EndReason string     `json:"endReason,omitempty"`
+	SessionID   string     `json:"sessionId"`
+	CallID      string     `json:"callId"`
+	Owner       *string    `json:"owner"`
+	Direction   string     `json:"direction"`
+	Peer        string     `json:"peer"`
+	StartedAt   int64      `json:"startedAt"`
+	ConnectedAt *int64     `json:"connectedAt,omitempty"`
+	Status      CallStatus `json:"status"`
+	EndedAt     *int64     `json:"endedAt,omitempty"`
+	EndReason   string     `json:"endReason,omitempty"`
 }
 
 type AuthSnapshot struct {
@@ -124,7 +125,7 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.broadcastCallList()
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
-		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
+		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt, "connectedAt": r.ConnectedAt,
 	})
 }
 

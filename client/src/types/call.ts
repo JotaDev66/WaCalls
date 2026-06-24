@@ -7,6 +7,7 @@ export type CallSummary = {
   direction: "outbound" | "inbound";
   peer: string;
   startedAt: number;
+  connectedAt?: number | null;
   status: CallStatus;
 };
 
