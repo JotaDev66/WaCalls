@@ -118,9 +118,12 @@ by tests in `internal/voip` (`go test ./...`).
 
 - **Go 1.26+**
 - **Node 22+** and **npm** (only to build/run the React client)
-- **Live audio (optional):** a C compiler (on Windows, **MSYS2 + mingw-w64-gcc** at
-  `C:\msys64\mingw64\bin`) and the `native/opus_mlow.dll` + `native/libopus-0.dll`
-  libraries (included in the repository).
+- **Live audio (optional):** a C compiler and the native MLow codec library.
+  - **Windows:** **MSYS2 + mingw-w64-gcc** at `C:\msys64\mingw64\bin`, plus the bundled
+    `native/opus_mlow.dll` + `native/libopus-0.dll`.
+  - **macOS / Linux:** build `native/libopus_mlow.a` once with `scripts/build-mlow.sh`
+    (see *Run (live audio)* below). It is git-ignored and architecture-specific, so it is
+    not committed.
 
 ---
 
@@ -160,6 +163,37 @@ $env:PATH = "C:\msys64\mingw64\bin;$PWD\native;$env:PATH"
 $env:CGO_ENABLED = "1"; $env:CC = "gcc"
 go run -tags mlow ./cmd/server -addr :8080 -debug
 ```
+
+**macOS / Linux:**
+
+The native MLow codec is built from
+[`edgardmessias/opus_mlow`](https://github.com/edgardmessias/opus_mlow) into the static
+library `native/libopus_mlow.a` (the cgo build links it via `-lopus_mlow`). It is **not
+committed** — it is architecture-specific and would clash with the Windows `.dll` at link
+time — so build it once, then run:
+
+```bash
+# build native/libopus_mlow.a (needs cmake + a C toolchain); git-ignored
+scripts/build-mlow.sh
+
+# start with the native codec
+CGO_ENABLED=1 go run -tags mlow ./cmd/server -addr :8080 -debug
+```
+
+`scripts/build-mlow.sh` clones and builds opus_mlow and copies the static library into
+`native/`. To do it by hand:
+
+```bash
+git clone https://github.com/edgardmessias/opus_mlow.git
+cmake -S opus_mlow -B opus_mlow/build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF
+cmake --build opus_mlow/build
+cp opus_mlow/build/libopus.a native/libopus_mlow.a
+```
+
+> `native/libopus_mlow.a` is git-ignored and architecture-specific — build it on the
+> machine you run on (the linker would otherwise pick a mismatched library over the
+> Windows `.dll`). Without it (or without `-tags mlow`) the server runs in
+> **signaling-only** mode (pairing and call setup work; no audio).
 
 Open `http://localhost:8080`, click **New session**, and scan the QR shown in the browser
 (it is also printed in the terminal) with **WhatsApp → Linked devices**. Add more accounts
