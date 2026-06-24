@@ -57,40 +57,9 @@ type mlowCodec struct {
 }
 
 func NewMLowCodec(opts CodecOptions) (Codec, error) {
-	if opts.Bitrate == 0 {
-		opts.Bitrate = DefaultCodecOptions.Bitrate
-	}
-	if opts.Complexity == 0 {
-		opts.Complexity = DefaultCodecOptions.Complexity
-	}
-	globalInitOnce.Do(func() { C.opus_global_create() })
-
-	c := &mlowCodec{}
-
-	var errBuf [4]C.uchar
-	c.decoder = C.opus_decoder_create(C.int32_t(mlowSampleRate), C.int(mlowChannels), &errBuf[0])
-	if c.decoder == nil {
-		return nil, fmt.Errorf("opus_decoder_create failed")
-	}
-	C.mlow_dec_ctl(c.decoder, C.int(ctlSetUsingSmpl), C.int(1))
-
-	c.encoder = C.opus_encoder_create(C.int32_t(mlowSampleRate), C.int(mlowChannels), C.int(opusApplicationVOIP), &errBuf[0])
-	if c.encoder == nil {
-		C.opus_decoder_destroy(c.decoder)
-		return nil, fmt.Errorf("opus_encoder_create failed")
-	}
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetUsingSmpl), C.int(1))
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetBitrate), C.int(opts.Bitrate))
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetComplexity), C.int(opts.Complexity))
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetSignal), C.int(ctlSignalVoice))
-	fec := 0
-	if opts.FEC {
-		fec = 1
-	}
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetInbandFEC), C.int(fec))
-	C.mlow_enc_ctl(c.encoder, C.int(ctlSetDTX), C.int(1))
-
-	return c, nil
+	// MLow is pure-Go now (newNativeMLow). The cgo path in this file remains only
+	// for NewOpusCodec (browser-side Opus 48 kHz), pending the pure-Go migration.
+	return newNativeMLow(), nil
 }
 
 func (c *mlowCodec) Encode(pcm []float32) ([]byte, error) {
