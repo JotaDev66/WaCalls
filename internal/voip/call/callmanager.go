@@ -204,6 +204,26 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 	return nil
 }
 
+// abortCall ends the current call locally (no terminate stanza is sent — the
+// call never connected) and drives the normal end-of-call notifications so the
+// UI clears. Used when call setup fails, e.g. the offer is rejected by WhatsApp.
+func (m *CallManager) abortCall(reason core.EndCallReason) {
+	m.mu.Lock()
+	call := m.currentCall
+	if call == nil || call.IsEnded() {
+		m.mu.Unlock()
+		return
+	}
+	_ = call.ApplyTransition(Transition{Type: TransitionTerminated, Reason: reason})
+	ended := call
+	m.emitState()
+	m.mu.Unlock()
+	if m.OnEnded != nil {
+		m.OnEnded(ended)
+	}
+	m.cleanupMedia()
+}
+
 func (m *CallManager) ownCredJid() string {
 	lid := m.sock.OwnLID()
 	if !lid.IsEmpty() {

@@ -176,7 +176,9 @@ func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
 		return
 	}
 	if e := wanode.AttrString(node.Attrs, "error"); e != "" {
-		m.log.Error("offer ack error", "error", e)
+		m.log.Error("offer rejected by server", "error", e,
+			"hint", "439/463 usually means a missing/invalid privacy (tc) token or a rate limit")
+		m.abortCall(core.EndCallReasonFailed)
 		return
 	}
 	parsed := signaling.ParseRelayFromAck(node)

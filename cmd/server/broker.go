@@ -51,6 +51,7 @@ type Broker struct {
 	mu      sync.RWMutex
 	subs    map[*subscriber]struct{}
 	calls   map[string]*CallRecord
+	ended   map[string]struct{}
 	history []CallRecord
 
 	SnapshotFn func() []any
@@ -60,6 +61,7 @@ func NewBroker() *Broker {
 	return &Broker{
 		subs:  map[*subscriber]struct{}{},
 		calls: map[string]*CallRecord{},
+		ended: map[string]struct{}{},
 	}
 }
 
@@ -110,6 +112,12 @@ func (b *Broker) emitSessionQR(sessionID, qr string) {
 
 func (b *Broker) upsertCall(r CallRecord) {
 	b.mu.Lock()
+	if _, done := b.ended[r.CallID]; done {
+		// A late upsert must not resurrect a call that already ended (e.g. an
+		// offer rejected before the HTTP handler recorded it as ringing).
+		b.mu.Unlock()
+		return
+	}
 	cp := r
 	b.calls[r.CallID] = &cp
 	b.mu.Unlock()
@@ -147,6 +155,7 @@ func (b *Broker) setOwner(id, owner string) bool {
 
 func (b *Broker) endCall(id, reason string) {
 	b.mu.Lock()
+	b.ended[id] = struct{}{}
 	c, ok := b.calls[id]
 	if !ok {
 		b.mu.Unlock()
