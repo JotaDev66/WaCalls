@@ -87,7 +87,29 @@ func (s *Socket) DecryptCallKey(ctx context.Context, from types.JID, encChild *w
 	return signaling.DecodeCallKeyPlaintext(plaintext)
 }
 
+// GetTCToken returns the stored privacy (tc) token for a contact, mirroring
+// whatsmeow's internal ensureTCToken. WhatsApp rejects call offers that omit
+// this token (ack error 439/463), so it must be included in the <privacy>
+// node whenever one is available. Returns (nil, nil) when no token is stored
+// for the contact — there is nothing to send in that case.
 func (s *Socket) GetTCToken(ctx context.Context, jid types.JID) ([]byte, error) {
+	if s.cli.Store == nil || s.cli.Store.PrivacyTokens == nil {
+		return nil, nil
+	}
+	// Tokens are stored under the contact's LID (see resolveTCTokenStorageLID
+	// in whatsmeow). Try the resolved LID first, then the JID as given.
+	for _, cand := range []types.JID{s.ResolveLIDForPN(ctx, jid).ToNonAD(), jid.ToNonAD()} {
+		if cand.IsEmpty() {
+			continue
+		}
+		tok, err := s.cli.Store.PrivacyTokens.GetPrivacyToken(ctx, cand)
+		if err != nil {
+			return nil, err
+		}
+		if tok != nil && len(tok.Token) > 0 {
+			return tok.Token, nil
+		}
+	}
 	return nil, nil
 }
 
@@ -97,6 +119,15 @@ func (s *Socket) ResolveLIDForPN(ctx context.Context, pn types.JID) types.JID {
 	}
 	if s.cli.Store != nil && s.cli.Store.LIDs != nil {
 		if lid, err := s.cli.Store.LIDs.GetLIDForPN(ctx, pn); err == nil && !lid.IsEmpty() {
+			return lid
+		}
+	}
+	// Not cached — ask the server. Modern WhatsApp expects calls addressed to
+	// the contact's LID; a call offer sent to the phone-number JID is rejected
+	// (ack error 439). Contacts we've never interacted with have no cached LID,
+	// so fetch it via GetUserInfo (mirrors whatsmeow's own send path).
+	if info, err := s.cli.GetUserInfo(ctx, []types.JID{pn}); err == nil {
+		if lid := info[pn].LID; !lid.IsEmpty() {
 			return lid
 		}
 	}
