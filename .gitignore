@@ -1,3 +1,9 @@
+# Local environment config (use .env.example as the template)
+.env
+.env.local
+.env.*.local
+!.env.example
+
 /docs
 /wacalls-server.exe
 /wacalls.exe

@@ -13,10 +13,13 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "HTTP listen address")
-	dbPath := flag.String("db", "wacalls.db", "SQLite session database path")
-	staticDir := flag.String("static", "client/dist", "static client directory (optional)")
-	debug := flag.Bool("debug", false, "verbose logging")
+	loadDotEnv(".env")
+
+	// Defaults come from .env / the environment; explicit flags override them.
+	addr := flag.String("addr", listenAddr(), "HTTP listen address (or set PORT)")
+	dbPath := flag.String("db", getenv("DB_PATH", "wacalls.db"), "SQLite session database path")
+	staticDir := flag.String("static", getenv("STATIC_DIR", "client/dist"), "static client directory (optional)")
+	debug := flag.Bool("debug", getenvBool("DEBUG", false), "verbose logging")
 	flag.Parse()
 
 	level := slog.LevelInfo
