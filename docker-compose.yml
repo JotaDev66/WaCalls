@@ -1,0 +1,12 @@
+services:
+  wacalls:
+    build: .
+    image: impa365/wacalls:latest
+    ports:
+      - "8080:8080"
+    volumes:
+      - wacalls-data:/data
+    restart: unless-stopped
+
+volumes:
+  wacalls-data:
