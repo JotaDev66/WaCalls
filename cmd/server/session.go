@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wacalls/internal/voip/call"
+	"strings"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/wanode"
@@ -21,6 +22,10 @@ import (
 )
 
 type Session struct {
+	SIPUser string
+	SIPPass string
+	SIPURL string
+	APIKey string
 	id   string
 	name string
 	mgr  *SessionManager
@@ -33,10 +38,14 @@ type Session struct {
 	auth AuthSnapshot
 }
 
-func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) *Session {
+func newSession(mgr *SessionManager, id, name, apiKey, sipUser, sipPass, sipURL string, client *whatsmeow.Client) *Session {
 	s := &Session{
 		id:     id,
 		name:   name,
+		APIKey: apiKey,
+		SIPUser: sipUser,
+		SIPPass: sipPass,
+		SIPURL: sipURL,
 		mgr:    mgr,
 		log:    mgr.log.With("session", id),
 		client: client,
@@ -64,9 +73,19 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
+			ac, ok := s.reg.get(c.CallID)
+			if ok && ac.rtpBridge != nil {
+				ac.rtpBridge.NotifyEnded(string(c.StateData.EndReason))
+			}
 			s.removeCall(c.CallID)
 			s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 			return
+		}
+		if c.StateData.State == core.CallStateActive {
+			ac, ok := s.reg.get(c.CallID)
+			if ok && ac.rtpBridge != nil {
+				ac.rtpBridge.NotifyActive()
+			}
 		}
 		dir := "outbound"
 		if c.Direction == core.CallDirectionIncoming {
@@ -84,15 +103,24 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		s.mgr.broker.upsertCall(rec)
 	}
 	cm.OnEnded = func(c *call.CallInfo) {
+		ac, ok := s.reg.get(c.CallID)
+		if ok && ac.rtpBridge != nil {
+			ac.rtpBridge.NotifyEnded(string(c.StateData.EndReason))
+		}
 		s.removeCall(c.CallID)
 		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
 		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+		if !ok {
 			return
 		}
-		_ = ac.bridge.WritePCM(pcm16)
+		if ac.bridge != nil {
+			_ = ac.bridge.WritePCM(pcm16)
+		}
+		if ac.rtpBridge != nil {
+			_ = ac.rtpBridge.WritePCM(pcm16)
+		}
 	}
 	cm.OnPeerVideo = func(au []byte) {
 		ac, ok := s.reg.get(callID)
@@ -232,7 +260,7 @@ func (s *Session) info() SessionInfo {
 	if id := s.client.Store.ID; id != nil {
 		jid = id.String()
 	}
-	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
+	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != "", APIKey: s.APIKey, SIPUser: s.SIPUser, SIPPass: s.SIPPass, SIPURL: s.SIPURL}
 }
 
 func (s *Session) setBridge(callID string, b *Bridge) {
@@ -253,6 +281,9 @@ func (s *Session) removeCall(callID string) {
 	}
 	if ac.bridge != nil {
 		ac.bridge.Close()
+	}
+	if ac.rtpBridge != nil {
+		ac.rtpBridge.Close()
 	}
 }
 
@@ -295,5 +326,38 @@ func mapStatus(state core.CallState) CallStatus {
 		return StatusStarting
 	default:
 		return StatusRinging
+	}
+}
+
+func (s *Session) sipStartCall(ctx context.Context, phone string, isVideo bool) (string, error) {
+	phone = strings.TrimSpace(phone)
+	phone = strings.TrimPrefix(phone, "+")
+	var cleaned strings.Builder
+	for _, c := range phone {
+		if c >= '0' && c <= '9' {
+			cleaned.WriteRune(c)
+		}
+	}
+	peer := types.NewJID(cleaned.String(), types.DefaultUserServer)
+	return s.startOutgoing(ctx, peer, isVideo)
+}
+
+func (s *Session) terminateCallByID(callID string) {
+	ac, ok := s.reg.get(callID)
+	if !ok {
+		return
+	}
+	_ = ac.cm.EndCall(context.Background(), "user_ended")
+}
+
+
+func (s *Session) setRTPBridge(callID string, b *SIPRTPBridge) {
+	oldB, found := s.reg.setRTPBridge(callID, b)
+	if !found {
+		b.Close()
+		return
+	}
+	if oldB != nil {
+		oldB.Close()
 	}
 }

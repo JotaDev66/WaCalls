@@ -9,6 +9,7 @@ import (
 type activeCall struct {
 	cm     *call.CallManager
 	bridge *Bridge
+	rtpBridge *SIPRTPBridge
 }
 
 type callRegistry struct {
@@ -71,4 +72,17 @@ func (r *callRegistry) drain() []*activeCall {
 	}
 	r.calls = map[string]*activeCall{}
 	return out
+}
+
+
+func (r *callRegistry) setRTPBridge(callID string, b *SIPRTPBridge) (*SIPRTPBridge, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ac, ok := r.calls[callID]
+	if !ok {
+		return nil, false
+	}
+	oldB := ac.rtpBridge
+	ac.rtpBridge = b
+	return oldB, true
 }

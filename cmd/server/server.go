@@ -15,6 +15,7 @@ type server struct {
 	sessions  *SessionManager
 	log       *slog.Logger
 	staticDir string
+	sipGW     *SIPGateway
 }
 
 func openDB(dbPath string) (*sql.DB, error) {
@@ -50,5 +51,9 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log 
 	mgr := newSessionManager(ctx, container, broker, store, waLogger, log, maxCalls)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &server{broker: broker, sessions: mgr, log: log, staticDir: staticDir}, nil
+	sipGateway, _ := NewSIPGateway(mgr, log)
+	if sipGateway != nil {
+		go sipGateway.Start(ctx, "0.0.0.0:5060")
+	}
+	return &server{broker: broker, sessions: mgr, sipGW: sipGateway, log: log, staticDir: staticDir}, nil
 }

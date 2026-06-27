@@ -6,4 +6,8 @@ export type SessionInfo = {
   jid: string;
   state: SessionState;
   paired: boolean;
+  api_key?: string;
+  sip_user?: string;
+  sip_pass?: string;
+  sip_url?: string;
 };
