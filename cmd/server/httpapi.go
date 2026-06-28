@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -191,6 +192,17 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		SessionID: sess.id, CallID: callID, Owner: &owner, Direction: "outbound", Peer: peer.String(),
 		StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 	})
+	if body.Record && s.recordingsDir != "" {
+		_ = os.MkdirAll(s.recordingsDir, 0o755)
+		recPath := filepath.Join(s.recordingsDir, callID+".wav")
+		if rec, err := NewRecorder(recPath); err == nil {
+			if ac, ok := sess.reg.get(callID); ok {
+				ac.recorder = rec
+			}
+		} else {
+			s.log.Warn("recorder create failed", "path", recPath, "err", err)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
 }
 
@@ -216,6 +228,9 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 
 	bridge.OnBrowserPCM = func(pcm []float32) {
 		ac.cm.FeedCapturedPCM(pcm)
+		if ac.recorder != nil {
+			ac.recorder.Write(pcm)
+		}
 	}
 	bridge.OnTerminalICE = func() {
 		go sess.terminateCall(callID, core.EndCallReasonUserEnded)

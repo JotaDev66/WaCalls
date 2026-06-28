@@ -7,8 +7,9 @@ import (
 )
 
 type activeCall struct {
-	cm     *call.CallManager
-	bridge *Bridge
+	cm       *call.CallManager
+	bridge   *Bridge
+	recorder *Recorder
 }
 
 type callRegistry struct {

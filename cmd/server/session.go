@@ -93,6 +93,9 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 			return
 		}
 		_ = ac.bridge.WritePCM(pcm16)
+		if ac.recorder != nil {
+			ac.recorder.Write(pcm16)
+		}
 	}
 }
 
@@ -247,6 +250,11 @@ func (s *Session) removeCall(callID string) {
 	if ac.bridge != nil {
 		ac.bridge.Close()
 	}
+	if ac.recorder != nil {
+		if err := ac.recorder.Close(); err != nil {
+			s.log.Warn("recorder close failed", "call", callID, "err", err)
+		}
+	}
 }
 
 func (s *Session) terminateCall(callID string, reason core.EndCallReason) {
@@ -262,6 +270,9 @@ func (s *Session) teardownAllCalls() {
 		_ = ac.cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
 		if ac.bridge != nil {
 			ac.bridge.Close()
+		}
+		if ac.recorder != nil {
+			_ = ac.recorder.Close()
 		}
 	}
 }
