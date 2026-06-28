@@ -1,0 +1,6 @@
+.git
+.github
+client/node_modules
+client/dist
+dist
+*.md
