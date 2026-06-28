@@ -2,6 +2,8 @@ package main
 
 import (
 	"log/slog"
+	"os"
+	"strconv"
 	"sync/atomic"
 
 	"wacalls/internal/voip/media"
@@ -27,8 +29,39 @@ type Bridge struct {
 	OnTerminalICE func()
 }
 
+// browserWebRTCAPI builds the pion API used for the browser leg. When the
+// deployment sets WEBRTC_NAT_1TO1_IP / WEBRTC_UDP_PORT_MIN / WEBRTC_UDP_PORT_MAX
+// it applies a 1:1 NAT mapping — so the SDP answer advertises the host's PUBLIC
+// IP instead of the container's internal address — and pins ICE to the published
+// UDP port. Without them it falls back to pion defaults (LAN/dev).
+//
+// Required behind Docker/NAT: with the default empty configuration pion only
+// gathers the container's private candidates, which a remote browser can never
+// reach, so the browser ICE leg stays in "checking" and audio never flows.
+func browserWebRTCAPI() (*webrtc.API, error) {
+	se := webrtc.SettingEngine{}
+	if natIP := os.Getenv("WEBRTC_NAT_1TO1_IP"); natIP != "" {
+		se.SetNAT1To1IPs([]string{natIP}, webrtc.ICECandidateTypeHost)
+	}
+	minStr, maxStr := os.Getenv("WEBRTC_UDP_PORT_MIN"), os.Getenv("WEBRTC_UDP_PORT_MAX")
+	if minStr != "" && maxStr != "" {
+		lo, errLo := strconv.ParseUint(minStr, 10, 16)
+		hi, errHi := strconv.ParseUint(maxStr, 10, 16)
+		if errLo == nil && errHi == nil {
+			if err := se.SetEphemeralUDPPortRange(uint16(lo), uint16(hi)); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return webrtc.NewAPI(webrtc.WithSettingEngine(se)), nil
+}
+
 func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	api, err := browserWebRTCAPI()
+	if err != nil {
+		return nil, "", err
+	}
+	pc, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, "", err
 	}
