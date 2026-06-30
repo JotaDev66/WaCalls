@@ -260,7 +260,8 @@ func (s *Session) info() SessionInfo {
 	if id := s.client.Store.ID; id != nil {
 		jid = id.String()
 	}
-	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != "", APIKey: s.APIKey, SIPUser: s.SIPUser, SIPPass: s.SIPPass, SIPURL: s.SIPURL}
+	// Do not expose sensitive fields in public SessionInfo
+	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != "", APIKey: "", SIPUser: "", SIPPass: "", SIPURL: s.SIPURL}
 }
 
 func (s *Session) setBridge(callID string, b *Bridge) {

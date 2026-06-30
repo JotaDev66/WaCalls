@@ -42,11 +42,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	httpSrv := &http.Server{Addr: *addr, Handler: srv.routes()}
+	httpSrv := &http.Server{
+		Addr:         *addr,
+		Handler:      srv.routes(),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
 	go func() {
 		log.Info("HTTP server listening", "addr", *addr)
+		// Optional TLS if ADMIN_TLS_CERT and ADMIN_TLS_KEY are provided
+		cert := os.Getenv("ADMIN_TLS_CERT")
+		key := os.Getenv("ADMIN_TLS_KEY")
+		if cert != "" && key != "" {
+			if _, err := os.Stat(cert); err == nil {
+				if _, err := os.Stat(key); err == nil {
+					if err := httpSrv.ListenAndServeTLS(cert, key); err != nil && !errors.Is(err, http.ErrServerClosed) {
+						log.Error("https server error", "err", err)
+					}
+					return
+				}
+			}
+		}
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("http server error", "err", err)
+			return
 		}
 	}()
 

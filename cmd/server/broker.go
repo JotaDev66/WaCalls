@@ -105,7 +105,15 @@ func (b *Broker) emitAuthState(sessionID string, a AuthSnapshot) {
 }
 
 func (b *Broker) emitSessionList(sessions []SessionInfo) {
-	b.broadcast(map[string]any{"type": "session-list", "sessions": sessions})
+	// Ensure session info is safe (mask sensitive fields) before broadcasting
+	safe := make([]SessionInfo, 0, len(sessions))
+	for _, s := range sessions {
+		s.APIKey = ""
+		s.SIPPass = ""
+		s.SIPUser = ""
+		safe = append(safe, s)
+	}
+	b.broadcast(map[string]any{"type": "session-list", "sessions": safe})
 }
 
 func (b *Broker) emitSessionQR(sessionID, qr string) {
@@ -119,48 +127,8 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.mu.Unlock()
 	b.broadcastCallList()
 	b.broadcast(map[string]any{
-		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
-		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
+		"type": "call-upsert", "sessionId": r.SessionID, "call": r,
 	})
-}
-
-func (b *Broker) getCall(id string) (*CallRecord, bool) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	c, ok := b.calls[id]
-	if !ok {
-		return nil, false
-	}
-	cp := *c
-	return &cp, true
-}
-
-func (b *Broker) setOwner(id, owner string) bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	c, ok := b.calls[id]
-	if !ok {
-		return false
-	}
-	if c.Owner != nil && *c.Owner != owner {
-		return false
-	}
-	c.Owner = &owner
-	return true
-}
-
-func (b *Broker) ownerActiveCall(owner string) string {
-	if owner == "" {
-		return ""
-	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	for id, c := range b.calls {
-		if c.Owner != nil && *c.Owner == owner && c.Status != StatusEnded {
-			return id
-		}
-	}
-	return ""
 }
 
 func (b *Broker) endCall(id, reason string) {
@@ -229,7 +197,6 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 
 	sub := b.subscribe(clientID)
 	defer b.unsubscribe(sub)

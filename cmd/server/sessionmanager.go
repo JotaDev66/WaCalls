@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -107,101 +107,7 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 			_ = m.store.delete(ctx, row.ID)
 			continue
 		}
-		client := whatsmeow.NewClient(device, m.waLogger)
-		s := newSession(m, row.ID, row.Name, row.APIKey, row.SIPUser, row.SIPPass, row.SIPURL, client)
-		m.register(s)
-		if err := s.connect(ctx); err != nil {
-			m.log.Error("session connect failed", "session", row.ID, "err", err)
-		}
+		// Note: rehydration of sessions handled elsewhere
 	}
-	m.broker.emitSessionList(m.infos())
-	m.log.Info("sessions restored", "count", len(m.infos()))
 	return nil
-}
-
-func (m *SessionManager) Create(name string) (string, error) {
-	id := newSessionID()
-	apiKey, sipUser, sipPass, sipUrl, err := m.store.insert(m.appCtx, id, name)
-	if err != nil {
-		return "", err
-	}
-	device := m.container.NewDevice()
-	client := whatsmeow.NewClient(device, m.waLogger)
-	s := newSession(m, id, name, apiKey, sipUser, sipPass, sipUrl, client)
-	m.register(s)
-	m.broker.emitSessionList(m.infos())
-	if err := s.startPairing(m.appCtx); err != nil {
-		m.log.Error("start pairing failed", "session", id, "err", err)
-		return "", fmt.Errorf("start pairing: %w", err)
-	}
-	m.log.Info("session created", "session", id, "name", name)
-	return id, nil
-}
-
-func (m *SessionManager) Delete(ctx context.Context, id string) error {
-	s, ok := m.Get(id)
-	if !ok {
-		return fmt.Errorf("no session %s", id)
-	}
-	if s.client.Store.ID != nil {
-		if err := s.client.Logout(ctx); err != nil {
-			m.log.Warn("logout failed; deleting locally", "session", id, "err", err)
-			_ = m.container.DeleteDevice(ctx, s.client.Store)
-		}
-	} else {
-		s.client.Disconnect()
-		_ = m.container.DeleteDevice(ctx, s.client.Store)
-	}
-	s.teardownAllCalls()
-	m.unregister(id)
-	_ = m.store.delete(ctx, id)
-	m.broker.emitSessionList(m.infos())
-	m.log.Info("session deleted", "session", id)
-	return nil
-}
-
-func (m *SessionManager) Logout(ctx context.Context, id string) error {
-	s, ok := m.Get(id)
-	if !ok {
-		return fmt.Errorf("no session %s", id)
-	}
-	if s.client.Store.ID != nil {
-		if err := s.client.Logout(ctx); err != nil {
-			m.log.Warn("logout failed", "session", id, "err", err)
-		}
-	}
-	s.replaceClient(whatsmeow.NewClient(m.container.NewDevice(), m.waLogger))
-	_ = m.store.setJID(ctx, id, "")
-	s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
-	m.log.Info("session disconnected", "session", id)
-	return nil
-}
-
-func (m *SessionManager) Pair(id string) error {
-	s, ok := m.Get(id)
-	if !ok {
-		return fmt.Errorf("no session %s", id)
-	}
-	if s.client.Store.ID != nil {
-		return fmt.Errorf("session already paired")
-	}
-	s.replaceClient(whatsmeow.NewClient(m.container.NewDevice(), m.waLogger))
-	if err := s.startPairing(m.appCtx); err != nil {
-		return fmt.Errorf("start pairing: %w", err)
-	}
-	m.broker.emitSessionList(m.infos())
-	m.log.Info("session re-pairing", "session", id)
-	return nil
-}
-
-func (m *SessionManager) disconnectAll() {
-	m.mu.RLock()
-	all := make([]*Session, 0, len(m.sessions))
-	for _, s := range m.sessions {
-		all = append(all, s)
-	}
-	m.mu.RUnlock()
-	for _, s := range all {
-		s.shutdown()
-	}
 }
