@@ -5,13 +5,15 @@
 **Native WhatsApp voice calls in pure Go, straight from the browser.**
 Built for native VoIP media, multi-account (multi-session) operation, and a modern browser client.
 
+[![WhatsApp](https://img.shields.io/badge/Official-WhatsApp%20Group-25D366?logo=whatsapp&logoColor=white)](https://chat.whatsapp.com/HBZpsDpCT6n0f6OWkHSXs6?s=cl&p=a&mlu=4)
+
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
 [![whatsmeow](https://img.shields.io/badge/whatsmeow-VoIP-25D366?logo=whatsapp&logoColor=white)](https://github.com/tulir/whatsmeow)
 [![pion](https://img.shields.io/badge/pion-WebRTC-FF6B6B)](https://github.com/pion/webrtc)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
-[Overview](#overview) · [Architecture](#architecture) · [Quick Start](#quick-start) · [API](#api) · [Security](#security)
+[Join the Official WhatsApp Group](https://chat.whatsapp.com/HBZpsDpCT6n0f6OWkHSXs6?s=cl&p=a&mlu=4) · [Overview](#overview) · [Architecture](#architecture) · [Quick Start](#quick-start) · [API](#api) · [Security](#security)
 
 </div>
 
