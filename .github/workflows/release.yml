@@ -49,7 +49,7 @@ jobs:
             -o "dist/${out}" ./cmd/server
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: server-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/*
@@ -80,7 +80,7 @@ jobs:
         run: tar -czf ../wacalls-client-${GITHUB_REF_NAME}.tar.gz -C dist .
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: client-dist
           path: wacalls-client-*.tar.gz
