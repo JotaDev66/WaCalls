@@ -41,6 +41,7 @@ func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid
 		SendRTP:         m.sendRTP,
 		OnRTP:           m.registerRTPHandler,
 		DeclareSelfSSRC: m.declareSelfSSRC,
+		Observer:        m.observer,
 	}
 	for _, e := range m.extensions {
 		if err := e.Attach(scope); err != nil {

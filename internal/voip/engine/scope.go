@@ -18,6 +18,7 @@ type CallScope struct {
 	SendRTP         func(pkt *media.RtpPacket) error
 	OnRTP           func(pt uint8, handler func(pkt *media.RtpPacket))
 	DeclareSelfSSRC func(ssrc uint32)
+	Observer        core.CallObserver
 }
 
 type Extension interface {

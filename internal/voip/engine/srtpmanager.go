@@ -16,6 +16,8 @@ type SrtpManager struct {
 	recvAuth int
 	send     map[uint32]*media.SrtpContext
 	recv     map[uint32]*media.SrtpContext
+	observer core.CallObserver
+	mem      int64
 }
 
 func NewSrtpManager(sendKM, recvKM core.SrtpKeyingMaterial, sendAuth, recvAuth int) *SrtpManager {
@@ -26,7 +28,17 @@ func NewSrtpManager(sendKM, recvKM core.SrtpKeyingMaterial, sendAuth, recvAuth i
 		recvAuth: recvAuth,
 		send:     map[uint32]*media.SrtpContext{},
 		recv:     map[uint32]*media.SrtpContext{},
+		observer: core.NopObserver{},
 	}
+}
+
+func (m *SrtpManager) SetObserver(o core.CallObserver) {
+	if o == nil {
+		o = core.NopObserver{}
+	}
+	m.mu.Lock()
+	m.observer = o
+	m.mu.Unlock()
 }
 
 func (m *SrtpManager) Protect(pkt *media.RtpPacket) ([]byte, error) {

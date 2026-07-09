@@ -47,7 +47,7 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 		auth:    AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
 	}
-	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall)
+	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, nil)
 	client.AddEventHandler(s.handleEvent)
 	return s
 }

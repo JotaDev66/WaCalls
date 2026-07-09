@@ -15,8 +15,9 @@ import (
 )
 
 type CallManager struct {
-	sock core.VoipSocket
-	log  *slog.Logger
+	sock     core.VoipSocket
+	log      *slog.Logger
+	observer core.CallObserver
 
 	mu          sync.Mutex
 	currentCall *CallInfo
@@ -55,6 +56,7 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 	m := &CallManager{
 		sock:         sock,
 		log:          log,
+		observer:     core.NopObserver{},
 		debeEnabled:  true,
 		extensions:   exts,
 		rtpHandlers:  map[uint8]func(*media.RtpPacket){},

@@ -18,18 +18,23 @@ type Client struct {
 	sock           core.VoipSocket
 	log            *slog.Logger
 	makeExtensions func() []engine.Extension
+	newObserver    func(callID string) core.CallObserver
 	onCall         func(callID string, cm *CallManager)
 	maxCalls       int
 	mu             sync.Mutex
 	calls          map[string]*CallManager
 }
 
-func NewClient(sock core.VoipSocket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager)) *Client {
-	return &Client{sock: sock, log: log, makeExtensions: makeExtensions, onCall: onCall, maxCalls: maxCalls, calls: map[string]*CallManager{}}
+func NewClient(sock core.VoipSocket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager), newObserver func(callID string) core.CallObserver) *Client {
+	if newObserver == nil {
+		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
+	}
+	return &Client{sock: sock, log: log, makeExtensions: makeExtensions, newObserver: newObserver, onCall: onCall, maxCalls: maxCalls, calls: map[string]*CallManager{}}
 }
 
 func (c *Client) createCall(callID string) *CallManager {
 	cm := NewCallManager(c.sock, c.log, c.makeExtensions()...)
+	cm.observer = c.newObserver(callID)
 	c.onCall(callID, cm)
 	c.mu.Lock()
 	c.calls[callID] = cm

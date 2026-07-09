@@ -37,6 +37,7 @@ func (m *CallManager) initSrtpKeysLocked() {
 		return
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	m.srtp.SetObserver(m.observer)
 	m.log.Debug("srtp per-jid keys set", "send", ourDeviceJid, "recv", peerDeviceJid)
 
 	m.ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid)
@@ -59,5 +60,6 @@ func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
 		return
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	m.srtp.SetObserver(m.observer)
 	m.log.Debug("srtp re-initialized with peer call key")
 }
