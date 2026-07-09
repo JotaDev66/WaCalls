@@ -61,9 +61,12 @@ func Init(ctx context.Context, cfg Config) (func(context.Context) error, func(st
 	otel.SetMeterProvider(mp)
 
 	shutdown := func(ctx context.Context) error {
-		err1 := tp.Shutdown(ctx)
+		err1 := mp.ForceFlush(ctx)
 		if err2 := mp.Shutdown(ctx); err1 == nil {
 			err1 = err2
+		}
+		if err3 := tp.Shutdown(ctx); err1 == nil {
+			err1 = err3
 		}
 		return err1
 	}
