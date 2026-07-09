@@ -41,6 +41,9 @@ func (v *Video) Name() string {
 }
 
 func (v *Video) Attach(scope *engine.CallScope) error {
+	if !scope.IsVideo {
+		return nil
+	}
 	selfSsrc := media.GenerateSecureSsrc(scope.CallID, scope.OwnDeviceJID, slotWord)
 
 	selfSsrcs := make([]uint32, len(callSlots))

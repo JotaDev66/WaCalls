@@ -77,7 +77,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.selfSsrc = media.GenerateSecureSsrc(callID, sj, 0)
 	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, peerJid.String(), 0)}
-	m.initCodec()
 	m.mu.Unlock()
 
 	preaccept := signaling.BuildPreacceptStanza(peerJid, callID, wanode.MustJID(creator))
@@ -163,8 +162,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 		m.mu.Lock()
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaConnected}); err == nil {
 			m.emitState()
-			m.startMediaSendLoopLocked()
-			m.log.Info("call ACTIVE (media path established)", "call_id", call.CallID, "audio", m.codec != nil)
+			m.log.Info("call ACTIVE (media path established)", "call_id", call.CallID)
 		}
 		m.mu.Unlock()
 	} else if relayData != nil {

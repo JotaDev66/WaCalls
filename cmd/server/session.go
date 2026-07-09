@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"wacalls/internal/voip/call"
+	"wacalls/internal/voip/codec/mlow"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
+	"wacalls/internal/voip/extension/audio"
+	"wacalls/internal/voip/extension/video"
 	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/wanode"
 	"wacalls/internal/wa"
@@ -48,7 +52,14 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 }
 
 func (s *Session) createCall(callID string) *call.CallManager {
-	cm := call.NewCallManager(wa.NewSocket(s.client), s.log)
+	var exts []engine.Extension
+	if codec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions); err == nil {
+		exts = append(exts, audio.New(codec))
+	} else {
+		s.log.Warn("MLow codec unavailable; call runs without audio", "err", err)
+	}
+	exts = append(exts, video.New())
+	cm := call.NewCallManager(wa.NewSocket(s.client), s.log, exts...)
 	s.wireCall(cm, callID)
 	s.reg.add(callID, &activeCall{cm: cm})
 	return cm

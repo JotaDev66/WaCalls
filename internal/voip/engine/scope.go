@@ -12,6 +12,7 @@ type CallScope struct {
 	CallID          string
 	OwnDeviceJID    string
 	PeerDeviceJID   string
+	IsVideo         bool
 	Relay           core.Relay
 	SendAudioFrame  func(encoded []byte, frameSamples int) error
 	SendRTP         func(pkt *media.RtpPacket) error
