@@ -176,6 +176,10 @@ go run ./cmd/server -static client/dist -addr :8080
 | `-debug` | `false` | Verbose logging (includes whatsmeow's internal log) |
 | `-max-calls-per-session` | `8` | Max concurrent calls per session (`0` = unlimited) |
 
+Set the `DATABASE_URL` environment variable to store everything on PostgreSQL instead of
+SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unset uses the
+`-db` SQLite file.
+
 ---
 
 ## Docker
@@ -193,6 +197,24 @@ docker compose up -d        # or: make up
 
 Open `http://<host>:8080`, click **New session**, and scan the QR (also printed in
 `docker compose logs -f`). Sessions persist on the named volume `wacalls-data`.
+
+### PostgreSQL backend (optional)
+
+By default WaCalls stores everything - app sessions and whatsmeow device credentials - in a
+single SQLite file (`-db`, persisted on the `wacalls-data` volume). To run everything on
+PostgreSQL instead, set `DATABASE_URL`: a non-empty value selects Postgres, empty keeps SQLite.
+
+Bring up the bundled Postgres with the compose overlay:
+
+```bash
+cp .env.example .env      # POSTGRES_* and DATABASE_URL are prefilled for the overlay
+make up-postgres          # docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d
+```
+
+`DATABASE_URL` is a standard URL: `postgres://user:pass@host:5432/db?sslmode=disable` (keep
+`sslmode=disable` for the bundled service, which has no TLS). Both the app's `sessions` table
+and whatsmeow's `whatsmeow_*` tables live in that database. Switching an existing SQLite deploy
+to Postgres starts with an empty database, so accounts must re-pair.
 
 ### WebRTC networking
 
