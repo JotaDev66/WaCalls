@@ -8,6 +8,8 @@ import (
 	"wacalls/internal/voip/media"
 )
 
+const srtpContextBytes = 4 * 1024
+
 type SrtpManager struct {
 	mu       sync.Mutex
 	sendKM   core.SrtpKeyingMaterial
@@ -54,6 +56,8 @@ func (m *SrtpManager) Protect(pkt *media.RtpPacket) ([]byte, error) {
 			return nil, err
 		}
 		m.send[pkt.Header.Ssrc] = c
+		m.mem += srtpContextBytes
+		m.observer.AddMem(srtpContextBytes)
 		ctx = c
 	}
 	return ctx.Protect(pkt)
@@ -73,6 +77,8 @@ func (m *SrtpManager) Unprotect(data []byte) (*media.RtpPacket, error) {
 			return nil, err
 		}
 		m.recv[ssrc] = c
+		m.mem += srtpContextBytes
+		m.observer.AddMem(srtpContextBytes)
 		ctx = c
 	}
 	return ctx.Unprotect(data)
@@ -80,7 +86,26 @@ func (m *SrtpManager) Unprotect(data []byte) (*media.RtpPacket, error) {
 
 func (m *SrtpManager) RekeyRecv(recvKM core.SrtpKeyingMaterial) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	released := int64(len(m.recv)) * srtpContextBytes
+	m.mem -= released
+	obs := m.observer
 	m.recvKM = recvKM
 	m.recv = map[uint32]*media.SrtpContext{}
+	m.mu.Unlock()
+	if released > 0 {
+		obs.ReleaseMem(released)
+	}
+}
+
+func (m *SrtpManager) Close() {
+	m.mu.Lock()
+	released := m.mem
+	obs := m.observer
+	m.mem = 0
+	m.send = map[uint32]*media.SrtpContext{}
+	m.recv = map[uint32]*media.SrtpContext{}
+	m.mu.Unlock()
+	if released > 0 {
+		obs.ReleaseMem(released)
+	}
 }

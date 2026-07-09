@@ -79,7 +79,10 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 
 func (m *CallManager) cleanupMedia() {
 	m.mu.Lock()
-	m.rtpSession = nil
+	if m.srtp != nil {
+		m.srtp.Close()
+	}
+	m.replaceRtpSession(nil)
 	m.srtp = nil
 	m.firstPacketSent = false
 	m.initialTransportSent = false

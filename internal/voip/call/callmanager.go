@@ -107,7 +107,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 
 	selfJid := creator.String()
 	m.selfSsrc = media.GenerateSecureSsrc(callID, selfJid, 0)
-	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
+	m.replaceRtpSession(media.NewWhatsAppOpusSession(m.selfSsrc))
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
@@ -180,7 +180,7 @@ func (m *CallManager) setupIncomingMedia(call *CallInfo, relayData *core.RelayDa
 		ourDeviceJid := ensureDeviceJid(findOurDevice(relayData.ParticipantJids, ourBase, m.ownCredJid()))
 		if newSelf := media.GenerateSecureSsrc(call.CallID, ourDeviceJid, 0); newSelf != m.selfSsrc {
 			m.selfSsrc = newSelf
-			m.rtpSession = media.NewWhatsAppOpusSession(newSelf)
+			m.replaceRtpSession(media.NewWhatsAppOpusSession(newSelf))
 		}
 		if peer := firstPeerDevice(relayData.ParticipantJids, ourBase); peer != "" {
 			m.peerSsrcs = []uint32{media.GenerateSecureSsrc(call.CallID, ensureDeviceJid(peer), 0)}

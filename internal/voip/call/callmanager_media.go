@@ -7,6 +7,18 @@ import (
 	"wacalls/internal/voip/transport"
 )
 
+const rtpSessionBytes = 8 * 1024
+
+func (m *CallManager) replaceRtpSession(s *media.RtpSession) {
+	if m.rtpSession != nil {
+		m.observer.ReleaseMem(rtpSessionBytes)
+	}
+	m.rtpSession = s
+	if s != nil {
+		m.observer.AddMem(rtpSessionBytes)
+	}
+}
+
 func (m *CallManager) FeedCapturedPCM(data []float32) {
 	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
 		a.FeedPCM(data)
@@ -71,6 +83,9 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 		return nil
 	}
 	marker := !m.firstPacketSent
+	if marker {
+		m.observer.Mark("media.first_packet")
+	}
 	pkt := m.rtpSession.CreatePacketWithDuration(encoded, frameSamples, marker)
 	if m.debeEnabled {
 		pkt.Header.Extension = true

@@ -9,6 +9,8 @@ import (
 	"wacalls/internal/voip/media"
 )
 
+const audioCodecBytes = 96 * 1024
+
 type Audio struct {
 	codec              core.AudioCodec
 	scope              *engine.CallScope
@@ -19,6 +21,7 @@ type Audio struct {
 	audioPlayedSamples uint64
 	sendLoopStop       chan struct{}
 	onPeerPCM          func([]float32)
+	detached           bool
 }
 
 func New(codec core.AudioCodec) *Audio {
@@ -32,6 +35,7 @@ func (a *Audio) Name() string {
 func (a *Audio) Attach(scope *engine.CallScope) error {
 	a.mu.Lock()
 	a.scope = scope
+	scope.Observer.AddMem(audioCodecBytes)
 	a.startSendLoopLocked()
 	a.mu.Unlock()
 	scope.OnRTP(core.PayloadTypeWhatsAppOpus, a.handleInbound)
@@ -40,11 +44,20 @@ func (a *Audio) Attach(scope *engine.CallScope) error {
 
 func (a *Audio) Detach() {
 	a.mu.Lock()
+	if a.detached {
+		a.mu.Unlock()
+		return
+	}
+	a.detached = true
 	if a.sendLoopStop != nil {
 		close(a.sendLoopStop)
 		a.sendLoopStop = nil
 	}
+	scope := a.scope
 	a.mu.Unlock()
+	if scope != nil {
+		scope.Observer.ReleaseMem(audioCodecBytes)
+	}
 	a.codec.Close()
 }
 
@@ -73,7 +86,9 @@ func (a *Audio) startSendLoopLocked() {
 	stop := make(chan struct{})
 	a.sendLoopStop = stop
 	frameSize := a.codec.FrameSize()
+	done := a.scope.Observer.TrackGoroutine()
 	go func() {
+		defer done()
 		ticker := time.NewTicker(60 * time.Millisecond)
 		defer ticker.Stop()
 		silence := make([]float32, frameSize)
