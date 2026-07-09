@@ -30,10 +30,13 @@ func newInstruments(m metric.Meter) (*instruments, error) {
 	if in.timeToActive, err = m.Float64Histogram("call.time_to_active", metric.WithUnit("ms")); err != nil {
 		return nil, err
 	}
-	if in.callMem, err = m.Int64UpDownCounter("call.mem.bytes", metric.WithUnit("By")); err != nil {
+	if in.callMem, err = m.Int64UpDownCounter("call.tracked_alloc.bytes",
+		metric.WithUnit("By"),
+		metric.WithDescription("Known per-call allocations tracked for leak detection (returns to zero at call end). NOT real RAM - use go.memory.used / calls.active for real memory.")); err != nil {
 		return nil, err
 	}
-	if in.callGor, err = m.Int64UpDownCounter("call.goroutines"); err != nil {
+	if in.callGor, err = m.Int64UpDownCounter("call.goroutines",
+		metric.WithDescription("Live goroutines held by the call; returns to zero at call end.")); err != nil {
 		return nil, err
 	}
 	if in.callsTotal, err = m.Int64Counter("calls.total"); err != nil {

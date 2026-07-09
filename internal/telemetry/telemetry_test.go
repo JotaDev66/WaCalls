@@ -70,7 +70,7 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 			names[m.Name] = true
 		}
 	}
-	for _, want := range []string{"call.mem.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration"} {
+	for _, want := range []string{"call.tracked_alloc.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration"} {
 		if !names[want] {
 			t.Errorf("missing instrument %q in collected metrics", want)
 		}
