@@ -1,0 +1,39 @@
+package core
+
+import "context"
+
+type AudioCodec interface {
+	Encode(pcm []float32) ([]byte, error)
+	Decode(frame []byte) ([]float32, error)
+	FrameSize() int
+	SampleRate() int
+	Close()
+}
+
+type VideoCodec interface {
+	Packetize(accessUnit []byte) [][]byte
+	Depacketize(rtpPayload []byte) [][]byte
+}
+
+type AudioSink interface {
+	FeedPCM(pcm []float32)
+	OnPeerPCM(handler func(pcm []float32))
+}
+
+type VideoSink interface {
+	FeedAU(accessUnit []byte)
+	OnPeerAU(handler func(accessUnit []byte))
+}
+
+type Session struct {
+	ID   string
+	Name string
+	JID  string
+}
+
+type SessionStore interface {
+	List(ctx context.Context) ([]Session, error)
+	Insert(ctx context.Context, id, name string) error
+	SetJID(ctx context.Context, id, jid string) error
+	Delete(ctx context.Context, id string) error
+}

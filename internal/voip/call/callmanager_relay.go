@@ -2,6 +2,7 @@ package call
 
 import (
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
 )
 
@@ -28,7 +29,6 @@ func (m *CallManager) onRelayConnected() {
 	if call != nil && call.StateData.State == core.CallStateConnecting {
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaConnected}); err == nil {
 			m.emitState()
-			m.startMediaSendLoopLocked()
 			m.log.Info("relay connected → active", "call_id", call.CallID)
 		}
 	}
@@ -79,26 +79,22 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 
 func (m *CallManager) cleanupMedia() {
 	m.mu.Lock()
-	codec := m.codec
-	m.codec = nil
-	if m.sendLoopStop != nil {
-		close(m.sendLoopStop)
-		m.sendLoopStop = nil
-	}
 	m.rtpSession = nil
-	m.srtpSession = nil
+	m.srtp = nil
 	m.firstPacketSent = false
 	m.initialTransportSent = false
 	m.outgoingPreacceptSent = false
 	m.actualPeerSet = false
-	m.captureBuf = nil
-	m.audioTimelineSet = false
-	m.audioPlayedSamples = 0
+	m.extAttached = false
 	m.mu.Unlock()
 
-	m.video.Reset()
-	m.relay.Cleanup()
-	if codec != nil {
-		codec.Close()
+	m.extMu.Lock()
+	m.rtpHandlers = map[uint8]func(*media.RtpPacket){}
+	m.declaredSelf = map[uint32]bool{}
+	m.extMu.Unlock()
+
+	for _, e := range m.extensions {
+		e.Detach()
 	}
+	m.relay.Cleanup()
 }

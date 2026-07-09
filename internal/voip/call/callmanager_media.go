@@ -1,91 +1,104 @@
 package call
 
 import (
-	"time"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
 )
 
-func (m *CallManager) initCodec() {
-	if m.codec != nil {
-		return
+func (m *CallManager) FeedCapturedPCM(data []float32) {
+	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
+		a.FeedPCM(data)
 	}
-	codec, err := media.NewMLowCodec(media.DefaultCodecOptions)
-	if err != nil {
-		m.log.Warn("MLow codec unavailable — call will run signaling-only (no audio)", "err", err)
-		return
-	}
-	m.codec = codec
 }
 
-func (m *CallManager) FeedCapturedPCM(data []float32) {
+func (m *CallManager) registerRTPHandler(pt uint8, handler func(*media.RtpPacket)) {
+	m.extMu.Lock()
+	m.rtpHandlers[pt] = handler
+	m.extMu.Unlock()
+}
+
+func (m *CallManager) declareSelfSSRC(ssrc uint32) {
+	m.extMu.Lock()
+	m.declaredSelf[ssrc] = true
+	m.extMu.Unlock()
+}
+
+func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid string) {
+	if m.extAttached {
+		return
+	}
+	m.extAttached = true
+	scope := &engine.CallScope{
+		Log:             m.log,
+		CallID:          m.currentCall.CallID,
+		OwnDeviceJID:    ourDeviceJid,
+		PeerDeviceJID:   peerDeviceJid,
+		IsVideo:         m.currentCall.MediaType == core.CallMediaTypeVideo,
+		Relay:           m.relay,
+		SendAudioFrame:  m.sendAudioFrame,
+		SendRTP:         m.sendRTP,
+		OnRTP:           m.registerRTPHandler,
+		DeclareSelfSSRC: m.declareSelfSSRC,
+	}
+	for _, e := range m.extensions {
+		if err := e.Attach(scope); err != nil {
+			m.log.Error("extension attach failed", "ext", e.Name(), "err", err)
+		}
+	}
+	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
+		a.OnPeerPCM(func(pcm []float32) {
+			if m.OnPeerAudio != nil {
+				m.OnPeerAudio(pcm)
+			}
+		})
+	}
+	if v, ok := engine.Capability[core.VideoSink](m.extensions); ok {
+		v.OnPeerAU(func(au []byte) {
+			if m.OnPeerVideo != nil {
+				m.OnPeerVideo(au)
+			}
+		})
+	}
+}
+
+func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.codec == nil || len(data) == 0 {
-		return
-	}
-	m.captureBuf = append(m.captureBuf, data...)
-	if maxBuffered := m.codec.FrameSize() * 4; len(m.captureBuf) > maxBuffered {
-		m.captureBuf = m.captureBuf[len(m.captureBuf)-maxBuffered:]
-	}
-}
-
-func (m *CallManager) sendOpusFrameLocked(opus []byte) {
-	if m.rtpSession == nil || m.srtpSession == nil {
-		return
+	if m.rtpSession == nil || m.srtp == nil {
+		return nil
 	}
 	marker := !m.firstPacketSent
-	pkt := m.rtpSession.CreatePacketWithDuration(opus, m.codec.FrameSize(), marker)
+	pkt := m.rtpSession.CreatePacketWithDuration(encoded, frameSamples, marker)
 	if m.debeEnabled {
 		pkt.Header.Extension = true
 		pkt.Header.ExtensionProfile = 0xbede
 		pkt.Header.ExtensionData = nil
 	}
 	m.firstPacketSent = true
-
-	srtp, err := m.srtpSession.Protect(pkt)
+	protected, err := m.srtp.Protect(pkt)
 	if err != nil {
 		m.log.Debug("srtp protect error", "err", err)
-		return
+		return err
 	}
-	m.relay.Broadcast(srtp)
+	m.relay.Broadcast(protected)
+	return nil
 }
 
-func (m *CallManager) startMediaSendLoopLocked() {
-	if m.sendLoopStop != nil || m.codec == nil {
-		return
+func (m *CallManager) sendRTP(pkt *media.RtpPacket) error {
+	m.mu.Lock()
+	srtp := m.srtp
+	m.mu.Unlock()
+	if srtp == nil {
+		return nil
 	}
-	stop := make(chan struct{})
-	m.sendLoopStop = stop
-	frameSize := m.codec.FrameSize()
-	go func() {
-		ticker := time.NewTicker(60 * time.Millisecond)
-		defer ticker.Stop()
-		silence := make([]float32, frameSize)
-		for {
-			select {
-			case <-stop:
-				return
-			case <-ticker.C:
-			}
-			m.mu.Lock()
-			if m.codec == nil || m.rtpSession == nil || m.srtpSession == nil || !m.relay.HasConnection() {
-				m.mu.Unlock()
-				continue
-			}
-			frame := silence
-			if len(m.captureBuf) >= frameSize {
-				frame = make([]float32, frameSize)
-				copy(frame, m.captureBuf[:frameSize])
-				m.captureBuf = m.captureBuf[frameSize:]
-			}
-			if opus, err := m.codec.Encode(frame); err == nil {
-				m.sendOpusFrameLocked(opus)
-			}
-			m.mu.Unlock()
-		}
-	}()
+	protected, err := srtp.Protect(pkt)
+	if err != nil {
+		return err
+	}
+	m.relay.Broadcast(protected)
+	return nil
 }
 
 func (m *CallManager) onRelayData(data []byte) {
@@ -98,26 +111,15 @@ func (m *CallManager) onRelayData(data []byte) {
 	if len(data) < 12 {
 		return
 	}
-	switch data[1] & 0x7f {
-	case core.PayloadTypeWhatsAppOpus:
-		m.handleAudioRelayData(data)
-	case core.PayloadTypeWhatsAppH264:
-		m.video.HandleRelayData(data)
-	}
-}
-
-func (m *CallManager) handleAudioRelayData(data []byte) {
-	m.mu.Lock()
-	if m.srtpSession == nil || m.codec == nil {
-		m.mu.Unlock()
-		return
-	}
+	pt := data[1] & 0x7f
 	ssrc := media.RTPSsrc(data)
+
+	m.mu.Lock()
 	if ssrc == m.selfSsrc {
 		m.mu.Unlock()
 		return
 	}
-	if !m.actualPeerSet {
+	if pt == core.PayloadTypeWhatsAppOpus && !m.actualPeerSet {
 		m.actualPeerSet = true
 		if !containsSsrc(m.peerSsrcs, ssrc) {
 			m.peerSsrcs = []uint32{ssrc}
@@ -125,9 +127,16 @@ func (m *CallManager) handleAudioRelayData(data []byte) {
 			go m.relay.ResendSubscriptions()
 		}
 	}
-	srtp := m.srtpSession
-	codec := m.codec
+	srtp := m.srtp
 	m.mu.Unlock()
+
+	m.extMu.Lock()
+	skip := m.declaredSelf[ssrc]
+	handler := m.rtpHandlers[pt]
+	m.extMu.Unlock()
+	if skip || srtp == nil || handler == nil {
+		return
+	}
 
 	pkt, err := srtp.Unprotect(data)
 	if err != nil {
@@ -137,38 +146,5 @@ func (m *CallManager) handleAudioRelayData(data []byte) {
 	if len(pkt.Payload) == 0 {
 		return
 	}
-	pcm, err := codec.Decode(pkt.Payload)
-	if err != nil || len(pcm) == 0 {
-		return
-	}
-	if m.OnPeerAudio != nil {
-		m.OnPeerAudio(m.alignPeerAudio(pkt.Header.Timestamp, pcm))
-	}
-}
-
-func (m *CallManager) alignPeerAudio(ts uint32, pcm []float32) []float32 {
-	const maxGapSamples = 8000
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	origLen := uint64(len(pcm))
-	if !m.audioTimelineSet {
-		m.audioTimelineSet = true
-		m.audioBaseTs = ts
-		m.audioPlayedSamples = origLen
-		return pcm
-	}
-	target := uint64(ts - m.audioBaseTs)
-	gap := int64(target) - int64(m.audioPlayedSamples)
-	if gap < 0 || gap > maxGapSamples {
-		m.audioBaseTs = ts
-		m.audioPlayedSamples = origLen
-		return pcm
-	}
-	if gap > 0 {
-		padded := make([]float32, int(gap)+int(origLen))
-		copy(padded[int(gap):], pcm)
-		pcm = padded
-	}
-	m.audioPlayedSamples = target + origLen
-	return pcm
+	handler(pkt)
 }

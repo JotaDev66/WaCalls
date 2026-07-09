@@ -4,8 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sync"
-	callvideo "wacalls/internal/voip/call/video"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/transport"
@@ -21,16 +21,13 @@ type CallManager struct {
 	mu          sync.Mutex
 	currentCall *CallInfo
 
-	rtpSession  *media.RtpSession
-	srtpSession *media.SrtpSession
-	codec       media.Codec
-	relay       RelayTransport
+	rtpSession *media.RtpSession
+	srtp       *engine.SrtpManager
+	relay      RelayTransport
 
 	selfSsrc      uint32
 	peerSsrcs     []uint32
 	actualPeerSet bool
-
-	video *callvideo.Pipeline
 
 	firstPacketSent       bool
 	initialTransportSent  bool
@@ -38,12 +35,11 @@ type CallManager struct {
 	acceptedByJid         string
 	debeEnabled           bool
 
-	captureBuf   []float32
-	sendLoopStop chan struct{}
-
-	audioTimelineSet   bool
-	audioBaseTs        uint32
-	audioPlayedSamples uint64
+	extensions   []engine.Extension
+	extMu        sync.Mutex
+	rtpHandlers  map[uint8]func(*media.RtpPacket)
+	declaredSelf map[uint32]bool
+	extAttached  bool
 
 	OnStateChange func(*CallInfo)
 	OnIncoming    func(*CallInfo)
@@ -52,25 +48,22 @@ type CallManager struct {
 	OnPeerVideo   func([]byte)
 }
 
-func NewCallManager(sock core.VoipSocket, log *slog.Logger) *CallManager {
+func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
 	if log == nil {
 		log = slog.Default()
 	}
 	m := &CallManager{
-		sock:        sock,
-		log:         log,
-		debeEnabled: true,
+		sock:         sock,
+		log:          log,
+		debeEnabled:  true,
+		extensions:   exts,
+		rtpHandlers:  map[uint8]func(*media.RtpPacket){},
+		declaredSelf: map[uint32]bool{},
 	}
 	relay := transport.NewSctpRelayManager(log)
 	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected() })
 	relay.SetOnReceive(func(data []byte) { m.onRelayData(data) })
 	m.relay = relay
-	m.video = callvideo.New(log, relay)
-	m.video.OnFrame = func(au []byte) {
-		if m.OnPeerVideo != nil {
-			m.OnPeerVideo(au)
-		}
-	}
 	return m
 }
 
@@ -114,7 +107,6 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.selfSsrc = media.GenerateSecureSsrc(callID, selfJid, 0)
 	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
-	m.initCodec()
 	m.mu.Unlock()
 
 	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved, isVideo)

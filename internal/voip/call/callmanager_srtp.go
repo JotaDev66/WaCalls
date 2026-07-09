@@ -2,6 +2,7 @@ package call
 
 import (
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/wanode"
 
@@ -35,19 +36,10 @@ func (m *CallManager) initSrtpKeysLocked() {
 		m.log.Error("srtp key derivation failed", "err1", err1, "err2", err2)
 		return
 	}
-	sess, err := media.NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
-	if err != nil {
-		m.log.Error("srtp session failed", "err", err)
-		return
-	}
-	m.srtpSession = sess
+	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	m.log.Debug("srtp per-jid keys set", "send", ourDeviceJid, "recv", peerDeviceJid)
 
-	if m.currentCall != nil && m.currentCall.MediaType == core.CallMediaTypeVideo {
-		if err := m.video.Setup(m.currentCall.CallID, ourDeviceJid, peerDeviceJid, sendKM, recvKM); err != nil {
-			m.log.Error("video setup failed", "err", err)
-		}
-	}
+	m.ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid)
 }
 
 func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
@@ -66,8 +58,6 @@ func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
 	if err1 != nil || err2 != nil {
 		return
 	}
-	if sess, err := media.NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen); err == nil {
-		m.srtpSession = sess
-		m.log.Debug("srtp re-initialized with peer call key")
-	}
+	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	m.log.Debug("srtp re-initialized with peer call key")
 }
