@@ -9,10 +9,13 @@ import (
 
 type CallScope struct {
 	Log             *slog.Logger
+	CallID          string
+	OwnDeviceJID    string
+	PeerDeviceJID   string
 	Relay           core.Relay
+	SendAudioFrame  func(encoded []byte, frameSamples int) error
 	SendRTP         func(pkt *media.RtpPacket) error
 	OnRTP           func(pt uint8, handler func(pkt *media.RtpPacket))
-	AudioRtpSession func() *media.RtpSession
 	DeclareSelfSSRC func(ssrc uint32)
 }
 
