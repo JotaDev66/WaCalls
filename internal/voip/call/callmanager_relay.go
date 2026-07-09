@@ -1,6 +1,9 @@
 package call
 
 import (
+	"context"
+	"runtime/pprof"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
@@ -71,11 +74,17 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 		return
 	}
 	m.mu.Lock()
+	callID := ""
+	if m.currentCall != nil {
+		callID = m.currentCall.CallID
+	}
 	m.relay.SetSsrc(m.selfSsrc)
 	m.relay.SetSubscriptionSsrc(firstSsrc(m.peerSsrcs))
 	m.mu.Unlock()
 	m.relay.SetObserver(m.observer)
-	m.relay.ConfigureRelays(relays)
+	pprof.Do(context.Background(), pprof.Labels("call_id", callID), func(context.Context) {
+		m.relay.ConfigureRelays(relays)
+	})
 	m.log.Info("relay configured", "connected", m.relay.ConnectedCount())
 }
 

@@ -1,6 +1,8 @@
 package audio
 
 import (
+	"context"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -87,7 +89,9 @@ func (a *Audio) startSendLoopLocked() {
 	a.sendLoopStop = stop
 	frameSize := a.codec.FrameSize()
 	done := a.scope.Observer.TrackGoroutine()
+	callID := a.scope.CallID
 	go func() {
+		pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels("call_id", callID)))
 		defer done()
 		ticker := time.NewTicker(60 * time.Millisecond)
 		defer ticker.Stop()
