@@ -1,6 +1,8 @@
 package audio
 
 import (
+	"context"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -8,6 +10,8 @@ import (
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 )
+
+const audioCodecBytes = 96 * 1024
 
 type Audio struct {
 	codec              core.AudioCodec
@@ -19,6 +23,7 @@ type Audio struct {
 	audioPlayedSamples uint64
 	sendLoopStop       chan struct{}
 	onPeerPCM          func([]float32)
+	detached           bool
 }
 
 func New(codec core.AudioCodec) *Audio {
@@ -32,6 +37,7 @@ func (a *Audio) Name() string {
 func (a *Audio) Attach(scope *engine.CallScope) error {
 	a.mu.Lock()
 	a.scope = scope
+	scope.Observer.AddMem(audioCodecBytes)
 	a.startSendLoopLocked()
 	a.mu.Unlock()
 	scope.OnRTP(core.PayloadTypeWhatsAppOpus, a.handleInbound)
@@ -40,11 +46,20 @@ func (a *Audio) Attach(scope *engine.CallScope) error {
 
 func (a *Audio) Detach() {
 	a.mu.Lock()
+	if a.detached {
+		a.mu.Unlock()
+		return
+	}
+	a.detached = true
 	if a.sendLoopStop != nil {
 		close(a.sendLoopStop)
 		a.sendLoopStop = nil
 	}
+	scope := a.scope
 	a.mu.Unlock()
+	if scope != nil {
+		scope.Observer.ReleaseMem(audioCodecBytes)
+	}
 	a.codec.Close()
 }
 
@@ -73,10 +88,15 @@ func (a *Audio) startSendLoopLocked() {
 	stop := make(chan struct{})
 	a.sendLoopStop = stop
 	frameSize := a.codec.FrameSize()
+	done := a.scope.Observer.TrackGoroutine()
+	callID := a.scope.CallID
 	go func() {
+		pprof.SetGoroutineLabels(pprof.WithLabels(context.Background(), pprof.Labels("call_id", callID)))
+		defer done()
 		ticker := time.NewTicker(60 * time.Millisecond)
 		defer ticker.Stop()
 		silence := make([]float32, frameSize)
+		voiced := make([]float32, frameSize)
 		for {
 			select {
 			case <-stop:
@@ -90,8 +110,8 @@ func (a *Audio) startSendLoopLocked() {
 			}
 			frame := silence
 			if len(a.captureBuf) >= frameSize {
-				frame = make([]float32, frameSize)
-				copy(frame, a.captureBuf[:frameSize])
+				copy(voiced, a.captureBuf[:frameSize])
+				frame = voiced
 				a.captureBuf = a.captureBuf[frameSize:]
 			}
 			scope := a.scope

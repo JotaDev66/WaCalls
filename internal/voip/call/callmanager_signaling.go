@@ -75,7 +75,7 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 		sj = m.sock.OwnPN().String()
 	}
 	m.selfSsrc = media.GenerateSecureSsrc(callID, sj, 0)
-	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
+	m.replaceRtpSession(media.NewWhatsAppOpusSession(m.selfSsrc))
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, peerJid.String(), 0)}
 	m.mu.Unlock()
 
@@ -230,7 +230,7 @@ func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
 		newSelf := media.GenerateSecureSsrc(call.CallID, ourDeviceJid, 0)
 		if newSelf != m.selfSsrc {
 			m.selfSsrc = newSelf
-			m.rtpSession = media.NewWhatsAppOpusSession(newSelf)
+			m.replaceRtpSession(media.NewWhatsAppOpusSession(newSelf))
 		}
 		if peer := firstPeerDevice(parsed.ParticipantJids, ourBase); peer != "" {
 			m.peerSsrcs = []uint32{media.GenerateSecureSsrc(call.CallID, ensureDeviceJid(peer), 0)}

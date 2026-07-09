@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/codec/mlow"
 	"wacalls/internal/voip/core"
@@ -47,7 +48,7 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 		auth:    AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
 	}
-	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall)
+	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, mgr.newObserver)
 	client.AddEventHandler(s.handleEvent)
 	return s
 }
@@ -70,9 +71,11 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 		})
 		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid, c.MediaType == core.CallMediaTypeVideo)
+		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound", Video: c.MediaType == core.CallMediaTypeVideo})
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
+			s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 			s.removeCall(c.CallID)
 			s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 			return
@@ -82,6 +85,12 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			dir = "inbound"
 		}
 		existing, _ := s.mgr.broker.getCall(c.CallID)
+		if existing == nil {
+			s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: dir, Video: c.MediaType == core.CallMediaTypeVideo})
+		}
+		if mapStatus(c.StateData.State) == StatusConnected && c.StateData.ConnectedAt != nil {
+			s.mgr.tracer.MarkActive(c.CallID, c.StateData.ConnectedAt.Sub(c.CreatedAt))
+		}
 		rec := CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: dir, Peer: c.PeerJid,
 			StartedAt: time.Now().UnixMilli(), Status: mapStatus(c.StateData.State),
@@ -93,6 +102,7 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		s.mgr.broker.upsertCall(rec)
 	}
 	cm.OnEnded = func(c *call.CallInfo) {
+		s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 		s.removeCall(c.CallID)
 		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 	}
@@ -259,6 +269,20 @@ func (s *Session) replaceClient(client *whatsmeow.Client) {
 func (s *Session) shutdown() {
 	s.teardownAllCalls()
 	s.client.Disconnect()
+}
+
+func endResult(c *call.CallInfo) string {
+	if c.StateData.ConnectedAt != nil {
+		return "completed"
+	}
+	return "failed"
+}
+
+func endDuration(c *call.CallInfo) time.Duration {
+	if c.StateData.EndedAt != nil {
+		return c.StateData.EndedAt.Sub(c.CreatedAt)
+	}
+	return 0
 }
 
 func mapStatus(state core.CallState) CallStatus {

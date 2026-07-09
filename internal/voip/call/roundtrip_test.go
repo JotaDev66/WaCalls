@@ -70,6 +70,7 @@ func (r *fakeRelay) ConfigureRelays([]transport.RelayConfig) {}
 func (r *fakeRelay) BufferedAmount() uint64                  { return 0 }
 func (r *fakeRelay) ConnectedCount() int                     { return 1 }
 func (r *fakeRelay) Cleanup()                                {}
+func (r *fakeRelay) SetObserver(core.CallObserver)           {}
 
 func km(seed byte) core.SrtpKeyingMaterial {
 	mk := make([]byte, 16)

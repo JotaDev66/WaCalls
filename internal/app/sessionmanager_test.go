@@ -21,7 +21,7 @@ func newTestManager(t *testing.T) *SessionManager {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { bundle.Close() })
-	return newSessionManager(ctx, bundle.Container, NewBroker(), bundle.Sessions, waLog.Noop, slog.Default(), 0)
+	return newSessionManager(ctx, bundle.Container, NewBroker(), bundle.Sessions, waLog.Noop, slog.Default(), 0, nil, nil)
 }
 
 func TestNewSessionID(t *testing.T) {

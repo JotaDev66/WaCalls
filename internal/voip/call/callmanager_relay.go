@@ -1,6 +1,9 @@
 package call
 
 import (
+	"context"
+	"runtime/pprof"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
@@ -12,6 +15,7 @@ type RelayTransport interface {
 	SetStreamSsrcs(selfSsrcs, peerSsrcs []uint32)
 	SetOnConnected(fn func(ip string, port int))
 	SetOnReceive(fn func(data []byte))
+	SetObserver(o core.CallObserver)
 	ResendSubscriptions()
 	ConfigureRelays(relays []transport.RelayConfig)
 	Broadcast(data []byte)
@@ -70,16 +74,26 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 		return
 	}
 	m.mu.Lock()
+	callID := ""
+	if m.currentCall != nil {
+		callID = m.currentCall.CallID
+	}
 	m.relay.SetSsrc(m.selfSsrc)
 	m.relay.SetSubscriptionSsrc(firstSsrc(m.peerSsrcs))
 	m.mu.Unlock()
-	m.relay.ConfigureRelays(relays)
+	m.relay.SetObserver(m.observer)
+	pprof.Do(context.Background(), pprof.Labels("call_id", callID), func(context.Context) {
+		m.relay.ConfigureRelays(relays)
+	})
 	m.log.Info("relay configured", "connected", m.relay.ConnectedCount())
 }
 
 func (m *CallManager) cleanupMedia() {
 	m.mu.Lock()
-	m.rtpSession = nil
+	if m.srtp != nil {
+		m.srtp.Close()
+	}
+	m.replaceRtpSession(nil)
 	m.srtp = nil
 	m.firstPacketSent = false
 	m.initialTransportSent = false

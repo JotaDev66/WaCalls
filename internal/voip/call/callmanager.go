@@ -15,8 +15,9 @@ import (
 )
 
 type CallManager struct {
-	sock core.VoipSocket
-	log  *slog.Logger
+	sock     core.VoipSocket
+	log      *slog.Logger
+	observer core.CallObserver
 
 	mu          sync.Mutex
 	currentCall *CallInfo
@@ -55,6 +56,7 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 	m := &CallManager{
 		sock:         sock,
 		log:          log,
+		observer:     core.NopObserver{},
 		debeEnabled:  true,
 		extensions:   exts,
 		rtpHandlers:  map[uint8]func(*media.RtpPacket){},
@@ -105,7 +107,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 
 	selfJid := creator.String()
 	m.selfSsrc = media.GenerateSecureSsrc(callID, selfJid, 0)
-	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
+	m.replaceRtpSession(media.NewWhatsAppOpusSession(m.selfSsrc))
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
@@ -178,7 +180,7 @@ func (m *CallManager) setupIncomingMedia(call *CallInfo, relayData *core.RelayDa
 		ourDeviceJid := ensureDeviceJid(findOurDevice(relayData.ParticipantJids, ourBase, m.ownCredJid()))
 		if newSelf := media.GenerateSecureSsrc(call.CallID, ourDeviceJid, 0); newSelf != m.selfSsrc {
 			m.selfSsrc = newSelf
-			m.rtpSession = media.NewWhatsAppOpusSession(newSelf)
+			m.replaceRtpSession(media.NewWhatsAppOpusSession(newSelf))
 		}
 		if peer := firstPeerDevice(relayData.ParticipantJids, ourBase); peer != "" {
 			m.peerSsrcs = []uint32{media.GenerateSecureSsrc(call.CallID, ensureDeviceJid(peer), 0)}

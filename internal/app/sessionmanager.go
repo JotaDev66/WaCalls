@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
@@ -17,13 +18,15 @@ import (
 )
 
 type SessionManager struct {
-	appCtx    context.Context
-	container *sqlstore.Container
-	broker    *Broker
-	store     core.SessionStore
-	waLogger  waLog.Logger
-	log       *slog.Logger
-	maxCalls  int
+	appCtx      context.Context
+	container   *sqlstore.Container
+	broker      *Broker
+	store       core.SessionStore
+	waLogger    waLog.Logger
+	log         *slog.Logger
+	maxCalls    int
+	newObserver func(string) core.CallObserver
+	tracer      telemetry.CallTracer
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
@@ -36,16 +39,24 @@ func newSessionID() string {
 	return hex.EncodeToString(b)
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int) *SessionManager {
+func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer) *SessionManager {
+	if newObserver == nil {
+		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
+	}
+	if tracer == nil {
+		tracer = telemetry.NopTracer()
+	}
 	return &SessionManager{
-		appCtx:    ctx,
-		container: container,
-		broker:    broker,
-		store:     store,
-		waLogger:  waLogger,
-		log:       log,
-		maxCalls:  maxCalls,
-		sessions:  map[string]*Session{},
+		appCtx:      ctx,
+		container:   container,
+		broker:      broker,
+		store:       store,
+		waLogger:    waLogger,
+		log:         log,
+		maxCalls:    maxCalls,
+		newObserver: newObserver,
+		tracer:      tracer,
+		sessions:    map[string]*Session{},
 	}
 }
 
