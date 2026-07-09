@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"strings"
 	"time"
@@ -28,6 +29,14 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
 
 	mux.HandleFunc("GET /api/events", s.handleEvents)
+
+	if s.debug {
+		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+		mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+	}
 
 	if s.staticDir != "" {
 		if _, err := os.Stat(s.staticDir); err == nil {

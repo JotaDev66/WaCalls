@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"wacalls/internal/app"
+	"wacalls/internal/telemetry"
 )
 
 func main() {
@@ -29,7 +31,18 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv, err := app.NewServer(ctx, *dbPath, *staticDir, *maxCalls, log)
+	shutdown, obsFactory, tracer, err := telemetry.Init(ctx, telemetry.ConfigFromEnv())
+	if err != nil {
+		log.Error("telemetry init failed", "err", err)
+		os.Exit(1)
+	}
+	defer func() {
+		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = shutdown(sctx)
+	}()
+
+	srv, err := app.NewServer(ctx, *dbPath, *staticDir, *maxCalls, *debug, obsFactory, tracer, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)

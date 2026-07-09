@@ -28,6 +28,8 @@ func (nopTracer) StartCall(string, CallAttrs)                   {}
 func (nopTracer) MarkActive(string, time.Duration)              {}
 func (nopTracer) EndCall(string, string, string, time.Duration) {}
 
+func NopTracer() CallTracer { return nopTracer{} }
+
 type otelTracer struct {
 	tracer trace.Tracer
 	inst   *instruments

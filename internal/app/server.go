@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"wacalls/internal/store/sqlite"
+	"wacalls/internal/telemetry"
+	"wacalls/internal/voip/core"
 
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
@@ -17,9 +19,10 @@ type Server struct {
 	sessions  *SessionManager
 	log       *slog.Logger
 	staticDir string
+	debug     bool
 }
 
-func NewServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log *slog.Logger) (*Server, error) {
+func NewServer(ctx context.Context, dbPath, staticDir string, maxCalls int, debug bool, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
 	bundle, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		return nil, err
@@ -31,10 +34,10 @@ func NewServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log 
 	}
 
 	broker := NewBroker()
-	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls)
+	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir}, nil
+	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, debug: debug}, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
