@@ -1,16 +1,8 @@
 package media
 
-type Codec interface {
-	Encode(pcm []float32) ([]byte, error)
+import "wacalls/internal/voip/core"
 
-	Decode(frame []byte) ([]float32, error)
-
-	FrameSize() int
-
-	SampleRate() int
-
-	Close()
-}
+type Codec = core.AudioCodec
 
 type CodecOptions struct {
 	Bitrate    int
