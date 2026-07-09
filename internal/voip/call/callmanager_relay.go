@@ -12,6 +12,7 @@ type RelayTransport interface {
 	SetStreamSsrcs(selfSsrcs, peerSsrcs []uint32)
 	SetOnConnected(fn func(ip string, port int))
 	SetOnReceive(fn func(data []byte))
+	SetObserver(o core.CallObserver)
 	ResendSubscriptions()
 	ConfigureRelays(relays []transport.RelayConfig)
 	Broadcast(data []byte)
@@ -73,6 +74,7 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 	m.relay.SetSsrc(m.selfSsrc)
 	m.relay.SetSubscriptionSsrc(firstSsrc(m.peerSsrcs))
 	m.mu.Unlock()
+	m.relay.SetObserver(m.observer)
 	m.relay.ConfigureRelays(relays)
 	m.log.Info("relay configured", "connected", m.relay.ConnectedCount())
 }
