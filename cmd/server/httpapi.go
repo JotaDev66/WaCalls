@@ -177,7 +177,7 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
 		return
 	}
-	if max := s.sessions.maxCalls; max > 0 && sess.reg.count() >= max {
+	if max := s.sessions.maxCalls; max > 0 && sess.callCount() >= max {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}
@@ -197,7 +197,7 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 
 func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
 	callID := r.PathValue("id")
-	ac, ok := sess.reg.get(callID)
+	cm, ok := sess.callFor(callID)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
@@ -216,10 +216,10 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 	}
 
 	bridge.OnBrowserPCM = func(pcm []float32) {
-		ac.cm.FeedCapturedPCM(pcm)
+		cm.FeedCapturedPCM(pcm)
 	}
 	bridge.OnBrowserVideo = func(au []byte) {
-		ac.cm.FeedCapturedVideo(au)
+		cm.FeedCapturedVideo(au)
 	}
 	bridge.OnTerminalICE = func() {
 		go sess.terminateCall(callID, core.EndCallReasonUserEnded)
@@ -230,7 +230,7 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	ac, ok := sess.reg.get(id)
+	cm, ok := sess.callFor(id)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
@@ -245,7 +245,7 @@ func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.broker.emitIncomingClaimed(sess.id, id, owner)
-	if err := ac.cm.AcceptCall(r.Context(), id); err != nil {
+	if err := cm.AcceptCall(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -254,8 +254,8 @@ func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if ac, ok := sess.reg.get(id); ok {
-		_ = ac.cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined)
+	if cm, ok := sess.callFor(id); ok {
+		_ = cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined)
 	}
 	sess.removeCall(id)
 	s.broker.endCall(id, string(core.EndCallReasonDeclined))
@@ -264,8 +264,8 @@ func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if ac, ok := sess.reg.get(id); ok {
-		_ = ac.cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
+	if cm, ok := sess.callFor(id); ok {
+		_ = cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
 	}
 	sess.removeCall(id)
 	s.broker.endCall(id, string(core.EndCallReasonUserEnded))

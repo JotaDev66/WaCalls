@@ -13,13 +13,10 @@ import (
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
 	"wacalls/internal/voip/extension/video"
-	"wacalls/internal/voip/signaling"
-	"wacalls/internal/voip/wanode"
 	"wacalls/internal/wa"
 
 	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
-	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 )
@@ -31,7 +28,10 @@ type Session struct {
 	log  *slog.Logger
 
 	client *whatsmeow.Client
-	reg    *callRegistry
+	calls  *call.Client
+
+	bridgeMu sync.Mutex
+	bridges  map[string]*Bridge
 
 	mu   sync.Mutex
 	auth AuthSnapshot
@@ -39,19 +39,20 @@ type Session struct {
 
 func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) *Session {
 	s := &Session{
-		id:     id,
-		name:   name,
-		mgr:    mgr,
-		log:    mgr.log.With("session", id),
-		client: client,
-		auth:   AuthSnapshot{State: "connecting"},
-		reg:    newCallRegistry(),
+		id:      id,
+		name:    name,
+		mgr:     mgr,
+		log:     mgr.log.With("session", id),
+		client:  client,
+		auth:    AuthSnapshot{State: "connecting"},
+		bridges: map[string]*Bridge{},
 	}
+	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall)
 	client.AddEventHandler(s.handleEvent)
 	return s
 }
 
-func (s *Session) createCall(callID string) *call.CallManager {
+func (s *Session) makeExtensions() []engine.Extension {
 	var exts []engine.Extension
 	if codec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions); err == nil {
 		exts = append(exts, audio.New(codec))
@@ -59,13 +60,10 @@ func (s *Session) createCall(callID string) *call.CallManager {
 		s.log.Warn("MLow codec unavailable; call runs without audio", "err", err)
 	}
 	exts = append(exts, video.New())
-	cm := call.NewCallManager(wa.NewSocket(s.client), s.log, exts...)
-	s.wireCall(cm, callID)
-	s.reg.add(callID, &activeCall{cm: cm})
-	return cm
+	return exts
 }
 
-func (s *Session) wireCall(cm *call.CallManager, callID string) {
+func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnIncoming = func(c *call.CallInfo) {
 		s.mgr.broker.upsertCall(CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
@@ -99,65 +97,27 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
-			return
+		if b := s.getBridge(callID); b != nil {
+			_ = b.WritePCM(pcm16)
 		}
-		_ = ac.bridge.WritePCM(pcm16)
 	}
 	cm.OnPeerVideo = func(au []byte) {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
-			return
+		if b := s.getBridge(callID); b != nil {
+			_ = b.WriteVideo(au)
 		}
-		_ = ac.bridge.WriteVideo(au)
 	}
 }
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
-	callID := signaling.GenerateCallID()
-	cm := s.createCall(callID)
-	if err := cm.StartCall(ctx, callID, peer, isVideo); err != nil {
-		s.removeCall(callID)
-		return "", err
-	}
-	return callID, nil
+	return s.calls.StartCall(ctx, peer, isVideo)
 }
 
-func (s *Session) callForEvent(from types.JID, data *waBinary.Node) (*activeCall, bool) {
-	callID := callIDFromNode(wrapCall(from, data))
-	if callID == "" {
-		return nil, false
-	}
-	return s.reg.get(callID)
+func (s *Session) callFor(callID string) (*call.CallManager, bool) {
+	return s.calls.Get(callID)
 }
 
-func (s *Session) onIncomingOffer(ctx context.Context, evt *events.CallOffer) {
-	node := wrapCall(evt.From, evt.Data)
-	callID := callIDFromNode(node)
-	if callID == "" {
-		return
-	}
-	if max := s.mgr.maxCalls; max > 0 && s.reg.count() >= max {
-		s.rejectOffer(ctx, node, evt.From)
-		return
-	}
-	cm := s.createCall(callID)
-	cm.HandleCallOffer(ctx, node, evt.From)
-}
-
-func (s *Session) rejectOffer(ctx context.Context, node *waBinary.Node, from types.JID) {
-	info := signaling.ExtractNodeInfo(node)
-	if info == nil {
-		return
-	}
-	creator := wanode.AttrString(info.InnerNode.Attrs, "call-creator")
-	if creator == "" {
-		creator = from.String()
-	}
-	reject := signaling.BuildRejectStanza(from, info.CallID, wanode.MustJID(creator))
-	_ = wa.NewSocket(s.client).SendNode(ctx, reject)
-	s.log.Info("inbound call rejected: session at capacity", "call_id", info.CallID)
+func (s *Session) callCount() int {
+	return s.calls.Count()
 }
 
 func (s *Session) handleEvent(rawEvt any) {
@@ -171,23 +131,15 @@ func (s *Session) handleEvent(rawEvt any) {
 	case *events.LoggedOut:
 		s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
 	case *events.CallOffer:
-		s.onIncomingOffer(ctx, evt)
+		s.calls.HandleOffer(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *events.CallAccept:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
-		}
+		s.calls.HandleAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *events.CallTransport:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTransport(ctx, wrapCall(evt.From, evt.Data), evt.From)
-		}
+		s.calls.HandleTransport(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *events.CallTerminate:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTerminate(wrapCall(evt.From, evt.Data))
-		}
+		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	case *events.CallReject:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTerminate(wrapCall(evt.From, evt.Data))
-		}
+		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	}
 }
 
@@ -246,40 +198,53 @@ func (s *Session) info() SessionInfo {
 	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
 }
 
+func (s *Session) getBridge(callID string) *Bridge {
+	s.bridgeMu.Lock()
+	defer s.bridgeMu.Unlock()
+	return s.bridges[callID]
+}
+
 func (s *Session) setBridge(callID string, b *Bridge) {
-	oldB, found := s.reg.setBridge(callID, b)
-	if !found {
+	s.bridgeMu.Lock()
+	old := s.bridges[callID]
+	if _, live := s.calls.Get(callID); !live {
+		s.bridgeMu.Unlock()
 		b.Close()
 		return
 	}
-	if oldB != nil {
-		oldB.Close()
+	s.bridges[callID] = b
+	s.bridgeMu.Unlock()
+	if old != nil {
+		old.Close()
 	}
 }
 
 func (s *Session) removeCall(callID string) {
-	ac, ok := s.reg.remove(callID)
-	if !ok {
-		return
+	s.bridgeMu.Lock()
+	b := s.bridges[callID]
+	delete(s.bridges, callID)
+	s.bridgeMu.Unlock()
+	if b != nil {
+		b.Close()
 	}
-	if ac.bridge != nil {
-		ac.bridge.Close()
-	}
+	s.calls.Remove(callID)
 }
 
 func (s *Session) terminateCall(callID string, reason core.EndCallReason) {
-	ac, ok := s.reg.get(callID)
-	if !ok {
-		return
-	}
-	_ = ac.cm.EndCall(context.Background(), reason)
+	_ = s.calls.EndCall(context.Background(), callID, reason)
 }
 
 func (s *Session) teardownAllCalls() {
-	for _, ac := range s.reg.drain() {
-		_ = ac.cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
-		if ac.bridge != nil {
-			ac.bridge.Close()
+	for _, cm := range s.calls.Drain() {
+		_ = cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
+	}
+	s.bridgeMu.Lock()
+	bridges := s.bridges
+	s.bridges = map[string]*Bridge{}
+	s.bridgeMu.Unlock()
+	for _, b := range bridges {
+		if b != nil {
+			b.Close()
 		}
 	}
 }
