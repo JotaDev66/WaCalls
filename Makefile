@@ -1,12 +1,16 @@
 COMPOSE ?= docker compose
+POSTGRES_COMPOSE ?= $(COMPOSE) -f docker-compose.yml -f docker-compose.postgres.yml
 
-.PHONY: build up down restart logs sh clean
+.PHONY: build up up-postgres down restart logs sh clean
 
 build:
 	$(COMPOSE) build
 
 up:
 	$(COMPOSE) up -d
+
+up-postgres:
+	$(POSTGRES_COMPOSE) up -d
 
 down:
 	$(COMPOSE) down
