@@ -96,6 +96,7 @@ func (a *Audio) startSendLoopLocked() {
 		ticker := time.NewTicker(60 * time.Millisecond)
 		defer ticker.Stop()
 		silence := make([]float32, frameSize)
+		voiced := make([]float32, frameSize)
 		for {
 			select {
 			case <-stop:
@@ -109,8 +110,8 @@ func (a *Audio) startSendLoopLocked() {
 			}
 			frame := silence
 			if len(a.captureBuf) >= frameSize {
-				frame = make([]float32, frameSize)
-				copy(frame, a.captureBuf[:frameSize])
+				copy(voiced, a.captureBuf[:frameSize])
+				frame = voiced
 				a.captureBuf = a.captureBuf[frameSize:]
 			}
 			scope := a.scope
