@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-func (s *server) routes() http.Handler {
+func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/sessions", s.handleSessionList)
@@ -63,7 +63,7 @@ func clientID(r *http.Request) string {
 	return r.URL.Query().Get("clientId")
 }
 
-func (s *server) sessionByID(w http.ResponseWriter, sid string) *Session {
+func (s *Server) sessionByID(w http.ResponseWriter, sid string) *Session {
 	sess, ok := s.sessions.Get(sid)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such session"})
@@ -72,15 +72,15 @@ func (s *server) sessionByID(w http.ResponseWriter, sid string) *Session {
 	return sess
 }
 
-func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.broker.serveSSE(w, r, clientID(r))
 }
 
-func (s *server) handleSessionList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.sessions.infos()})
 }
 
-func (s *server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
 	}
@@ -97,7 +97,7 @@ func (s *server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
-func (s *server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.sessions.Delete(r.Context(), r.PathValue("sid")); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -105,7 +105,7 @@ func (s *server) handleSessionDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) handleSessionLogout(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionLogout(w http.ResponseWriter, r *http.Request) {
 	if err := s.sessions.Logout(r.Context(), r.PathValue("sid")); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -113,7 +113,7 @@ func (s *server) handleSessionLogout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) handleSessionPair(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSessionPair(w http.ResponseWriter, r *http.Request) {
 	if err := s.sessions.Pair(r.PathValue("sid")); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -121,43 +121,43 @@ func (s *server) handleSessionPair(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *server) handleStartCall(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStartCall(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doStartCall(sess, w, r)
 	}
 }
 
-func (s *server) handleWebRTC(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleWebRTC(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doWebRTC(sess, w, r)
 	}
 }
 
-func (s *server) handleAccept(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleAccept(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doAccept(sess, w, r)
 	}
 }
 
-func (s *server) handleReject(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReject(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doReject(sess, w, r)
 	}
 }
 
-func (s *server) handleEndCall(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doEndCall(sess, w, r)
 	}
 }
 
-func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		writeJSON(w, http.StatusOK, map[string]any{"rows": s.broker.historyRows(sess.id, 50)})
 	}
 }
 
-func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	if sess.client.Store.ID == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
 		return
@@ -195,7 +195,7 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
 }
 
-func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
 	callID := r.PathValue("id")
 	cm, ok := sess.callFor(callID)
 	if !ok {
@@ -228,7 +228,7 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"sdp_answer": answer})
 }
 
-func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	cm, ok := sess.callFor(id)
 	if !ok {
@@ -252,7 +252,7 @@ func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": id}})
 }
 
-func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if cm, ok := sess.callFor(id); ok {
 		_ = cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined)
@@ -262,7 +262,7 @@ func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if cm, ok := sess.callFor(id); ok {
 		_ = cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
