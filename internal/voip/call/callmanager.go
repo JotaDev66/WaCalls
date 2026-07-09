@@ -6,6 +6,7 @@ import (
 	"sync"
 	callvideo "wacalls/internal/voip/call/video"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/transport"
@@ -21,10 +22,10 @@ type CallManager struct {
 	mu          sync.Mutex
 	currentCall *CallInfo
 
-	rtpSession  *media.RtpSession
-	srtpSession *media.SrtpSession
-	codec       media.Codec
-	relay       RelayTransport
+	rtpSession *media.RtpSession
+	srtp       *engine.SrtpManager
+	codec      media.Codec
+	relay      RelayTransport
 
 	selfSsrc      uint32
 	peerSsrcs     []uint32

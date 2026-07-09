@@ -86,7 +86,7 @@ func (m *CallManager) cleanupMedia() {
 		m.sendLoopStop = nil
 	}
 	m.rtpSession = nil
-	m.srtpSession = nil
+	m.srtp = nil
 	m.firstPacketSent = false
 	m.initialTransportSent = false
 	m.outgoingPreacceptSent = false

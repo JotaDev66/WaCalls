@@ -32,7 +32,7 @@ func (m *CallManager) FeedCapturedPCM(data []float32) {
 }
 
 func (m *CallManager) sendOpusFrameLocked(opus []byte) {
-	if m.rtpSession == nil || m.srtpSession == nil {
+	if m.rtpSession == nil || m.srtp == nil {
 		return
 	}
 	marker := !m.firstPacketSent
@@ -44,7 +44,7 @@ func (m *CallManager) sendOpusFrameLocked(opus []byte) {
 	}
 	m.firstPacketSent = true
 
-	srtp, err := m.srtpSession.Protect(pkt)
+	srtp, err := m.srtp.Protect(pkt)
 	if err != nil {
 		m.log.Debug("srtp protect error", "err", err)
 		return
@@ -70,7 +70,7 @@ func (m *CallManager) startMediaSendLoopLocked() {
 			case <-ticker.C:
 			}
 			m.mu.Lock()
-			if m.codec == nil || m.rtpSession == nil || m.srtpSession == nil || !m.relay.HasConnection() {
+			if m.codec == nil || m.rtpSession == nil || m.srtp == nil || !m.relay.HasConnection() {
 				m.mu.Unlock()
 				continue
 			}
@@ -108,7 +108,7 @@ func (m *CallManager) onRelayData(data []byte) {
 
 func (m *CallManager) handleAudioRelayData(data []byte) {
 	m.mu.Lock()
-	if m.srtpSession == nil || m.codec == nil {
+	if m.srtp == nil || m.codec == nil {
 		m.mu.Unlock()
 		return
 	}
@@ -125,7 +125,7 @@ func (m *CallManager) handleAudioRelayData(data []byte) {
 			go m.relay.ResendSubscriptions()
 		}
 	}
-	srtp := m.srtpSession
+	srtp := m.srtp
 	codec := m.codec
 	m.mu.Unlock()
 

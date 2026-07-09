@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
 )
@@ -34,7 +34,7 @@ type Pipeline struct {
 
 	mu       sync.Mutex
 	rtp      *media.RtpSession
-	srtp     *media.SrtpSession
+	srtp     *engine.SrtpManager
 	selfSsrc uint32
 	depack   *transport.H264Depacketizer
 	frameBuf []byte
@@ -50,11 +50,7 @@ func New(log *slog.Logger, relay Relay) *Pipeline {
 	return &Pipeline{log: log, relay: relay}
 }
 
-func (p *Pipeline) Setup(callID, ourDeviceJid, peerDeviceJid string, sendKM, recvKM core.SrtpKeyingMaterial) error {
-	srtp, err := media.NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
-	if err != nil {
-		return err
-	}
+func (p *Pipeline) Setup(callID, ourDeviceJid, peerDeviceJid string, srtp *engine.SrtpManager) error {
 	selfSsrc := media.GenerateSecureSsrc(callID, ourDeviceJid, slotWord)
 
 	selfSsrcs := make([]uint32, len(callSlots))

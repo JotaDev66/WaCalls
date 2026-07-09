@@ -1,9 +1,12 @@
 package video
 
 import (
+	"bytes"
 	"sync"
 	"testing"
 
+	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/transport"
 )
 
@@ -51,5 +54,72 @@ func TestResetClearsState(t *testing.T) {
 	p.Reset()
 	if p.depack != nil || p.frameBuf != nil || p.selfSsrc != 0 {
 		t.Fatal("Reset did not clear pipeline state")
+	}
+}
+
+type captureRelay struct {
+	mu        sync.Mutex
+	sent      [][]byte
+	connected bool
+}
+
+func (r *captureRelay) Broadcast(d []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.sent = append(r.sent, append([]byte(nil), d...))
+}
+func (r *captureRelay) BufferedAmount() uint64             { return 0 }
+func (r *captureRelay) HasConnection() bool                { return r.connected }
+func (r *captureRelay) SetStreamSsrcs(self, peer []uint32) {}
+
+func km(seed byte) core.SrtpKeyingMaterial {
+	mk := make([]byte, 16)
+	ms := make([]byte, 14)
+	for i := range mk {
+		mk[i] = seed + byte(i)
+	}
+	for i := range ms {
+		ms[i] = seed*2 + byte(i)
+	}
+	return core.SrtpKeyingMaterial{MasterKey: mk, MasterSalt: ms}
+}
+
+func TestVideoRoundtripThroughSharedManager(t *testing.T) {
+	k1, k2 := km(1), km(9)
+	senderMgr := engine.NewSrtpManager(k1, k2, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	receiverMgr := engine.NewSrtpManager(k2, k1, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+
+	sRelay := &captureRelay{connected: true}
+	sender := New(nil, sRelay)
+	if err := sender.Setup("call1", "alice.0", "bob.0", senderMgr); err != nil {
+		t.Fatalf("sender setup: %v", err)
+	}
+
+	rRelay := &captureRelay{connected: true}
+	receiver := New(nil, rRelay)
+	if err := receiver.Setup("call1", "bob.0", "alice.0", receiverMgr); err != nil {
+		t.Fatalf("receiver setup: %v", err)
+	}
+
+	var got []byte
+	receiver.OnFrame = func(au []byte) { got = au }
+
+	au := []byte{0, 0, 0, 1, 0x67, 0xAA, 0xBB, 0xCC}
+	sender.FeedCaptured(au)
+
+	sRelay.mu.Lock()
+	pkts := append([][]byte(nil), sRelay.sent...)
+	sRelay.mu.Unlock()
+	if len(pkts) == 0 {
+		t.Fatal("sender produced no SRTP packets")
+	}
+	for _, p := range pkts {
+		receiver.HandleRelayData(p)
+	}
+	if got == nil {
+		t.Fatal("receiver emitted no frame")
+	}
+	if !bytes.Contains(got, []byte{0x67, 0xAA, 0xBB, 0xCC}) {
+		t.Fatalf("reassembled frame missing NALU payload: %x", got)
 	}
 }
