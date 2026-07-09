@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"wacalls/internal/store/sqlite"
+	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
@@ -22,8 +22,8 @@ type Server struct {
 	debug     bool
 }
 
-func NewServer(ctx context.Context, dbPath, staticDir string, maxCalls int, debug bool, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
-	bundle, err := sqlite.Open(ctx, dbPath)
+func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	bundle, err := store.Open(ctx, storeCfg)
 	if err != nil {
 		return nil, err
 	}

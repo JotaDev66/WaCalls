@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"wacalls/internal/app"
+	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 )
 
@@ -42,7 +43,11 @@ func main() {
 		_ = shutdown(sctx)
 	}()
 
-	srv, err := app.NewServer(ctx, *dbPath, *staticDir, *maxCalls, *debug, obsFactory, tracer, log)
+	storeCfg := store.Config{
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		SQLitePath:  *dbPath,
+	}
+	srv, err := app.NewServer(ctx, storeCfg, *staticDir, *maxCalls, *debug, obsFactory, tracer, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)
