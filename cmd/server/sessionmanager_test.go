@@ -2,13 +2,13 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"log/slog"
 	"path/filepath"
 	"testing"
 
+	"wacalls/internal/store/sqlite"
+
 	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
@@ -16,27 +16,25 @@ func newTestManager(t *testing.T) *SessionManager {
 	t.Helper()
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "mgr_test.db")
-	db, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
+	bundle, err := sqlite.Open(ctx, dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { db.Close() })
+	t.Cleanup(func() { bundle.Close() })
+	return newSessionManager(ctx, bundle.Container, NewBroker(), bundle.Sessions, waLog.Noop, slog.Default(), 0)
+}
 
-	container := sqlstore.NewWithDB(db, "sqlite3", waLog.Noop)
-	if err := container.Upgrade(ctx); err != nil {
-		t.Fatal(err)
+func TestNewSessionID(t *testing.T) {
+	id := newSessionID()
+	if len(id) != 32 {
+		t.Fatalf("session id should be 32 hex chars, got %d", len(id))
 	}
-	store, err := newSessionStore(ctx, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return newSessionManager(ctx, container, NewBroker(), store, waLog.Noop, slog.Default(), 0)
 }
 
 func (m *SessionManager) addUnconnected(t *testing.T, name string) *Session {
 	t.Helper()
 	id := newSessionID()
-	if err := m.store.insert(m.appCtx, id, name); err != nil {
+	if err := m.store.Insert(m.appCtx, id, name); err != nil {
 		t.Fatal(err)
 	}
 	client := whatsmeow.NewClient(m.container.NewDevice(), waLog.Noop)

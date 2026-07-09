@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -16,7 +20,7 @@ type SessionManager struct {
 	appCtx    context.Context
 	container *sqlstore.Container
 	broker    *Broker
-	store     *sessionStore
+	store     core.SessionStore
 	waLogger  waLog.Logger
 	log       *slog.Logger
 	maxCalls  int
@@ -26,7 +30,13 @@ type SessionManager struct {
 	order    []string
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store *sessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int) *SessionManager {
+func newSessionID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int) *SessionManager {
 	return &SessionManager{
 		appCtx:    ctx,
 		container: container,
@@ -86,25 +96,25 @@ func (m *SessionManager) snapshotEvents() []any {
 }
 
 func (m *SessionManager) Restore(ctx context.Context) error {
-	rows, err := m.store.list(ctx)
+	rows, err := m.store.List(ctx)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
 		if row.JID == "" {
-			_ = m.store.delete(ctx, row.ID)
+			_ = m.store.Delete(ctx, row.ID)
 			continue
 		}
 		jid, err := types.ParseJID(row.JID)
 		if err != nil {
 			m.log.Warn("dropping session with unparseable jid", "session", row.ID, "jid", row.JID)
-			_ = m.store.delete(ctx, row.ID)
+			_ = m.store.Delete(ctx, row.ID)
 			continue
 		}
 		device, err := m.container.GetDevice(ctx, jid)
 		if err != nil || device == nil {
 			m.log.Warn("dropping session with no stored device", "session", row.ID, "jid", row.JID, "err", err)
-			_ = m.store.delete(ctx, row.ID)
+			_ = m.store.Delete(ctx, row.ID)
 			continue
 		}
 		client := whatsmeow.NewClient(device, m.waLogger)
@@ -121,7 +131,7 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 
 func (m *SessionManager) Create(name string) (string, error) {
 	id := newSessionID()
-	if err := m.store.insert(m.appCtx, id, name); err != nil {
+	if err := m.store.Insert(m.appCtx, id, name); err != nil {
 		return "", err
 	}
 	device := m.container.NewDevice()
@@ -153,7 +163,7 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 	}
 	s.teardownAllCalls()
 	m.unregister(id)
-	_ = m.store.delete(ctx, id)
+	_ = m.store.Delete(ctx, id)
 	m.broker.emitSessionList(m.infos())
 	m.log.Info("session deleted", "session", id)
 	return nil
@@ -170,7 +180,7 @@ func (m *SessionManager) Logout(ctx context.Context, id string) error {
 		}
 	}
 	s.replaceClient(whatsmeow.NewClient(m.container.NewDevice(), m.waLogger))
-	_ = m.store.setJID(ctx, id, "")
+	_ = m.store.SetJID(ctx, id, "")
 	s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
 	m.log.Info("session disconnected", "session", id)
 	return nil

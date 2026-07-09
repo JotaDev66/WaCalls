@@ -165,7 +165,7 @@ func (s *Session) handleEvent(rawEvt any) {
 	switch evt := rawEvt.(type) {
 	case *events.Connected:
 		if id := s.client.Store.ID; id != nil {
-			_ = s.mgr.store.setJID(s.mgr.appCtx, s.id, id.String())
+			_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 		}
 		s.setAuth(AuthSnapshot{State: "open", Paired: true})
 	case *events.LoggedOut:
@@ -216,7 +216,7 @@ func (s *Session) startPairing(ctx context.Context) error {
 				s.mgr.broker.emitSessionQR(s.id, evt.Code)
 			case "success":
 				if id := s.client.Store.ID; id != nil {
-					_ = s.mgr.store.setJID(s.mgr.appCtx, s.id, id.String())
+					_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 				}
 				s.setAuth(AuthSnapshot{State: "open", Paired: true})
 			case "timeout":
