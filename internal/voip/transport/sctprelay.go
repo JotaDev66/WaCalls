@@ -17,6 +17,8 @@ const (
 
 	peerConnectionBytes = 64 * 1024
 	dataChannelBytes    = 16 * 1024
+
+	maxOpenRelays = 2
 )
 
 type relayConnState int
@@ -203,9 +205,17 @@ func (m *SctpRelayManager) connectToRelay(info RelayConfig) {
 	m.observer.AddMem(dataChannelBytes)
 
 	channel.OnOpen(func() {
+		m.mu.Lock()
+		if m.countOpenLocked() >= maxOpenRelays {
+			m.mu.Unlock()
+			m.log.Info("relay over cap; closing loser", "id", id, "cap", maxOpenRelays)
+			go m.closeConnection(id)
+			return
+		}
+		conn.state = relayStateOpen
+		m.mu.Unlock()
 		m.log.Info("relay datachannel open", "id", id)
 		m.observer.Mark("transport.sctp_open")
-		conn.state = relayStateOpen
 		m.sendStunRegistration(conn)
 		m.observer.Mark("transport.stun")
 		m.startKeepalive(conn)
@@ -422,6 +432,16 @@ func (m *SctpRelayManager) BufferedAmount() uint64 {
 		}
 	}
 	return maxBuf
+}
+
+func (m *SctpRelayManager) countOpenLocked() int {
+	n := 0
+	for _, c := range m.connections {
+		if c.state == relayStateOpen {
+			n++
+		}
+	}
+	return n
 }
 
 func (m *SctpRelayManager) HasConnection() bool {
