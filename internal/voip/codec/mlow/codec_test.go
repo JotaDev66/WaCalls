@@ -1,13 +1,10 @@
-package media
+package mlow
 
 import (
 	"math"
 	"testing"
 )
 
-// These tests cover the adapter's contract (the Codec port), not the numerical
-// fidelity of the MLow codec itself — that is covered by the vendored mlow
-// package's own reference-vector tests.
 func TestMLowCodecAdapterRoundtrip(t *testing.T) {
 	codec, err := NewMLowCodec(DefaultCodecOptions)
 	if err != nil {

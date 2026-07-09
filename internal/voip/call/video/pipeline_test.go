@@ -5,9 +5,9 @@ import (
 	"sync"
 	"testing"
 
+	"wacalls/internal/voip/codec/h264"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
-	"wacalls/internal/voip/transport"
 )
 
 type fakeRelay struct {
@@ -48,7 +48,7 @@ func TestHandleRelayDataNoopBeforeSetup(t *testing.T) {
 
 func TestResetClearsState(t *testing.T) {
 	p := New(nil, &fakeRelay{})
-	p.depack = &transport.H264Depacketizer{}
+	p.depack = &h264.H264Depacketizer{}
 	p.frameBuf = []byte{1, 2, 3}
 	p.selfSsrc = 42
 	p.Reset()

@@ -1,17 +1,17 @@
-package media
+package mlow
 
-import "wacalls/internal/voip/media/mlow"
+import "wacalls/internal/voip/core"
 
 type mlowCodec struct {
-	enc *mlow.MlowEncoder
-	dec *mlow.MlowDecoder
+	enc *MlowEncoder
+	dec *MlowDecoder
 }
 
-func NewMLowCodec(opts CodecOptions) (Codec, error) {
+func NewMLowCodec(opts CodecOptions) (core.AudioCodec, error) {
 	_ = opts
 	return &mlowCodec{
-		enc: mlow.NewMlowEncoder(),
-		dec: mlow.NewMlowDecoder(),
+		enc: NewMlowEncoder(),
+		dec: NewMlowDecoder(),
 	}, nil
 }
 

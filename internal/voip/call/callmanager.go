@@ -24,7 +24,7 @@ type CallManager struct {
 
 	rtpSession *media.RtpSession
 	srtp       *engine.SrtpManager
-	codec      media.Codec
+	codec      core.AudioCodec
 	relay      RelayTransport
 
 	selfSsrc      uint32

@@ -2,6 +2,7 @@ package call
 
 import (
 	"time"
+	"wacalls/internal/voip/codec/mlow"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
@@ -11,7 +12,7 @@ func (m *CallManager) initCodec() {
 	if m.codec != nil {
 		return
 	}
-	codec, err := media.NewMLowCodec(media.DefaultCodecOptions)
+	codec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
 	if err != nil {
 		m.log.Warn("MLow codec unavailable — call will run signaling-only (no audio)", "err", err)
 		return

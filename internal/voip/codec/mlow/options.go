@@ -1,8 +1,4 @@
-package media
-
-import "wacalls/internal/voip/core"
-
-type Codec = core.AudioCodec
+package mlow
 
 type CodecOptions struct {
 	Bitrate    int

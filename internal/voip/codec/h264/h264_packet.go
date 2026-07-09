@@ -1,4 +1,4 @@
-package transport
+package h264
 
 const (
 	h264StapAType = 24

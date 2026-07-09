@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"wacalls/internal/voip/codec/h264"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
-	"wacalls/internal/voip/transport"
 )
 
 const (
@@ -36,7 +36,7 @@ type Pipeline struct {
 	rtp      *media.RtpSession
 	srtp     *engine.SrtpManager
 	selfSsrc uint32
-	depack   *transport.H264Depacketizer
+	depack   *h264.H264Depacketizer
 	frameBuf []byte
 	lastAUAt time.Time
 
@@ -63,9 +63,9 @@ func (p *Pipeline) Setup(callID, ourDeviceJid, peerDeviceJid string, srtp *engin
 	p.mu.Lock()
 	p.srtp = srtp
 	p.selfSsrc = selfSsrc
-	p.rtp = media.NewH264Session(selfSsrc)
+	p.rtp = h264.NewSession(selfSsrc)
 	if p.depack == nil {
-		p.depack = &transport.H264Depacketizer{}
+		p.depack = &h264.H264Depacketizer{}
 	}
 	p.mu.Unlock()
 
@@ -82,7 +82,7 @@ func (p *Pipeline) FeedCaptured(au []byte) {
 	if rtp == nil || srtp == nil || !p.relay.HasConnection() || len(au) == 0 {
 		return
 	}
-	nalus := transport.SplitAnnexB(au)
+	nalus := h264.SplitAnnexB(au)
 	if len(nalus) == 0 {
 		return
 	}
@@ -91,7 +91,7 @@ func (p *Pipeline) FeedCaptured(au []byte) {
 	}
 	var payloads [][]byte
 	for _, nalu := range nalus {
-		payloads = append(payloads, transport.PackageH264NALU(nalu)...)
+		payloads = append(payloads, h264.PackageH264NALU(nalu)...)
 	}
 
 	p.mu.Lock()
