@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"wacalls/internal/app"
+	"wacalls/internal/store"
 )
 
 func main() {
@@ -29,7 +30,11 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv, err := app.NewServer(ctx, *dbPath, *staticDir, *maxCalls, log)
+	storeCfg := store.Config{
+		DatabaseURL: os.Getenv("DATABASE_URL"),
+		SQLitePath:  *dbPath,
+	}
+	srv, err := app.NewServer(ctx, storeCfg, *staticDir, *maxCalls, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)
