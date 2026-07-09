@@ -8,6 +8,7 @@ import (
 	"time"
 	"wacalls/internal/voip/core"
 
+	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 )
 
@@ -19,7 +20,15 @@ const (
 	dataChannelBytes    = 16 * 1024
 
 	maxOpenRelays = 2
+
+	maxDialRelays = 3
 )
+
+var relayAPI = func() *webrtc.API {
+	s := webrtc.SettingEngine{}
+	s.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
+	return webrtc.NewAPI(webrtc.WithSettingEngine(s))
+}()
 
 type relayConnState int
 
@@ -130,7 +139,13 @@ func connID(ip string, port int, authTokenID string) string {
 
 func (m *SctpRelayManager) ConfigureRelays(relays []RelayConfig) {
 	var wg sync.WaitGroup
+	m.mu.Lock()
+	dialed := len(m.connections)
+	m.mu.Unlock()
 	for _, r := range relays {
+		if dialed >= maxDialRelays {
+			break
+		}
 		port := r.Port
 		if port == 0 {
 			port = core.WARelayPort
@@ -143,6 +158,7 @@ func (m *SctpRelayManager) ConfigureRelays(relays []RelayConfig) {
 		if exists {
 			continue
 		}
+		dialed++
 		wg.Add(1)
 		dialDone := m.observer.TrackGoroutine()
 		go func(rc RelayConfig) {
@@ -168,7 +184,7 @@ func (m *SctpRelayManager) connectToRelay(info RelayConfig) {
 	m.connections[id] = conn
 	m.mu.Unlock()
 
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+	pc, err := relayAPI.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		m.log.Error("relay peerconnection failed", "id", id, "err", err)
 		m.failConnection(conn)
