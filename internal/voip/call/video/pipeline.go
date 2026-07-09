@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"wacalls/internal/voip/codec/h264"
+	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
 )
@@ -21,16 +22,9 @@ var (
 	annexBStartCode = []byte{0, 0, 0, 1}
 )
 
-type Relay interface {
-	Broadcast(data []byte)
-	BufferedAmount() uint64
-	HasConnection() bool
-	SetStreamSsrcs(selfSsrcs, peerSsrcs []uint32)
-}
-
 type Pipeline struct {
 	log   *slog.Logger
-	relay Relay
+	relay core.Relay
 
 	mu       sync.Mutex
 	rtp      *media.RtpSession
@@ -43,7 +37,7 @@ type Pipeline struct {
 	OnFrame func(au []byte)
 }
 
-func New(log *slog.Logger, relay Relay) *Pipeline {
+func New(log *slog.Logger, relay core.Relay) *Pipeline {
 	if log == nil {
 		log = slog.Default()
 	}
