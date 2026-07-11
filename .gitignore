@@ -6,6 +6,7 @@
 *.out
 /dist/
 /bin/
+/tmp/
 wacalls.db
 run-mlow.ps1
 *.db
