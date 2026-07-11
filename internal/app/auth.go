@@ -22,3 +22,13 @@ func bearerAuthorizer(token string) func(*http.Request) bool {
 		return subtle.ConstantTimeCompare([]byte(requestToken(r)), want) == 1
 	}
 }
+
+func (s *Server) withAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.authorize(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+	})
+}
