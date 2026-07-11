@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -64,5 +65,134 @@ func TestSrtpAuthTagKat(t *testing.T) {
 	}
 	if got := hex.EncodeToString(ctx.computeAuthTag(samplePacket, 0, 4)); got != "53fada83" {
 		t.Fatalf("auth tag mismatch vs whatsapp-rust kat: %s", got)
+	}
+}
+
+func TestUnprotectRoundtripMultiPacket(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	sess := NewWhatsAppOpusSession(0xAABBCCDD)
+	for i := range 5 {
+		payload := bytes.Repeat([]byte{byte(0x40 + i)}, 40)
+		wire, err := sender.Protect(sess.CreatePacket(payload, i == 0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := receiver.Unprotect(wire)
+		if err != nil {
+			t.Fatalf("packet %d: %v", i, err)
+		}
+		if !bytes.Equal(got.Payload, payload) {
+			t.Fatalf("packet %d payload mismatch", i)
+		}
+	}
+}
+
+func TestUnprotectRejectsCorruptedTag(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	sess := NewWhatsAppOpusSession(0xAABBCCDD)
+	wire, err := sender.Protect(sess.CreatePacket(bytes.Repeat([]byte{0x42}, 40), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire[len(wire)-1] ^= 0x01
+	_, err = receiver.Unprotect(wire)
+	assertSrtpErr(t, err, SrtpErrAuthFailed)
+}
+
+func TestUnprotectRejectsTruncatedTag(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	sess := NewWhatsAppOpusSession(0xAABBCCDD)
+	wire, err := sender.Protect(sess.CreatePacket(bytes.Repeat([]byte{0x42}, 40), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = receiver.Unprotect(wire[:len(wire)-2])
+	assertSrtpErr(t, err, SrtpErrAuthFailed)
+
+	_, err = receiver.Unprotect(wire[:12+core.SRTPRecvAuthTagLen])
+	assertSrtpErr(t, err, SrtpErrPacketTooShort)
+}
+
+func TestUnprotectRejectsTamperedPayload(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	sess := NewWhatsAppOpusSession(0xAABBCCDD)
+	wire, err := sender.Protect(sess.CreatePacket(bytes.Repeat([]byte{0x42}, 40), true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wire[14] ^= 0xFF
+	_, err = receiver.Unprotect(wire)
+	assertSrtpErr(t, err, SrtpErrAuthFailed)
+}
+
+func TestUnprotectForgedPacketDoesNotDesyncRoc(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	sess := NewWhatsAppOpusSession(0x0BADF00D)
+	payload := bytes.Repeat([]byte{0x50}, 40)
+
+	first, err := sender.Protect(sess.CreatePacket(payload, true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := receiver.Unprotect(first); err != nil {
+		t.Fatal(err)
+	}
+	baseSeq := binary.BigEndian.Uint16(first[2:4])
+
+	forged, err := sender.Protect(sess.CreatePacket(payload, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary.BigEndian.PutUint16(forged[2:4], baseSeq+0x4000)
+	_, err = receiver.Unprotect(forged)
+	assertSrtpErr(t, err, SrtpErrAuthFailed)
+
+	next, err := sender.Protect(sess.CreatePacket(payload, false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := receiver.Unprotect(next)
+	if err != nil {
+		t.Fatalf("legit frame after forged packet: %v", err)
+	}
+	if !bytes.Equal(got.Payload, payload) {
+		t.Fatal("payload mismatch after forged packet")
+	}
+}
+
+func TestUnprotectRoundtripAcrossSeqWrap(t *testing.T) {
+	sender, receiver := authTestPair(t)
+	seqs := []uint16{0xFFFE, 0xFFFF, 0x0000, 0x0001}
+	payloads := make([][]byte, len(seqs))
+	wires := make([][]byte, len(seqs))
+	for i, seq := range seqs {
+		payloads[i] = bytes.Repeat([]byte{byte(i)*37 + 1}, 40)
+		pkt := &RtpPacket{
+			Header:  NewRtpHeader(core.PayloadTypeWhatsAppOpus, seq, uint32(seq), 0x57410001),
+			Payload: payloads[i],
+		}
+		wire, err := sender.Protect(pkt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wires[i] = wire
+	}
+
+	for _, i := range []int{0, 1, 3, 2} {
+		got, err := receiver.Unprotect(wires[i])
+		if err != nil {
+			t.Fatalf("seq %#04x: %v", seqs[i], err)
+		}
+		if !bytes.Equal(got.Payload, payloads[i]) {
+			t.Fatalf("seq %#04x payload mismatch", seqs[i])
+		}
+	}
+
+	got, err := receiver.Unprotect(wires[1])
+	if err != nil {
+		t.Fatalf("late pre-wrap packet: %v", err)
+	}
+	if !bytes.Equal(got.Payload, payloads[1]) {
+		t.Fatal("late pre-wrap packet must decrypt under roc-1")
 	}
 }

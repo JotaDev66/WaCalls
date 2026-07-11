@@ -117,9 +117,14 @@ func (c *SrtpContext) Unprotect(data []byte) (*RtpPacket, error) {
 		return nil, &SrtpError{SrtpErrPacketTooShort, fmt.Sprintf("no payload: %dB total, %dB header, auth=%d", len(data), headerSize, c.authTagLen)}
 	}
 
-	c.updateRoc(header.SequenceNumber)
-	index := c.packetIndex(header.SequenceNumber)
+	roc := c.estimateRoc(header.SequenceNumber)
+	expected := c.computeAuthTag(data[:headerSize+payloadLen], roc, c.authTagLen)
+	if !hmac.Equal(expected, data[headerSize+payloadLen:]) {
+		return nil, &SrtpError{SrtpErrAuthFailed, fmt.Sprintf("auth tag mismatch for seq %d", header.SequenceNumber)}
+	}
+	c.commitRoc(roc, header.SequenceNumber)
 
+	index := (uint64(roc) << 16) | uint64(header.SequenceNumber)
 	iv := c.generateIV(header.Ssrc, index)
 	decrypted := make([]byte, payloadLen)
 	if err := aesCtrXor(c.sessionKey, iv, data[headerSize:headerSize+payloadLen], decrypted); err != nil {
@@ -141,6 +146,39 @@ func (c *SrtpContext) updateRoc(seq uint16) {
 		c.roc++
 	}
 	c.lastSeq = seq
+}
+
+func (c *SrtpContext) estimateRoc(seq uint16) uint32 {
+	if !c.initialized {
+		return c.roc
+	}
+	if c.lastSeq < 0x8000 {
+		if int32(seq)-int32(c.lastSeq) > 0x8000 {
+			return c.roc - 1
+		}
+		return c.roc
+	}
+	if int32(c.lastSeq)-int32(seq) > 0x8000 {
+		return c.roc + 1
+	}
+	return c.roc
+}
+
+func (c *SrtpContext) commitRoc(v uint32, seq uint16) {
+	if !c.initialized {
+		c.lastSeq = seq
+		c.initialized = true
+		return
+	}
+	switch v {
+	case c.roc:
+		if seq > c.lastSeq {
+			c.lastSeq = seq
+		}
+	case c.roc + 1:
+		c.roc = v
+		c.lastSeq = seq
+	}
 }
 
 func (c *SrtpContext) packetIndex(seq uint16) uint64 {
