@@ -15,32 +15,36 @@ import (
 )
 
 func (s *Server) routes() http.Handler {
-	mux := http.NewServeMux()
+	api := http.NewServeMux()
 
-	mux.HandleFunc("GET /api/sessions", s.handleSessionList)
-	mux.HandleFunc("POST /api/sessions", s.handleSessionCreate)
-	mux.HandleFunc("DELETE /api/sessions/{sid}", s.handleSessionDelete)
-	mux.HandleFunc("POST /api/sessions/{sid}/logout", s.handleSessionLogout)
-	mux.HandleFunc("POST /api/sessions/{sid}/pair", s.handleSessionPair)
-	mux.HandleFunc("POST /api/sessions/{sid}/calls", s.handleStartCall)
-	mux.HandleFunc("POST /api/sessions/{sid}/calls/{id}/webrtc", s.handleWebRTC)
-	mux.HandleFunc("POST /api/sessions/{sid}/calls/{id}/accept", s.handleAccept)
-	mux.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
-	mux.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
-	mux.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
-
-	mux.HandleFunc("GET /api/events", s.handleEvents)
+	api.HandleFunc("GET /api/sessions", s.handleSessionList)
+	api.HandleFunc("POST /api/sessions", s.handleSessionCreate)
+	api.HandleFunc("DELETE /api/sessions/{sid}", s.handleSessionDelete)
+	api.HandleFunc("POST /api/sessions/{sid}/logout", s.handleSessionLogout)
+	api.HandleFunc("POST /api/sessions/{sid}/pair", s.handleSessionPair)
+	api.HandleFunc("POST /api/sessions/{sid}/calls", s.handleStartCall)
+	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/webrtc", s.handleWebRTC)
+	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/accept", s.handleAccept)
+	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
+	api.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
+	api.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
+	api.HandleFunc("GET /api/events", s.handleEvents)
 
 	if s.debug {
-		mux.HandleFunc("GET /debug/pprof/", pprof.Index)
-		mux.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
-		mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
-		mux.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
-		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
+		api.HandleFunc("GET /debug/pprof/", pprof.Index)
+		api.HandleFunc("GET /debug/pprof/cmdline", pprof.Cmdline)
+		api.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+		api.HandleFunc("GET /debug/pprof/symbol", pprof.Symbol)
+		api.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	}
 
-	mux.Handle("/", s.uiHandler())
-	return withCORS(mux)
+	root := http.NewServeMux()
+	root.Handle("/api/", s.withAuth(api))
+	if s.debug {
+		root.Handle("/debug/", s.withAuth(api))
+	}
+	root.Handle("/", s.uiHandler())
+	return withCORS(root)
 }
 
 func (s *Server) uiHandler() http.Handler {

@@ -47,7 +47,7 @@ func main() {
 		DatabaseURL: os.Getenv("DATABASE_URL"),
 		SQLitePath:  *dbPath,
 	}
-	srv, err := app.NewServer(ctx, storeCfg, *staticDir, *maxCalls, *debug, obsFactory, tracer, log)
+	srv, err := app.NewServer(ctx, storeCfg, *staticDir, *maxCalls, *debug, os.Getenv("WACALLS_API_TOKEN"), obsFactory, tracer, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)

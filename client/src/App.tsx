@@ -11,6 +11,9 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ensureSessionsWired, useSessions } from "@/stores/sessions";
 import { ensureCallsWired } from "@/stores/calls";
 import { useTheme } from "@/stores/theme";
+import { setOnUnauthorized } from "@/lib/api";
+import { promptForToken } from "@/stores/auth";
+import { AuthGate } from "@/components/domain/auth/AuthGate";
 
 export const App = () => {
   const sessions = useSessions((s) => s.sessions);
@@ -18,6 +21,7 @@ export const App = () => {
   const theme = useTheme((s) => s.theme);
 
   useEffect(() => {
+    setOnUnauthorized(promptForToken);
     ensureSessionsWired();
     ensureCallsWired();
   }, []);
@@ -43,6 +47,7 @@ export const App = () => {
         )}
       </AppShell>
       <IncomingCallModal />
+      <AuthGate />
       <Toaster theme={theme} position="top-right" richColors closeButton />
     </TooltipProvider>
   );

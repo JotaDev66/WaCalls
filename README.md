@@ -278,9 +278,11 @@ cd client && npm run build    # client type-check + production build
 
 ## Security
 
-The API has **no authentication** — anyone with HTTP access can create accounts, place
-calls, and read history. **Run it only on a trusted LAN.** `wacalls.db` holds WhatsApp
-session credentials (secrets): **do not commit it** and keep it protected.
+Set `WACALLS_API_TOKEN` to require a bearer token on every `/api` and `/debug` route;
+leave it empty to disable auth (trusted LAN only). Clients send it as
+`Authorization: Bearer <token>`; the SSE stream (`/api/events`) takes it as a
+`?access_token=<token>` query parameter. `wacalls.db` holds WhatsApp session
+credentials (secrets): **do not commit it** and keep it protected.
 
 ---
 

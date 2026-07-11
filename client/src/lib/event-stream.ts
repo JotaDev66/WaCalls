@@ -1,5 +1,6 @@
 import type { CallStatus } from "@/types/call";
 import type { SessionInfo, SessionState } from "@/types/session";
+import { getToken } from "./api-token";
 
 type CallListRow = {
   sessionId: string;
@@ -31,7 +32,9 @@ class EventStream {
 
   connect(clientId: string): void {
     if (this.#es) return;
-    this.#es = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}`);
+    const token = getToken();
+    const auth = token ? `&access_token=${encodeURIComponent(token)}` : "";
+    this.#es = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}${auth}`);
     this.#es.onmessage = (ev) => {
       try {
         const parsed: BrokerEvent = JSON.parse(ev.data);

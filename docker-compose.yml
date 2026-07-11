@@ -13,6 +13,7 @@ services:
     environment:
       WACALLS_PUBLIC_IP: ${WACALLS_PUBLIC_IP:-}
       WACALLS_WEBRTC_UDP_PORT: ${WEBRTC_UDP_PORT:-7881}
+      WACALLS_API_TOKEN: ${WACALLS_API_TOKEN:-}
     volumes:
       - wacalls-data:/data
 
