@@ -30,29 +30,6 @@ func GenerateCallStanzaID() string {
 	return strings.ToUpper(hex.EncodeToString(b))
 }
 
-func padRandomMax16(msg []byte) []byte {
-	var r [1]byte
-	rand.Read(r[:])
-	padLen := int(r[0]&0x0f) + 1
-	out := make([]byte, len(msg)+padLen)
-	copy(out, msg)
-	for i := len(msg); i < len(out); i++ {
-		out[i] = byte(padLen)
-	}
-	return out
-}
-
-func unpadRandomMax16(b []byte) ([]byte, error) {
-	if len(b) == 0 {
-		return nil, fmt.Errorf("unpad given empty bytes")
-	}
-	pad := int(b[len(b)-1])
-	if pad > len(b) {
-		return nil, fmt.Errorf("unpad given %d bytes, but pad is %d", len(b), pad)
-	}
-	return b[:len(b)-pad], nil
-}
-
 func EncodeCallKeyMessage(callKey []byte) ([]byte, error) {
 	msg := &waE2E.Message{Call: &waE2E.Call{CallKey: callKey}}
 	return proto.Marshal(msg)

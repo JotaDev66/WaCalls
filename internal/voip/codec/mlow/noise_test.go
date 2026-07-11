@@ -75,7 +75,7 @@ func TestGenNoise(t *testing.T) {
 		if ng.RandSeed != r.SeedOut || ng.RandSeed != ngOut.RandSeed {
 			t.Errorf("rec %d: rand_seed got %d want %d/%d", n, ng.RandSeed, r.SeedOut, ngOut.RandSeed)
 		}
-		for i := 0; i < 80; i++ {
+		for i := range 80 {
 			if absF32(noise[i]-r.Noise[i]) >= 1e-6 {
 				t.Errorf("rec %d: noise[%d] %.6g != %.6g (voiced=%d np=%d)", n, i, noise[i], r.Noise[i], r.Voiced, r.SfPulses)
 				break
@@ -84,7 +84,7 @@ func TestGenNoise(t *testing.T) {
 		if absF32(ng.EnvLast-ngOut.EnvLast) >= 1e-6 {
 			t.Errorf("rec %d: env_last %.6g != %.6g", n, ng.EnvLast, ngOut.EnvLast)
 		}
-		for k := 0; k < 2; k++ {
+		for k := range 2 {
 			if absF32(ng.OutStateUV[k]-ngOut.OutStateUV[k]) >= 1e-6 {
 				t.Errorf("rec %d: out_state_uv[%d]", n, k)
 			}

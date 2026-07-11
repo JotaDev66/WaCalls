@@ -131,7 +131,7 @@ func TestDecoderReconstructsCQlsf(t *testing.T) {
 		rec := SmplReconstructNLSF(st, r.Voiced, 0, grid, &stage2, prevNLSF)
 
 		var rd float32
-		for k := 0; k < SmplOrder; k++ {
+		for k := range SmplOrder {
 			d := rec[k] - r.Qlsf[k]
 			if d < 0 {
 				d = -d

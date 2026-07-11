@@ -51,7 +51,7 @@ func TestBuildBrowserAPIMux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)
 	}
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 
 	if _, err := pc.CreateDataChannel("pcm", nil); err != nil {
 		t.Fatalf("CreateDataChannel: %v", err)

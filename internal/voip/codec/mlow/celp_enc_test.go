@@ -7,7 +7,7 @@ import (
 
 func celpSineVec(n int, f, a float32) []float32 {
 	v := make([]float32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		v[i] = float32(math.Sin(float64(float32(i)*f))) * a
 	}
 	return v

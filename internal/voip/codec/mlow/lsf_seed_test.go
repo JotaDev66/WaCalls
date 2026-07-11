@@ -80,20 +80,20 @@ func TestLsfSeedMatchesBlobs(t *testing.T) {
 	}
 	for v := range b.cb.St1 {
 		s, o := b.cb.St1[v], cbBlob.St1[v]
-		for c := 0; c < lsfCentroids; c++ {
-			for i := 0; i < lsfOrder; i++ {
+		for c := range lsfCentroids {
+			for i := range lsfOrder {
 				exactF("cbhalf", s.Cbhalf[c][i], o.Cbhalf[c][i])
 				exactF("cb_cinv", s.CbCinv[c][i], o.CbCinv[c][i])
-				for j := 0; j < lsfOrder; j++ {
+				for j := range lsfOrder {
 					exactF("c_inv", s.CInv[i][j], o.CInv[i][j])
 					tolF(s.We[c][i][j], o.We[c][i][j], &maxSqrtUlp)
 					tolF(s.Wie[c][i][j], o.Wie[c][i][j], &maxSqrtUlp)
 				}
 			}
 		}
-		for lr := 0; lr < 2; lr++ {
-			for i := 0; i < lsfOrder; i++ {
-				for j := 0; j < lsfOrder; j++ {
+		for lr := range 2 {
+			for i := range lsfOrder {
+				for j := range lsfOrder {
 					exactF("rotcond", s.Rotcond[lr][i][j], o.Rotcond[lr][i][j])
 				}
 			}
@@ -105,14 +105,14 @@ func TestLsfSeedMatchesBlobs(t *testing.T) {
 			tolF(s.BitsCond[i], o.BitsCond[i], &maxLogUlp)
 		}
 	}
-	for v := 0; v < 2; v++ {
-		for lr := 0; lr < 2; lr++ {
-			for c := 0; c < lsfCentroids+1; c++ {
+	for v := range 2 {
+		for lr := range 2 {
+			for c := range lsfCentroids + 1 {
 				s, o := b.cb.St2[v][lr][c], cbBlob.St2[v][lr][c]
 				if !reflect.DeepEqual(s.NumQlvls, o.NumQlvls) {
 					t.Errorf("NumQlvls[%d][%d][%d] mismatch", v, lr, c)
 				}
-				for i := 0; i < lsfOrder; i++ {
+				for i := range lsfOrder {
 					for k := range s.Qlvls[i] {
 						exactF("qlvls", s.Qlvls[i][k], o.Qlvls[i][k])
 					}

@@ -38,7 +38,7 @@ func makeBrowserOffer(t *testing.T) (*webrtc.PeerConnection, *webrtc.DataChannel
 
 func TestNewBridgeNegotiatesDataChannelOffer(t *testing.T) {
 	pc, _, offer := makeBrowserOffer(t)
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 
 	br, answer, err := NewBridge(offer, slog.Default())
 	if err != nil {
@@ -58,7 +58,7 @@ func TestNewBridgeNegotiatesDataChannelOffer(t *testing.T) {
 // that PCM sent on the data channel surfaces as float32 via OnBrowserPCM.
 func TestBridgePCMRoundtrip(t *testing.T) {
 	pc, dc, offer := makeBrowserOffer(t)
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 
 	got := make(chan []float32, 1)
 	br, answer, err := NewBridge(offer, slog.Default())

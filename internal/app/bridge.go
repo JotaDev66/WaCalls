@@ -60,17 +60,17 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 	})
 
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offerSDP}); err != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, "", err
 	}
 	answer, err := pc.CreateAnswer(nil)
 	if err != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, "", err
 	}
 	gatherComplete := webrtc.GatheringCompletePromise(pc)
 	if err := pc.SetLocalDescription(answer); err != nil {
-		pc.Close()
+		_ = pc.Close()
 		return nil, "", err
 	}
 	<-gatherComplete

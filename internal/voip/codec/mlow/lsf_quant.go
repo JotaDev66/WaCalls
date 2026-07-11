@@ -97,14 +97,14 @@ func smplSign(a float32) int32 {
 // ----- vector helpers (faithful ports) -----
 
 func subVec(y, z, out []float32) {
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		out[i] = y[i] - z[i]
 	}
 }
 
 func dotProd(a, b []float32) float32 {
 	var s float32
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		s += a[i] * b[i]
 	}
 	return s
@@ -112,7 +112,7 @@ func dotProd(a, b []float32) float32 {
 
 func werr(x, y, w []float32) float32 {
 	var s float32
-	for k := 0; k < SmplLPCOrder; k++ {
+	for k := range SmplLPCOrder {
 		e := x[k] - y[k]
 		s += w[k] * e * e
 	}
@@ -123,12 +123,12 @@ func werr(x, y, w []float32) float32 {
 func matrixMultTransp16(c [][]float32, x, y []float32, lenX int) {
 	var yt [SmplLPCOrder]float32
 	xtmp := x[0]
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		yt[i] = c[0][i] * xtmp
 	}
 	for j := 1; j < lenX; j++ {
 		xtmp := x[j]
-		for i := 0; i < SmplLPCOrder; i++ {
+		for i := range SmplLPCOrder {
 			yt[i] += c[j][i] * xtmp
 		}
 	}
@@ -139,10 +139,10 @@ func matrixMultTransp16(c [][]float32, x, y []float32, lenX int) {
 func getMaxiK(x []float32, idx []int32, k int) {
 	n := len(x)
 	used := make([]bool, n)
-	for slot := 0; slot < k; slot++ {
+	for slot := range k {
 		bestI := int32(-1)
 		bestV := float32(math.Inf(-1))
-		for i := 0; i < n; i++ {
+		for i := range n {
 			if used[i] {
 				continue
 			}
@@ -164,7 +164,7 @@ func getMaxiK(x []float32, idx []int32, k int) {
 // scale = 1/min. a is the monic LPC A[0..16] (A[0]=1).
 func lsfWeightsSpectral(a, lsf []float32) [SmplLPCOrder]float32 {
 	var lsfw [SmplLPCOrder]float32
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		eRe := cosF32(lsf[i])
 		eIm := sinF32(lsf[i])
 		accRe := float32(1.0)
@@ -207,7 +207,7 @@ func LsfWeightsLaroia(lsf []float32) [SmplLPCOrder]float32 {
 	}
 	invDelta[SmplLPCOrder] = 1.0 / maxF32(smplPi-lsf[SmplLPCOrder-1], minDist)
 	var lsfw [SmplLPCOrder]float32
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		lsfw[i] = invDelta[i] + invDelta[i+1]
 	}
 	return lsfw
@@ -237,14 +237,15 @@ func lsfMinDist(lsfs, minDist []float32) {
 	if dm > 0.0 {
 		return
 	}
-	for k := 0; k < 1000; k++ {
+	for k := range 1000 {
 		delta := float32(k)*1.0e-6 - dm
 		dlsfs[minIx] += delta
-		if minIx == 0 {
+		switch minIx {
+		case 0:
 			dlsfs[1] -= delta
-		} else if minIx == n {
+		case n:
 			dlsfs[n-1] -= delta
-		} else {
+		default:
 			delta *= 0.5
 			dlsfs[minIx-1] -= delta
 			dlsfs[minIx+1] -= delta
@@ -275,7 +276,7 @@ type condParams struct {
 func vqTemp(lsf []float32, cbhalf, cbCinv [][]float32, cond *condParams, surv int, idxs []int32) {
 	var err [LSFCBCentroids + 1]float32
 	var tmp [SmplLPCOrder]float32
-	for s := 0; s < LSFCBCentroids; s++ {
+	for s := range LSFCBCentroids {
 		subVec(cbhalf[s], lsf, tmp[:])
 		err[s] = -dotProd(tmp[:], cbCinv[s])
 	}
@@ -313,18 +314,18 @@ func lsfQuantCore(cb *LsfCb, a, nlsf []float32, voiced, lowRate int, cond *condP
 	var outQi [SmplLPCOrder + 1]int32
 	var outQlsf [SmplLPCOrder]float32
 
-	for s1 := 0; s1 < surv; s1++ {
+	for s1 := range surv {
 		qi1 := int(qim1[s1])
 		isCond := qi1 == LSFCBCentroids
 
 		// lsfq1 = 2 * cbhalf[qi1] (or cond centroid).
 		var lsfq1 [SmplLPCOrder]float32
 		if isCond {
-			for i := 0; i < SmplLPCOrder; i++ {
+			for i := range SmplLPCOrder {
 				lsfq1[i] = cond.st1Cbhalf[i] * 2.0
 			}
 		} else {
-			for i := 0; i < SmplLPCOrder; i++ {
+			for i := range SmplLPCOrder {
 				lsfq1[i] = st1.Cbhalf[qi1][i] * 2.0
 			}
 		}
@@ -361,7 +362,7 @@ func lsfQuantCore(cb *LsfCb, a, nlsf []float32, voiced, lowRate int, cond *condP
 		var qres [SmplLPCOrder]float32
 		var qi2 [SmplLPCOrder]int32
 		st2 := &st2v[qi1]
-		for i := 0; i < SmplLPCOrder; i++ {
+		for i := range SmplLPCOrder {
 			qi2i := int32(roundF32(qerr[i]))
 			mn := minQi[qi1][i]
 			mx := maxQi[qi1][i]
@@ -396,7 +397,7 @@ func lsfQuantCore(cb *LsfCb, a, nlsf []float32, voiced, lowRate int, cond *condP
 		}
 		var lsfq [SmplLPCOrder]float32
 		matrixMultTransp16(wePtr, qres[:], lsfq[:], SmplLPCOrder)
-		for i := 0; i < SmplLPCOrder; i++ {
+		for i := range SmplLPCOrder {
 			lsfq[i] += lsfq1[i]
 		}
 
@@ -407,7 +408,7 @@ func lsfQuantCore(cb *LsfCb, a, nlsf []float32, voiced, lowRate int, cond *condP
 		// ONE coeff relative to this base, undoing the previous flip.
 		lsfqBase := lsfq
 		curBits := bits
-		for s2 := 0; s2 < surv2; s2++ {
+		for s2 := range surv2 {
 			lsfMinDist(lsfq[:], minDist)
 			w := werr(lsf[:], lsfq[:], wlsf[:])
 			rd := 0.5*float32(SmplLPCOrder)*log2F32(w)*rdWAdj + curBits
@@ -430,7 +431,7 @@ func lsfQuantCore(cb *LsfCb, a, nlsf []float32, voiced, lowRate int, cond *condP
 			qi2[ic] += alt[ic]
 			qi2New := qi2[ic]
 			qlvlsDiff := st2.Qlvls[ic][qi2New] - st2.Qlvls[ic][qi2Old]
-			for i := 0; i < SmplLPCOrder; i++ {
+			for i := range SmplLPCOrder {
 				lsfq[i] = lsfqBase[i] + qlvlsDiff*wePtr[ic][i]
 			}
 			curBits = bitsOrig + st2.NumBits[ic][qi2New] - st2.NumBits[ic][qi2Old]
@@ -458,7 +459,7 @@ func LsfQuantCond(a, nlsf, lsfqPrev []float32, voiced, lowRate int, rdWAdj float
 	reg := cb.RegCond[voiced]
 	var lsfqPrevReg [SmplLPCOrder]float32
 	var st1Cbhalf [SmplLPCOrder]float32
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		lsfqPrevReg[i] = lsfqPrev[i] + reg*(cbMean[i]-lsfqPrev[i])
 		st1Cbhalf[i] = 0.5 * lsfqPrevReg[i]
 	}
@@ -482,17 +483,17 @@ func rotApplyWght(rot [][]float32, lsf []float32) (we, wie [][]float32) {
 		lsfw[i] = sqrtF32(lsfw[i])
 	}
 	var lsfwInv [SmplLPCOrder]float32
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		lsfwInv[i] = 1.0 / lsfw[i]
 	}
 	wrot1 := make([][]float32, SmplLPCOrder)
 	wrot2 := make([][]float32, SmplLPCOrder)
-	for i := 0; i < SmplLPCOrder; i++ {
+	for i := range SmplLPCOrder {
 		wrot1[i] = make([]float32, SmplLPCOrder)
 		wrot2[i] = make([]float32, SmplLPCOrder)
 	}
-	for i := 0; i < SmplLPCOrder; i++ {
-		for j := 0; j < SmplLPCOrder; j++ {
+	for i := range SmplLPCOrder {
+		for j := range SmplLPCOrder {
 			wrot1[i][j] = rot[i][j] * lsfwInv[j]
 			wrot2[j][i] = rot[i][j] * lsfw[j]
 		}

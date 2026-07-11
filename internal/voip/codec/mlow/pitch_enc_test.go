@@ -55,7 +55,7 @@ func TestPitchEstimatorGroundTruth(t *testing.T) {
 			if d := absf32(res.HarmStrength - rec.Harm); d > maxHarmErr {
 				maxHarmErr = d
 			}
-			for sf := 0; sf < NumSubframes; sf++ {
+			for sf := range NumSubframes {
 				if res.Laginds[sf] != rec.Laginds[sf] {
 					lagMism++
 					break

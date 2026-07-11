@@ -72,7 +72,7 @@ func SmplPfFir3(input []float32, n int, coef [3]float32, state *[2]float32, out 
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_harmcomb.rs#L68-L95
 	xm1 := state[0]
 	xm2 := state[1]
-	for i := 0; i < n; i++ {
+	for i := range n {
 		var p1, p2 float32
 		if i >= 1 {
 			p1 = input[i-1]
@@ -242,7 +242,7 @@ func rampDn() []float32 {
 		dOmega := smplPiF32 / (2.0 * (float32(SmplIntfLen) + 1.0))
 		omega := dOmega
 		rampDnTab = make([]float32, SmplIntfLen)
-		for i := 0; i < SmplIntfLen; i++ {
+		for i := range SmplIntfLen {
 			rampDnTab[i] = float32(math.Pow(float64(float32(math.Cos(float64(omega)))), float64(hpPostfTransitionSpeed)))
 			omega += dOmega
 		}
@@ -286,7 +286,7 @@ func SmplHpPostfilter(st *HpPostfilterState, xIn []float32, n int, lag float32, 
 
 	if overlap {
 		ramp := rampDn()
-		for i := 0; i < n; i++ {
+		for i := range n {
 			yTmp[i] += (yOld[i] - yTmp[i]) * ramp[i]
 		}
 	}
@@ -316,10 +316,7 @@ const (
 )
 
 func lagToFiltIx(lag int32) int {
-	d := lag + 30
-	if d < 80 {
-		d = 80
-	}
+	d := max(lag+30, 80)
 	return int(int32(harmLPFiltRes)/d - int32(harmLPFiltRes)/int32(harmMaxPitchLag))
 }
 
@@ -337,7 +334,7 @@ func harmTables() *harmTablesT {
 		var filtWin [harmFBDelay]float32
 		dOmega := (0.5 * smplPiF32) / (float32(harmFBDelay) + 1.0)
 		omega := dOmega
-		for i := 0; i < harmFBDelay; i++ {
+		for i := range harmFBDelay {
 			filtWin[i] = float32(math.Cos(float64(omega))) / (float32(i) + 1.0)
 			omega += dOmega
 		}
@@ -361,7 +358,7 @@ func harmCreateLPFilter(omega0 float32, filtWin *[harmFBDelay]float32, blp *[2*h
 	}
 	var sumB float32
 	omegaCSum := omegaC
-	for i := 0; i < harmFBDelay; i++ {
+	for i := range harmFBDelay {
 		b := filtWin[i] * float32(math.Sin(float64(omegaCSum)))
 		omegaCSum += omegaC
 		blp[harmFBDelay+i+1] = b
@@ -393,7 +390,7 @@ func NewHarmPostfilterState() *HarmPostfilterState {
 
 func harmDotProd(a, b []float32, l int) float32 {
 	var r float32
-	for i := 0; i < l; i++ {
+	for i := range l {
 		r += a[i] * b[i]
 	}
 	return r
@@ -401,7 +398,7 @@ func harmDotProd(a, b []float32, l int) float32 {
 
 func harmNrg(x []float32, n int) float32 {
 	var r float32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r += x[i] * x[i]
 	}
 	return r
@@ -409,10 +406,10 @@ func harmNrg(x []float32, n int) float32 {
 
 // harmFiltMA16Sym: 17-tap symmetric MA reading 16 samples of history from buf[xBase-16..].
 func harmFiltMA16Sym(buf []float32, xBase, n int, coef *[17]float32, out []float32) {
-	for nn := 0; nn < n; nn++ {
+	for nn := range n {
 		c := xBase + nn
 		res := buf[c-8] * coef[8]
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			res += coef[i] * (buf[c-i] + buf[c-16+i])
 		}
 		out[nn] = res
@@ -427,18 +424,15 @@ func harmPostfilterCore(lpcoefs *[2*harmFBDelay + 1]float32, comb []float32, com
 	if lag > 0 {
 		lookforward := int32(l) + lag - futureSamples
 		if lookforward > 0 {
-			l2 := int(int32(l) - lookforward)
-			if l2 < 0 {
-				l2 = 0
-			}
-			for i := 0; i < l2; i++ {
+			l2 := max(int(int32(l)-lookforward), 0)
+			for i := range l2 {
 				out[outOff+i] = comb[combX+i-lagU] + comb[combX+i+lagU]
 			}
 			for i := 0; i < l-l2; i++ {
 				out[outOff+l2+i] = comb[combX+l2+i-lagU] + comb[combX+l2+i]
 			}
 		} else {
-			for i := 0; i < l; i++ {
+			for i := range l {
 				out[outOff+i] = comb[combX+i-lagU] + comb[combX+i+lagU]
 			}
 		}
@@ -454,39 +448,39 @@ func harmPostfilterCore(lpcoefs *[2*harmFBDelay + 1]float32, comb []float32, com
 		strength := 0.5 * xy / denom
 		highLagReduction := 1.0 - harmReductionFac*(float32(lag-harmMinPitchLag)/float32(harmMaxPitchLag-harmMinPitchLag))
 		strength = strength * highLagReduction * harmStrength
-		for i := 0; i < l; i++ {
+		for i := range l {
 			out[outOff+i] *= 0.5 * strength
 		}
-		for i := 0; i < l; i++ {
+		for i := range l {
 			diff[diffBase+i] = out[outOff+i] + (-strength)*comb[combX+i]
 		}
 		kernel := tables.lpFilters[lagToFiltIx(lag)]
-		for k := 0; k < 2*harmFBDelay+1; k++ {
+		for k := range 2*harmFBDelay + 1 {
 			lpcoefs[k] = kernel[k] * fbStrength
 		}
 		coef17 := *lpcoefs
 		var yh [harmLagSubfrLen]float32
 		harmFiltMA16Sym(diff, diffBase, l, &coef17, yh[:])
-		for i := 0; i < l; i++ {
+		for i := range l {
 			out[outOff+i] = yh[i] + comb[combX-harmFBDelay+i]
 		}
 		*prevDidFilter = 1
 	} else {
-		for i := 0; i < harmLagSubfrLen; i++ {
+		for i := range harmLagSubfrLen {
 			diff[diffBase+i] = 0.0
 		}
 		if *prevDidFilter != 0 {
 			coef17 := *lpcoefs
 			var yh [2 * harmFBDelay]float32
 			harmFiltMA16Sym(diff, diffBase, 2*harmFBDelay, &coef17, yh[:])
-			for i := 0; i < 2*harmFBDelay; i++ {
+			for i := range 2 * harmFBDelay {
 				out[outOff+i] = yh[i] + comb[combX-harmFBDelay+i]
 			}
 			for i := 2 * harmFBDelay; i < l; i++ {
 				out[outOff+i] = comb[combX+harmFBDelay+i-2*harmFBDelay]
 			}
 		} else {
-			for i := 0; i < l; i++ {
+			for i := range l {
 				out[outOff+i] = comb[combX-harmFBDelay+i]
 			}
 		}
@@ -512,10 +506,7 @@ func SmplHarmPostfilter(st *HarmPostfilterState, x []float32, xLen int, lags []f
 	for lagCtr < nLags {
 		offset2 := 0
 		copy(diff[diffPrefix-16:diffPrefix], st.state1[:])
-		lagCtrEnd := lagCtr + harmPitchNumSubframes
-		if lagCtrEnd > nLags {
-			lagCtrEnd = nLags
-		}
+		lagCtrEnd := min(lagCtr+harmPitchNumSubframes, nLags)
 		for lagCtr < lagCtrEnd {
 			combX := harmMaxPitchLag + offset1
 			futureSamples := int32(harmDelay) + int32(xLen) - int32(offset1)

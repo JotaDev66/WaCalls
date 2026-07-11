@@ -64,13 +64,11 @@ func ExtractRelayEndpoints(node *waBinary.Node) []core.RelayEndpoint {
 	}
 
 	for _, child := range wanode.NodeChildren(node) {
-		child := child
 		switch child.Tag {
 		case "relay":
 			parseRelay(&child)
 		case "relays":
 			for _, rn := range wanode.NodeChildren(&child) {
-				rn := rn
 				if rn.Tag == "relay" {
 					parseRelay(&rn)
 				}
@@ -84,7 +82,6 @@ func ExtractRelayEndpoints(node *waBinary.Node) []core.RelayEndpoint {
 
 func findEncNode(inner *waBinary.Node) *waBinary.Node {
 	for _, c := range wanode.NodeChildren(inner) {
-		c := c
 		if c.Tag == "enc" && wanode.HasAttr(c.Attrs, "type") {
 			return &c
 		}
@@ -98,7 +95,6 @@ func findEncNode(inner *waBinary.Node) *waBinary.Node {
 				continue
 			}
 			for _, e := range wanode.NodeChildren(&toNode) {
-				e := e
 				if e.Tag == "enc" && wanode.HasAttr(e.Attrs, "type") {
 					return &e
 				}

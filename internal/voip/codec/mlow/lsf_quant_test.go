@@ -40,13 +40,13 @@ func TestLsfQuant(t *testing.T) {
 		} else {
 			res = LsfQuant(r.A, r.Lsf, r.Voiced, r.LowRate, r.RDwAdj, r.Surv)
 		}
-		for k := 0; k < SmplLPCOrder+1; k++ {
+		for k := range SmplLPCOrder + 1 {
 			if res.Qi[k] != r.Qi[k] {
 				t.Fatalf("rec %d (voiced=%d cond=%d): qi mismatch\n got  %v\n want %v",
 					n, r.Voiced, r.CondCode, res.Qi, r.Qi)
 			}
 		}
-		for k := 0; k < SmplLPCOrder; k++ {
+		for k := range SmplLPCOrder {
 			if d := res.QLsf[k] - r.Qlsf[k]; d > 1e-4 || d < -1e-4 {
 				t.Errorf("rec %d: qlsf[%d] %.6f != C %.6f", n, k, res.QLsf[k], r.Qlsf[k])
 			}

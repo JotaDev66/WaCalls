@@ -106,7 +106,7 @@ func pdfToCmf(pdf []int32) []uint16 {
 		sump += int64(x)
 	}
 	cmf := make([]uint16, len(pdf)+1)
-	for i := 0; i < len(pdf); i++ {
+	for i := range pdf {
 		p := (int64(pdf[i])*(maxval-n))/sump + 1
 		cmf[i+1] = uint16(int32(cmf[i]) + int32(p))
 	}
@@ -144,10 +144,7 @@ func ccCreateSplitCmfs() [][]uint16 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/smpl_cc_tables.rs#L125-L137
 	out := make([][]uint16, 0, ccSplitNumTables)
 	for numPulses := int32(1); numPulses <= ccSplitNumTables; numPulses++ {
-		minSplit := numPulses - ccMaxPulsesPerSf*2
-		if minSplit < 0 {
-			minSplit = 0
-		}
+		minSplit := max(numPulses-ccMaxPulsesPerSf*2, 0)
 		maxSplit := numPulses - minSplit
 		p := make([]int32, 0, maxSplit-minSplit+1)
 		for k := minSplit; k <= maxSplit; k++ {
@@ -176,10 +173,7 @@ func ccCreateRunlenTable(maxSamples int32) runlenCmfs {
 			for r := int32(0); r < nump-1; r++ {
 				p1Q31 = (p1Q31 * tmp) >> 31
 			}
-			p1Q31 = ccOneQ31 - p1Q31
-			if p1Q31 > 2147376274 {
-				p1Q31 = 2147376274
-			}
+			p1Q31 = min(ccOneQ31-p1Q31, 2147376274)
 			var logOutQ7 int32
 			if nump > ms {
 				logOutQ7 = ccLin2log((nump<<10)/ms) - 10*128
@@ -190,10 +184,7 @@ func ccCreateRunlenTable(maxSamples int32) runlenCmfs {
 			const scaleMaxQ15 = 36000
 			const scaleMinQ15 = 26000
 			scaleFacQ15 := int32(scaleMaxQ15) - (((scaleMaxQ15 - scaleMinQ15) * ccSigmQ15((logOutQ7>>2)+sigmBiasQ5)) >> 15)
-			p1Q31 = ccOneQ31 - int64(ccLog2lin(((scaleFacQ15*(ccLin2log(int32(ccOneQ31-p1Q31))-31*128))>>15)+31*128))
-			if p1Q31 > 2147376274 {
-				p1Q31 = 2147376274
-			}
+			p1Q31 = min(ccOneQ31-int64(ccLog2lin(((scaleFacQ15*(ccLin2log(int32(ccOneQ31-p1Q31))-31*128))>>15)+31*128)), 2147376274)
 			p[nums-1] = int32((plongerQ31 * p1Q31) >> 31)
 			plongerQ31 = (plongerQ31 * (ccOneQ31 - p1Q31)) >> 31
 		}
@@ -304,7 +295,7 @@ func loadCcSeed() *ccSeed {
 		panic("mlow: inflate cc seed: " + err.Error())
 	}
 	raw, err := io.ReadAll(zr)
-	zr.Close()
+	_ = zr.Close()
 	if err != nil {
 		panic("mlow: read cc seed: " + err.Error())
 	}
@@ -480,7 +471,7 @@ func (t *CcTables) Runlen(oct int32) *runlenCmfs { return &t.runlen[oct-1] }
 // Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/rangecoder.rs#L228-L245
 func cdfWindow(base []uint16, start, n int) []uint16 {
 	w := make([]uint16, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if j := start + i; j >= 0 && j < len(base) {
 			w[i] = base[j]
 		}

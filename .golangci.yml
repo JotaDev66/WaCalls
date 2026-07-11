@@ -1,0 +1,18 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - modernize
+  exclusions:
+    rules:
+      - linters:
+          - staticcheck
+        text: SA1019
+      - linters:
+          - modernize
+        text: newexpr
+
+formatters:
+  enable:
+    - gofmt

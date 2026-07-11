@@ -49,7 +49,7 @@ func TestExcPre(t *testing.T) {
 		config := int(frame[0]>>2) & 1
 		lowRate := (frame[0]>>2)&1 != 0
 		dec := NewRangeDecoder(frame[1:])
-		for f := 0; f < 3; f++ {
+		for f := range 3 {
 			lsf := DecodeSmplLsf(dec, tbl, &lstate, config, f)
 			pulses := DecodeSmplPulses(dec, mem, 320, 4, 1, int32(config), lsf.Stage1)
 			voiced := lsf.Stage1 == 1
@@ -63,14 +63,14 @@ func TestExcPre(t *testing.T) {
 			params.TotalPulses = total
 			if voiced {
 				pr := DecodeSmplPitch(dec, mem, &lstate, 320, 4, int32(config), pulses.Subfr)
-				for b := 0; b < 8; b++ {
+				for b := range 8 {
 					v := float32(pr.BlockLags[b])*0.5 + 32.0
 					if v > 320.0 {
 						v = 320.0
 					}
 					params.BlockLags[b] = v
 				}
-				for sf := 0; sf < 4; sf++ {
+				for sf := range 4 {
 					params.AcbgIdx[sf] = pr.GainIdx[sf]
 					if pr.FiltIdx[sf] > 0 {
 						params.FcbgIdx[sf] = pr.FiltIdx[sf]
@@ -86,7 +86,7 @@ func TestExcPre(t *testing.T) {
 			celp.SynthFrame(nlsf, int(lsf.Extra), pulses.Pulses, &params, lowRate, 320, sig[:])
 			prevNLSF = nlsf
 
-			for sf := 0; sf < 4; sf++ {
+			for sf := range 4 {
 				ci, ok := cmap[[3]int{packet, f, sf}]
 				if !ok {
 					continue
@@ -103,7 +103,7 @@ func TestExcPre(t *testing.T) {
 				}
 				base := sf * SmplSubfrLen
 				bad := false
-				for i := 0; i < SmplSubfrLen; i++ {
+				for i := range SmplSubfrLen {
 					d := absF32(celp.ExcPre[base+i] - cexc[i])
 					if d > worst {
 						worst = d

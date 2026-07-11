@@ -199,14 +199,14 @@ func (d *MlowDecoder) decodeActiveFrame(frame []byte) []float32 {
 		params := CelpDecParams{Voiced: voiced, SfPulses: pulses.Subfr, TotalPulses: total}
 		if voiced {
 			pr := DecodeSmplPitch(dec, mem, &d.state.Lstate, SmplIntfLen, 4, int32(config), pulses.Subfr)
-			for b := 0; b < 8; b++ {
+			for b := range 8 {
 				v := float64(pr.BlockLags[b])*0.5 + 32.0
 				if v > 320.0 {
 					v = 320.0
 				}
 				params.BlockLags[b] = float32(v)
 			}
-			for sf := 0; sf < 4; sf++ {
+			for sf := range 4 {
 				params.AcbgIdx[sf] = pr.GainIdx[sf]
 				if pr.FiltIdx[sf] > 0 {
 					params.FcbgIdx[sf] = pr.FiltIdx[sf]
@@ -235,7 +235,7 @@ func (d *MlowDecoder) decodeActiveFrame(frame []byte) []float32 {
 	// reference does (fixed 0..3 loop). The DTX silence gaps that make this sound
 	// choppy are reconstructed downstream from the RTP timestamps, not here.
 	const numInternal = internalGroupSize
-	for f := 0; f < numInternal; f++ {
+	for f := range numInternal {
 		decodeOne(f)
 	}
 	d.log.Trace().Int("config", config).Bool("low_rate", lowRate).Int("body_bytes", bodyLen).

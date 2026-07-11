@@ -161,11 +161,8 @@ type VadPacketResult struct {
 // NewSmplVadState initializes the VAD (smpl_VAD_Init).
 func NewSmplVadState() *SmplVadState {
 	s := &SmplVadState{counter: 15, remainingDtxHangover: 60, hangoverMs: 60}
-	for b := 0; b < vadNBands; b++ {
-		bias := vadNoiseLevelsBias / (int32(b) + 1)
-		if bias < 1 {
-			bias = 1
-		}
+	for b := range vadNBands {
+		bias := max(vadNoiseLevelsBias/(int32(b)+1), 1)
 		s.noiseLevelBias[b] = bias
 		s.nl[b] = 100 * bias
 		s.invNl[b] = silkInt32Max / s.nl[b]
@@ -175,7 +172,7 @@ func NewSmplVadState() *SmplVadState {
 
 // filtHP: first-order ARMA HP filter with zero at DC, in place over len samples.
 func (s *SmplVadState) filtHP(x []int32, bQ16, aNegQ16 int32, length int) {
-	for i := 0; i < length; i++ {
+	for i := range length {
 		inval := smulwb(bQ16, x[i])
 		outval := sat16(s.hpState - inval)
 		s.hpState = smlawb(inval, aNegQ16, outval)
@@ -187,7 +184,7 @@ func (s *SmplVadState) filtHP(x []int32, bQ16, aNegQ16 int32, length int) {
 // outL[0..n/2] and high band to outH[0..n/2]; s is the carried 2-element state.
 func anaFiltBank1(inp []int32, s *[2]int32, outL, outH []int32, n int) {
 	n2 := n >> 1
-	for k := 0; k < n2; k++ {
+	for k := range n2 {
 		in32 := inp[2*k] << 10
 		y := in32 - s[0]
 		x := smlawb(y, y, aFB121)
@@ -209,7 +206,7 @@ func anaFiltBank1(inp []int32, s *[2]int32, outL, outH []int32, n int) {
 // x[0..n/2] and high band to x[hiOff..hiOff+n/2].
 func anaFiltBank1Inplace(x []int32, hiOff int, s *[2]int32, n int) {
 	n2 := n >> 1
-	for k := 0; k < n2; k++ {
+	for k := range n2 {
 		in32 := x[2*k] << 10
 		y := in32 - s[0]
 		xx := smlawb(y, y, aFB121)
@@ -234,7 +231,7 @@ func (s *SmplVadState) getNoiseLevels(pX *[vadNBands]int32) {
 		minCoef = div32(silkInt16Max, (s.counter>>4)+1)
 		s.counter++
 	}
-	for b := 0; b < vadNBands; b++ {
+	for b := range vadNBands {
 		nl := s.nl[b]
 		nrg := addPosSat32(pX[b], s.noiseLevelBias[b])
 		invNrg := div32(silkInt32Max, nrg)
@@ -247,15 +244,9 @@ func (s *SmplVadState) getNoiseLevels(pX *[vadNBands]int32) {
 		default:
 			coef = smulwb(smulww(invNrg, nl), vadNoiseLevelSmoothCoefQ16<<1)
 		}
-		coef = (coef * (100 + s.noiseLvlUpdateSpeed)) / 100
-		if coef < minCoef {
-			coef = minCoef
-		}
+		coef = max((coef*(100+s.noiseLvlUpdateSpeed))/100, minCoef)
 		s.invNl[b] = smlawb(s.invNl[b], invNrg-s.invNl[b], coef)
-		v := div32(silkInt32Max, s.invNl[b])
-		if v > 0x00FFFFFF {
-			v = 0x00FFFFFF
-		}
+		v := min(div32(silkInt32Max, s.invNl[b]), 0x00FFFFFF)
 		s.nl[b] = v
 	}
 }
@@ -286,19 +277,16 @@ func (s *SmplVadState) getSAQ8(pIn []int32, framelen int) int32 {
 
 	// Energy in each band.
 	var xnrg [vadNBands]int32
-	for b := 0; b < vadNBands; b++ {
-		shift := vadNBands - b
-		if shift > vadNBands-1 {
-			shift = vadNBands - 1
-		}
+	for b := range vadNBands {
+		shift := min(vadNBands-b, vadNBands-1)
 		dec := framelen >> shift
 		decSubfrLen := dec >> vadInternalSubframesLog2
 		decSubfrOffset := 0
 		xnrg[b] = s.xnrgSubfr[b]
 		var sumSquared int32
-		for sub := 0; sub < vadInternalSubframes; sub++ {
+		for sub := range vadInternalSubframes {
 			sumSquared = 0
-			for i := 0; i < decSubfrLen; i++ {
+			for i := range decSubfrLen {
 				xTmp := x[xOffset[b]+i+decSubfrOffset] >> 3
 				sumSquared = smlabb(sumSquared, xTmp, xTmp)
 			}
@@ -317,7 +305,7 @@ func (s *SmplVadState) getSAQ8(pIn []int32, framelen int) int32 {
 	// Signal-plus-noise to noise ratio.
 	var sumSquared int32
 	var inputTilt int32
-	for b := 0; b < vadNBands; b++ {
+	for b := range vadNBands {
 		speechNrg := xnrg[b] - s.nl[b]
 		if speechNrg > 0 {
 			var ratioQ8 int32
@@ -341,10 +329,7 @@ func (s *SmplVadState) getSAQ8(pIn []int32, framelen int) int32 {
 	saQ15 := sigmQ15(smulwb(vadSnrFactorQ16, pSnrDbQ7) - vadNegativeOffsetQ5)
 
 	_ = inputTilt
-	r := saQ15 >> 7
-	if r > silkUint8Max {
-		r = silkUint8Max
-	}
+	r := min(saQ15>>7, silkUint8Max)
 	return r
 }
 
@@ -360,10 +345,10 @@ func (s *SmplVadState) ProcessPacket(pcmI16 []int16, framelen int) VadPacketResu
 		return VadPacketResult{}
 	}
 	var vt [3]vadType
-	for i := 0; i < framesPerPacket; i++ {
+	for i := range framesPerPacket {
 		t := i * framelen
 		frame := make([]int32, framelen)
-		for j := 0; j < framelen; j++ {
+		for j := range framelen {
 			frame[j] = int32(pcmI16[t+j])
 		}
 		saQ8 := s.getSAQ8(frame, framelen)

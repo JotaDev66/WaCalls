@@ -106,7 +106,7 @@ func encodeXorRelayedAddress(ip string, port int) []byte {
 	data[1] = 0x01
 	binary.BigEndian.PutUint16(data[2:], uint16(port)^uint16(stunMagicCookie>>16))
 	var p0, p1, p2, p3 int
-	fmt.Sscanf(ip, "%d.%d.%d.%d", &p0, &p1, &p2, &p3)
+	_, _ = fmt.Sscanf(ip, "%d.%d.%d.%d", &p0, &p1, &p2, &p3)
 	ipNum := uint32(p0)<<24 | uint32(p1)<<16 | uint32(p2)<<8 | uint32(p3)
 	binary.BigEndian.PutUint32(data[4:], ipNum^stunMagicCookie)
 	return data

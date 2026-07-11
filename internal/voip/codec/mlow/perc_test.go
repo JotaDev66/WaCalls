@@ -19,7 +19,7 @@ func TestPercFFTRoundtrip(t *testing.T) {
 	rfftForwardOrdered(x, f)
 	back := make([]float32, n)
 	rfftBackwardOrdered(f, back)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		expected := x[i] * float32(n)
 		if d := math.Abs(float64(back[i] - expected)); d >= 1e-1*(1.0+math.Abs(float64(expected))) {
 			t.Fatalf("idx %d: got %v want %v", i, back[i], expected)
