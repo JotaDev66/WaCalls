@@ -1,20 +1,10 @@
 import { apiPost } from "./api";
 import { setupAudioChannel } from "./call/audio-channel";
-import { setupVideoChannel } from "./call/video-channel";
-import { videoSupported } from "./call/video-codec";
-import { VIDEO_FPS, VIDEO_HEIGHT, VIDEO_WIDTH } from "../constants/video";
-
-export type OpenCallOptions = {
-  video?: boolean;
-  camDeviceId?: string | null;
-};
 
 export type OpenCall = {
   pc: RTCPeerConnection;
   micStream: MediaStream;
   remoteStream: MediaStream | null;
-  localVideoStream: MediaStream | null;
-  remoteVideoStream: MediaStream | null;
   close: () => void;
 };
 
@@ -22,28 +12,14 @@ export const openCall = async (
   sid: string,
   callId: string,
   micDeviceId: string | null,
-  opts: OpenCallOptions = {},
 ): Promise<OpenCall> => {
-  const wantVideo = !!opts.video && videoSupported();
-  if (opts.video && !wantVideo) {
-    console.warn("video requested but WebCodecs/insertable-streams unsupported; audio only");
-  }
-
   const localStream = await navigator.mediaDevices.getUserMedia({
     audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
-    video: wantVideo
-      ? {
-          deviceId: opts.camDeviceId ? { exact: opts.camDeviceId } : undefined,
-          width: { ideal: VIDEO_WIDTH },
-          height: { ideal: VIDEO_HEIGHT },
-          frameRate: { ideal: VIDEO_FPS },
-        }
-      : false,
+    video: false,
   });
 
   const pc = new RTCPeerConnection({ iceServers: [] });
   const audio = await setupAudioChannel(pc, localStream);
-  const video = setupVideoChannel(pc, localStream, wantVideo);
 
   const offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
@@ -65,10 +41,7 @@ export const openCall = async (
     pc,
     micStream: localStream,
     remoteStream: audio.remoteStream,
-    localVideoStream: video.localVideoStream,
-    remoteVideoStream: video.remoteVideoStream,
     close: () => {
-      video.close();
       audio.close();
       try {
         localStream.getTracks().forEach((t) => t.stop());
