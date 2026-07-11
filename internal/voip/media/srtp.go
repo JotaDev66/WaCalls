@@ -15,9 +15,12 @@ type SrtpErrorType string
 const (
 	SrtpErrPacketTooShort SrtpErrorType = "packet_too_short"
 	SrtpErrAuthFailed     SrtpErrorType = "auth_failed"
+	SrtpErrReplay         SrtpErrorType = "replay"
 	SrtpErrEncryption     SrtpErrorType = "encryption"
 	SrtpErrDecryption     SrtpErrorType = "decryption"
 )
+
+const srtpReplayWindowSize = 64
 
 type SrtpError struct {
 	Type SrtpErrorType
@@ -27,18 +30,29 @@ type SrtpError struct {
 func (e *SrtpError) Error() string { return fmt.Sprintf("srtp %s: %s", e.Type, e.Msg) }
 
 type SrtpContext struct {
-	sessionKey  []byte
-	sessionSalt []byte
-	authKey     []byte
-	roc         uint32
-	lastSeq     uint16
-	initialized bool
-	authTagLen  int
+	sessionKey   []byte
+	sessionSalt  []byte
+	authKey      []byte
+	roc          uint32
+	lastSeq      uint16
+	initialized  bool
+	authTagLen   int
+	highestIndex uint64
+	replayWindow uint64
 }
 
 func NewSrtpContext(keying core.SrtpKeyingMaterial, authTagLen int) (*SrtpContext, error) {
 	if authTagLen <= 0 {
 		authTagLen = core.SRTPAuthTagLen
+	}
+	if authTagLen > sha1.Size {
+		return nil, fmt.Errorf("srtp auth tag length %d exceeds SHA-1 size", authTagLen)
+	}
+	if len(keying.MasterKey) != 16 {
+		return nil, fmt.Errorf("srtp master key must be 16 bytes, got %d", len(keying.MasterKey))
+	}
+	if len(keying.MasterSalt) != 14 {
+		return nil, fmt.Errorf("srtp master salt must be 14 bytes, got %d", len(keying.MasterSalt))
 	}
 	sk, err := deriveSrtpKey(keying.MasterKey, keying.MasterSalt, core.SRTPLabelEncryption, 16)
 	if err != nil {
@@ -109,8 +123,18 @@ func (c *SrtpContext) Unprotect(data []byte) (*RtpPacket, error) {
 		return nil, &SrtpError{SrtpErrPacketTooShort, fmt.Sprintf("no payload: %dB total, %dB header, auth=%d", len(data), headerSize, c.authTagLen)}
 	}
 
-	c.updateRoc(header.SequenceNumber)
-	index := c.packetIndex(header.SequenceNumber)
+	guessedRoc := c.estimateRecvRoc(header.SequenceNumber)
+	index := (uint64(guessedRoc) << 16) | uint64(header.SequenceNumber)
+	if c.isReplay(index) {
+		return nil, &SrtpError{SrtpErrReplay, fmt.Sprintf("packet index %d already received or outside replay window", index)}
+	}
+
+	authDataEnd := headerSize + payloadLen
+	expectedTag := c.computeAuthTag(data[:authDataEnd], guessedRoc, c.authTagLen)
+	receivedTag := data[authDataEnd:]
+	if !hmac.Equal(receivedTag, expectedTag) {
+		return nil, &SrtpError{SrtpErrAuthFailed, "authentication tag mismatch"}
+	}
 
 	iv := c.generateIV(header.Ssrc, index)
 	decrypted := make([]byte, payloadLen)
@@ -118,7 +142,65 @@ func (c *SrtpContext) Unprotect(data []byte) (*RtpPacket, error) {
 		return nil, &SrtpError{SrtpErrDecryption, err.Error()}
 	}
 
+	c.acceptRecv(header.SequenceNumber, guessedRoc, index)
 	return &RtpPacket{Header: header, Payload: decrypted}, nil
+}
+
+// estimateRecvRoc implements the packet-index guess from RFC 3711 Appendix A.
+// It does not mutate context state, so unauthenticated packets cannot advance
+// the rollover counter or poison the replay window.
+func (c *SrtpContext) estimateRecvRoc(seq uint16) uint32 {
+	if !c.initialized {
+		return 0
+	}
+
+	guessed := c.roc
+	if c.lastSeq < 0x8000 {
+		if uint32(seq) > uint32(c.lastSeq)+0x8000 && guessed > 0 {
+			guessed--
+		}
+	} else if uint32(c.lastSeq) > uint32(seq)+0x8000 {
+		guessed++
+	}
+	return guessed
+}
+
+func (c *SrtpContext) isReplay(index uint64) bool {
+	if !c.initialized || index > c.highestIndex {
+		return false
+	}
+	delta := c.highestIndex - index
+	if delta >= srtpReplayWindowSize {
+		return true
+	}
+	return c.replayWindow&(uint64(1)<<delta) != 0
+}
+
+func (c *SrtpContext) acceptRecv(seq uint16, roc uint32, index uint64) {
+	if !c.initialized {
+		c.initialized = true
+		c.roc = roc
+		c.lastSeq = seq
+		c.highestIndex = index
+		c.replayWindow = 1
+		return
+	}
+
+	if index > c.highestIndex {
+		delta := index - c.highestIndex
+		if delta >= srtpReplayWindowSize {
+			c.replayWindow = 1
+		} else {
+			c.replayWindow = (c.replayWindow << delta) | 1
+		}
+		c.highestIndex = index
+		c.roc = roc
+		c.lastSeq = seq
+		return
+	}
+
+	delta := c.highestIndex - index
+	c.replayWindow |= uint64(1) << delta
 }
 
 func (c *SrtpContext) updateRoc(seq uint16) {
