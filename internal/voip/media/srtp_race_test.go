@@ -25,7 +25,7 @@ func TestSrtpContextConcurrentUnprotect(t *testing.T) {
 	sess := NewWhatsAppOpusSession(0xAABBCCDD)
 	payload := bytes.Repeat([]byte{0x42}, 40)
 	packets := make([][]byte, 0, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		pkt := sess.CreatePacketWithDuration(payload, 960, i == 0)
 		p, err := sender.Protect(pkt)
 		if err != nil {
@@ -35,14 +35,12 @@ func TestSrtpContextConcurrentUnprotect(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for g := 0; g < 4; g++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < 300; i++ {
+	for range 4 {
+		wg.Go(func() {
+			for i := range 300 {
 				_, _ = receiver.Unprotect(packets[i%len(packets)])
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }
