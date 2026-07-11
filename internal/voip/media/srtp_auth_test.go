@@ -196,3 +196,34 @@ func TestUnprotectRoundtripAcrossSeqWrap(t *testing.T) {
 		t.Fatal("late pre-wrap packet must decrypt under roc-1")
 	}
 }
+
+func TestEstimateRocDoesNotAdvanceWithoutCommit(t *testing.T) {
+	km, err := DerivePerJidSrtpKey(bytes.Repeat([]byte{0x22}, 32), "peer:0@lid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := NewSrtpContext(km, core.SRTPRecvAuthTagLen)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx.commitRoc(ctx.estimateRoc(0x7FFE), 0x7FFE)
+	if ctx.roc != 0 {
+		t.Fatalf("roc after seed: %d", ctx.roc)
+	}
+
+	_ = ctx.estimateRoc(0xFFFE)
+	_ = ctx.estimateRoc(0x7FFD)
+	if ctx.roc != 0 {
+		t.Fatalf("estimate alone advanced roc: %d", ctx.roc)
+	}
+	if got := ctx.estimateRoc(0x7FFF); got != 0 {
+		t.Fatalf("legit in-window seq estimated roc %d, want 0", got)
+	}
+
+	ctx.commitRoc(ctx.estimateRoc(0xFFFE), 0xFFFE)
+	ctx.commitRoc(ctx.estimateRoc(0x7FFD), 0x7FFD)
+	if ctx.roc != 1 {
+		t.Fatalf("committed staircase must advance roc to 1, got %d", ctx.roc)
+	}
+}
