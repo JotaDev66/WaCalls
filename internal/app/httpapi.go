@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/webui"
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow/types"
@@ -38,12 +39,20 @@ func (s *Server) routes() http.Handler {
 		mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 	}
 
+	mux.Handle("/", s.uiHandler())
+	return withCORS(mux)
+}
+
+func (s *Server) uiHandler() http.Handler {
 	if s.staticDir != "" {
 		if _, err := os.Stat(s.staticDir); err == nil {
-			mux.Handle("/", http.FileServer(http.Dir(s.staticDir)))
+			return http.FileServer(http.Dir(s.staticDir))
 		}
 	}
-	return withCORS(mux)
+	if sub, err := webui.FS(); err == nil {
+		return http.FileServerFS(sub)
+	}
+	return http.NotFoundHandler()
 }
 
 func withCORS(h http.Handler) http.Handler {
