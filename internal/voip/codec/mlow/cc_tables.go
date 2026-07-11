@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"io"
 	"math/bits"
+	"sync"
 )
 
 // Logical seed-built tables for the nrgres/gains (Group A/E), LTP gain (Group C),
@@ -390,14 +391,15 @@ func (s *ccSeed) build() *CcTables {
 	return t
 }
 
-var ccTablesInst *CcTables
+var (
+	ccTablesOnce sync.Once
+	ccTablesInst *CcTables
+)
 
 // LoadCcTables expands the embedded cc seed ROM into the nrgres/gains/LTP/pulse tables once.
 func LoadCcTables() *CcTables {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/smpl_cc_tables.rs#L331-L337
-	if ccTablesInst == nil {
-		ccTablesInst = loadCcSeed().build()
-	}
+	ccTablesOnce.Do(func() { ccTablesInst = loadCcSeed().build() })
 	return ccTablesInst
 }
 
