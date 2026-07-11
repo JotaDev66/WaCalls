@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"fmt"
+	"sync"
 	"wacalls/internal/voip/core"
 )
 
@@ -27,6 +28,7 @@ type SrtpError struct {
 func (e *SrtpError) Error() string { return fmt.Sprintf("srtp %s: %s", e.Type, e.Msg) }
 
 type SrtpContext struct {
+	mu          sync.Mutex
 	sessionKey  []byte
 	sessionSalt []byte
 	authKey     []byte
@@ -65,11 +67,15 @@ func (c *SrtpContext) SetAuthKeying(keying core.SrtpKeyingMaterial) error {
 	if err != nil {
 		return err
 	}
+	c.mu.Lock()
 	c.authKey = ak
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *SrtpContext) Protect(packet *RtpPacket) ([]byte, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.updateRoc(packet.Header.SequenceNumber)
 	index := c.packetIndex(packet.Header.SequenceNumber)
 
@@ -95,6 +101,8 @@ func (c *SrtpContext) Protect(packet *RtpPacket) ([]byte, error) {
 }
 
 func (c *SrtpContext) Unprotect(data []byte) (*RtpPacket, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if len(data) < 12 {
 		return nil, &SrtpError{SrtpErrPacketTooShort, fmt.Sprintf("packet too short: %d bytes", len(data))}
 	}
