@@ -21,8 +21,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	if creator == "" {
 		creator = peerJid.String()
 	}
-	isVideo := hasChildTag(info.InnerNode, "video")
-
 	callKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
 	if err != nil {
 		m.log.Error("offer decrypt call key", "err", err)
@@ -45,9 +43,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.log.Debug("offer inner node structure", "call_id", callID, "children", childTagSummary(info.InnerNode))
 
 	mediaType := core.CallMediaTypeAudio
-	if isVideo {
-		mediaType = core.CallMediaTypeVideo
-	}
 
 	m.mu.Lock()
 	call := NewIncomingCall(callID, peerJid.String(), creator, "", mediaType)
@@ -90,7 +85,7 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.mu.Lock()
 	m.emitState()
 	m.mu.Unlock()
-	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "video", isVideo, "relays", len(relays))
+	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "relays", len(relays))
 }
 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {

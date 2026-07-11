@@ -23,7 +23,6 @@ type CallMediaType string
 
 const (
 	CallMediaTypeAudio CallMediaType = "audio"
-	CallMediaTypeVideo CallMediaType = "video"
 )
 
 type EndCallReason string
@@ -41,7 +40,6 @@ const (
 
 const (
 	PayloadTypeWhatsAppOpus = 120
-	PayloadTypeWhatsAppH264 = 97
 )
 
 const (

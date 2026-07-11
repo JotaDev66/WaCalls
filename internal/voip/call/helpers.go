@@ -8,15 +8,6 @@ import (
 	waBinary "go.mau.fi/whatsmeow/binary"
 )
 
-func hasChildTag(n *waBinary.Node, tag string) bool {
-	for _, c := range wanode.NodeChildren(n) {
-		if c.Tag == tag {
-			return true
-		}
-	}
-	return false
-}
-
 func ensureDeviceJid(jid string) string {
 	if strings.Contains(jid, ":") {
 

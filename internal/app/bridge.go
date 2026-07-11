@@ -11,23 +11,18 @@ import (
 
 // pcmChannelLabel is the data channel the browser opens to carry raw 16 kHz mono
 // Int16 LE PCM in both directions. The browser side must create it with this label.
-const (
-	pcmChannelLabel  = "pcm"
-	h264ChannelLabel = "h264"
-)
+const pcmChannelLabel = "pcm"
 
 // Bridge is the browser-leg adapter: it carries raw PCM between the browser and
 // the CallManager over a WebRTC data channel. The call core only ever sees
 // []float32 PCM, so it stays unaware of the transport (no Opus here anymore).
 type Bridge struct {
-	pc      *webrtc.PeerConnection
-	dc      atomic.Pointer[webrtc.DataChannel]
-	videoDC atomic.Pointer[webrtc.DataChannel]
-	log     *slog.Logger
+	pc  *webrtc.PeerConnection
+	dc  atomic.Pointer[webrtc.DataChannel]
+	log *slog.Logger
 
 	// OnBrowserPCM is invoked with decoded 16 kHz mono PCM captured from the browser mic.
-	OnBrowserPCM   func(pcm []float32)
-	OnBrowserVideo func(au []byte)
+	OnBrowserPCM func(pcm []float32)
 	// OnTerminalICE fires when the peer connection fails or closes.
 	OnTerminalICE func()
 }
@@ -50,13 +45,6 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 				if cb := br.OnBrowserPCM; cb != nil && len(msg.Data) > 0 {
 					cb(media.PCMInt16LEToFloat32(msg.Data))
-				}
-			})
-		case h264ChannelLabel:
-			br.videoDC.Store(dc)
-			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-				if cb := br.OnBrowserVideo; cb != nil && len(msg.Data) > 0 {
-					cb(msg.Data)
 				}
 			})
 		}
@@ -98,14 +86,6 @@ func (b *Bridge) WritePCM(pcm []float32) error {
 		return nil
 	}
 	return dc.Send(media.PCMFloat32ToInt16LE(pcm))
-}
-
-func (b *Bridge) WriteVideo(au []byte) error {
-	dc := b.videoDC.Load()
-	if dc == nil || len(au) == 0 {
-		return nil
-	}
-	return dc.Send(au)
 }
 
 func (b *Bridge) Close() {

@@ -10,19 +10,9 @@ type AudioCodec interface {
 	Close()
 }
 
-type VideoCodec interface {
-	Packetize(accessUnit []byte) [][]byte
-	Depacketize(rtpPayload []byte) [][]byte
-}
-
 type AudioSink interface {
 	FeedPCM(pcm []float32)
 	OnPeerPCM(handler func(pcm []float32))
-}
-
-type VideoSink interface {
-	FeedAU(accessUnit []byte)
-	OnPeerAU(handler func(accessUnit []byte))
 }
 
 type Session struct {

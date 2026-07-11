@@ -47,10 +47,8 @@ func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid
 		CallID:          m.currentCall.CallID,
 		OwnDeviceJID:    ourDeviceJid,
 		PeerDeviceJID:   peerDeviceJid,
-		IsVideo:         m.currentCall.MediaType == core.CallMediaTypeVideo,
 		Relay:           m.relay,
 		SendAudioFrame:  m.sendAudioFrame,
-		SendRTP:         m.sendRTP,
 		OnRTP:           m.registerRTPHandler,
 		DeclareSelfSSRC: m.declareSelfSSRC,
 		Observer:        m.observer,
@@ -64,13 +62,6 @@ func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid
 		a.OnPeerPCM(func(pcm []float32) {
 			if m.OnPeerAudio != nil {
 				m.OnPeerAudio(pcm)
-			}
-		})
-	}
-	if v, ok := engine.Capability[core.VideoSink](m.extensions); ok {
-		v.OnPeerAU(func(au []byte) {
-			if m.OnPeerVideo != nil {
-				m.OnPeerVideo(au)
 			}
 		})
 	}
@@ -96,21 +87,6 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	protected, err := m.srtp.Protect(pkt)
 	if err != nil {
 		m.log.Debug("srtp protect error", "err", err)
-		return err
-	}
-	m.relay.Broadcast(protected)
-	return nil
-}
-
-func (m *CallManager) sendRTP(pkt *media.RtpPacket) error {
-	m.mu.Lock()
-	srtp := m.srtp
-	m.mu.Unlock()
-	if srtp == nil {
-		return nil
-	}
-	protected, err := srtp.Protect(pkt)
-	if err != nil {
 		return err
 	}
 	m.relay.Broadcast(protected)
