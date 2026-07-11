@@ -13,6 +13,7 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
+COPY --from=web /web/dist ./internal/app/webui/dist
 ARG VERSION=docker
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -31,11 +32,10 @@ RUN apk add --no-cache ca-certificates \
     && mkdir -p /data && chown app:app /data
 WORKDIR /app
 COPY --from=build /out/wacalls /usr/local/bin/wacalls
-COPY --from=web /web/dist ./client/dist
 USER app
 EXPOSE 8080
 VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/api/sessions >/dev/null 2>&1 || exit 1
 ENTRYPOINT ["wacalls"]
-CMD ["-addr=:8080", "-db=/data/wacalls.db", "-static=/app/client/dist"]
+CMD ["-addr=:8080", "-db=/data/wacalls.db"]
