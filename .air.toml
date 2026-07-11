@@ -4,7 +4,7 @@ tmp_dir = "tmp"
 [build]
   cmd = "go build -o ./tmp/wacalls-dev.exe ./cmd/server"
   entrypoint = "./tmp/wacalls-dev.exe"
-  full_bin = "./tmp/wacalls-dev.exe -addr :3001 -debug -db ./tmp/wacalls-dev.db"
+  args_bin = ["-addr", ":3001", "-debug", "-db", "wacalls.db"]
   include_ext = ["go"]
   exclude_dir = ["client", "tmp", "docs", "bin", "internal/app/webui/dist"]
   exclude_regex = ["_test\\.go"]
