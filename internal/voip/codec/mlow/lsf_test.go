@@ -25,6 +25,7 @@ func TestLoadSmplTables(t *testing.T) {
 	got := LoadSmplTables()
 	if got == nil {
 		t.Fatal("LoadSmplTables returned nil")
+		return
 	}
 	if !reflect.DeepEqual(*got, want) {
 		t.Fatalf("blob tables differ from JSON capture:\n sel:    %v\n grid:   %v\n extra:  %v\n stage2 dims: %d",
