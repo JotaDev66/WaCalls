@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"wacalls/internal/store"
@@ -15,11 +16,12 @@ import (
 )
 
 type Server struct {
-	broker    *Broker
-	sessions  *SessionManager
-	log       *slog.Logger
-	staticDir string
-	debug     bool
+	broker     *Broker
+	sessions   *SessionManager
+	log        *slog.Logger
+	staticDir  string
+	debug      bool
+	adminToken string
 }
 
 func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
@@ -37,13 +39,24 @@ func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, max
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, debug: debug}, nil
+	return &Server{
+		broker: broker, sessions: mgr, log: log, staticDir: staticDir,
+		debug: debug, adminToken: os.Getenv("WACALLS_ADMIN_TOKEN"),
+	}, nil
 }
 
-func (s *Server) Run(ctx context.Context, addr string) error {
+func (s *Server) Run(ctx context.Context, addr, unixSocketPath string) error {
 	defer s.sessions.disconnectAll()
 	if err := s.sessions.Restore(ctx); err != nil {
 		return err
+	}
+	var unixServer *unixPCMServer
+	if unixSocketPath != "" {
+		unixServer = newUnixPCMServer(unixSocketPath, sessionLocalBackend{sessions: s.sessions}, s.log)
+		if err := unixServer.Start(ctx); err != nil {
+			return err
+		}
+		defer func() { _ = unixServer.Close() }()
 	}
 	httpSrv := &http.Server{Addr: addr, Handler: s.routes()}
 	go func() {

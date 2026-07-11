@@ -77,8 +77,23 @@ func (c *Client) Drain() []*CallManager {
 }
 
 func (c *Client) StartCall(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
+	return c.startCall(ctx, peer, isVideo, nil)
+}
+
+// StartCallWithSetup lets a transport adapter attach to the CallManager after
+// the standard callbacks are wired but before the first state transition can
+// fire. Keeping this hook inside call creation avoids a pending-adapter race
+// with unrelated inbound calls.
+func (c *Client) StartCallWithSetup(ctx context.Context, peer types.JID, isVideo bool, setup func(string, *CallManager)) (string, error) {
+	return c.startCall(ctx, peer, isVideo, setup)
+}
+
+func (c *Client) startCall(ctx context.Context, peer types.JID, isVideo bool, setup func(string, *CallManager)) (string, error) {
 	callID := signaling.GenerateCallID()
 	cm := c.createCall(callID)
+	if setup != nil {
+		setup(callID, cm)
+	}
 	if err := cm.StartCall(ctx, callID, peer, isVideo); err != nil {
 		c.Remove(callID)
 		return "", err

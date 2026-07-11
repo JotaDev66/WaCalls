@@ -18,6 +18,9 @@ type Audio struct {
 	scope              *engine.CallScope
 	mu                 sync.Mutex
 	captureBuf         []float32
+	captureGeneration  uint64
+	captureInFlight    bool
+	drainCh            chan struct{}
 	audioTimelineSet   bool
 	audioBaseTs        uint32
 	audioPlayedSamples uint64
@@ -27,7 +30,9 @@ type Audio struct {
 }
 
 func New(codec core.AudioCodec) *Audio {
-	return &Audio{codec: codec}
+	drained := make(chan struct{})
+	close(drained)
+	return &Audio{codec: codec, drainCh: drained}
 }
 
 func (a *Audio) Name() string {
@@ -55,6 +60,10 @@ func (a *Audio) Detach() {
 		close(a.sendLoopStop)
 		a.sendLoopStop = nil
 	}
+	a.captureGeneration++
+	a.captureBuf = nil
+	a.captureInFlight = false
+	a.markCaptureDrainedLocked()
 	scope := a.scope
 	a.mu.Unlock()
 	if scope != nil {
@@ -69,9 +78,56 @@ func (a *Audio) FeedPCM(pcm []float32) {
 	if a.codec == nil || len(pcm) == 0 {
 		return
 	}
+	a.markCapturePendingLocked()
 	a.captureBuf = append(a.captureBuf, pcm...)
 	if maxBuffered := a.codec.FrameSize() * 4; len(a.captureBuf) > maxBuffered {
 		a.captureBuf = a.captureBuf[len(a.captureBuf)-maxBuffered:]
+	}
+}
+
+// FlushPCM atomically invalidates all captured audio that has not yet reached
+// the relay. Incrementing the generation also cancels a frame being encoded
+// outside the lock, which is required for immediate barge-in semantics.
+func (a *Audio) FlushPCM() {
+	a.mu.Lock()
+	a.captureGeneration++
+	a.captureBuf = nil
+	if !a.captureInFlight {
+		a.markCaptureDrainedLocked()
+	}
+	a.mu.Unlock()
+}
+
+func (a *Audio) WaitPCMDrained(ctx context.Context) error {
+	a.mu.Lock()
+	if len(a.captureBuf) == 0 && !a.captureInFlight {
+		a.mu.Unlock()
+		return nil
+	}
+	ch := a.drainCh
+	a.mu.Unlock()
+
+	select {
+	case <-ch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (a *Audio) markCapturePendingLocked() {
+	select {
+	case <-a.drainCh:
+		a.drainCh = make(chan struct{})
+	default:
+	}
+}
+
+func (a *Audio) markCaptureDrainedLocked() {
+	select {
+	case <-a.drainCh:
+	default:
+		close(a.drainCh)
 	}
 }
 
@@ -109,16 +165,42 @@ func (a *Audio) startSendLoopLocked() {
 				continue
 			}
 			frame := silence
+			voicedFrame := false
+			generation := a.captureGeneration
 			if len(a.captureBuf) >= frameSize {
 				copy(voiced, a.captureBuf[:frameSize])
 				frame = voiced
 				a.captureBuf = a.captureBuf[frameSize:]
+				a.captureInFlight = true
+				voicedFrame = true
 			}
 			scope := a.scope
 			codec := a.codec
 			a.mu.Unlock()
-			if enc, err := codec.Encode(frame); err == nil {
-				scope.SendAudioFrame(enc, codec.FrameSize())
+
+			enc, err := codec.Encode(frame)
+			if voicedFrame {
+				a.mu.Lock()
+				if generation != a.captureGeneration {
+					a.captureInFlight = false
+					if len(a.captureBuf) == 0 {
+						a.markCaptureDrainedLocked()
+					}
+					a.mu.Unlock()
+					continue
+				}
+				if err == nil {
+					_ = scope.SendAudioFrame(enc, codec.FrameSize())
+				}
+				a.captureInFlight = false
+				if len(a.captureBuf) == 0 {
+					a.markCaptureDrainedLocked()
+				}
+				a.mu.Unlock()
+				continue
+			}
+			if err == nil {
+				_ = scope.SendAudioFrame(enc, codec.FrameSize())
 			}
 		}
 	}()

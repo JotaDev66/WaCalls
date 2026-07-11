@@ -20,6 +20,7 @@ func main() {
 	staticDir := flag.String("static", "client/dist", "static client directory (optional)")
 	debug := flag.Bool("debug", false, "verbose logging")
 	maxCalls := flag.Int("max-calls-per-session", 8, "max concurrent calls per session (0 = unlimited)")
+	unixSocket := flag.String("unix-socket", envOrDefault("WACALLS_SOCKET", "/run/ligacao-ai/wacalls.sock"), "private local PCM Unix socket (empty disables it)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -52,8 +53,15 @@ func main() {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)
 	}
-	if err := srv.Run(ctx, *addr); err != nil {
+	if err := srv.Run(ctx, *addr, *unixSocket); err != nil {
 		log.Error("server error", "err", err)
 		os.Exit(1)
 	}
+}
+
+func envOrDefault(name, fallback string) string {
+	if value := os.Getenv(name); value != "" {
+		return value
+	}
+	return fallback
 }

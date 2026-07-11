@@ -17,6 +17,8 @@ type VideoCodec interface {
 
 type AudioSink interface {
 	FeedPCM(pcm []float32)
+	FlushPCM()
+	WaitPCMDrained(ctx context.Context) error
 	OnPeerPCM(handler func(pcm []float32))
 }
 

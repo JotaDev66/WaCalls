@@ -1,6 +1,8 @@
 package call
 
 import (
+	"context"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
@@ -23,6 +25,25 @@ func (m *CallManager) FeedCapturedPCM(data []float32) {
 	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
 		a.FeedPCM(data)
 	}
+}
+
+// FlushCapturedPCM discards audio that has not yet been sent to the peer. The
+// audio extension also invalidates a frame currently being encoded, so no
+// stale TTS frame can be emitted after this method returns.
+func (m *CallManager) FlushCapturedPCM() {
+	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
+		a.FlushPCM()
+	}
+}
+
+// WaitCapturedPCMDrained waits until every queued captured sample has been
+// encoded and handed to the relay. It is used by the local fallback path to
+// avoid tearing down the call before the warning has played.
+func (m *CallManager) WaitCapturedPCMDrained(ctx context.Context) error {
+	if a, ok := engine.Capability[core.AudioSink](m.extensions); ok {
+		return a.WaitPCMDrained(ctx)
+	}
+	return nil
 }
 
 func (m *CallManager) registerRTPHandler(pt uint8, handler func(*media.RtpPacket)) {

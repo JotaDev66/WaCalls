@@ -33,6 +33,8 @@ type Session struct {
 
 	bridgeMu sync.Mutex
 	bridges  map[string]*Bridge
+	localMu  sync.Mutex
+	local    map[string]localCallObserver
 
 	mu   sync.Mutex
 	auth AuthSnapshot
@@ -47,6 +49,7 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 		client:  client,
 		auth:    AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
+		local:   map[string]localCallObserver{},
 	}
 	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, mgr.newObserver)
 	client.AddEventHandler(s.handleEvent)
@@ -74,6 +77,9 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound", Video: c.MediaType == core.CallMediaTypeVideo})
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
+		if sink := s.localCall(callID); sink != nil {
+			sink.onState(c)
+		}
 		if c.IsEnded() {
 			s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 			s.removeCall(c.CallID)
@@ -102,11 +108,17 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		s.mgr.broker.upsertCall(rec)
 	}
 	cm.OnEnded = func(c *call.CallInfo) {
+		if sink := s.localCall(callID); sink != nil {
+			sink.onState(c)
+		}
 		s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 		s.removeCall(c.CallID)
 		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
+		if sink := s.localCall(callID); sink != nil {
+			sink.onPeerPCM(pcm16)
+		}
 		if b := s.getBridge(callID); b != nil {
 			_ = b.WritePCM(pcm16)
 		}
@@ -120,6 +132,26 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
 	return s.calls.StartCall(ctx, peer, isVideo)
+}
+
+func (s *Session) startLocalOutgoing(ctx context.Context, peer types.JID, sink localCallObserver) (string, error) {
+	callID, err := s.calls.StartCallWithSetup(ctx, peer, false, func(callID string, cm *call.CallManager) {
+		s.localMu.Lock()
+		s.local[callID] = sink
+		s.localMu.Unlock()
+		sink.bound(s, callID, cm)
+	})
+	if err != nil {
+		s.localMu.Lock()
+		for id, candidate := range s.local {
+			if candidate == sink {
+				delete(s.local, id)
+			}
+		}
+		s.localMu.Unlock()
+		return "", err
+	}
+	return callID, nil
 }
 
 func (s *Session) callFor(callID string) (*call.CallManager, bool) {
@@ -237,6 +269,9 @@ func (s *Session) removeCall(callID string) {
 	if b != nil {
 		b.Close()
 	}
+	if sink := s.detachLocalCall(callID); sink != nil {
+		sink.closed()
+	}
 	s.calls.Remove(callID)
 }
 
@@ -257,6 +292,28 @@ func (s *Session) teardownAllCalls() {
 			b.Close()
 		}
 	}
+	s.localMu.Lock()
+	local := s.local
+	s.local = map[string]localCallObserver{}
+	s.localMu.Unlock()
+	for _, sink := range local {
+		sink.closed()
+	}
+}
+
+func (s *Session) localCall(callID string) localCallObserver {
+	s.localMu.Lock()
+	sink := s.local[callID]
+	s.localMu.Unlock()
+	return sink
+}
+
+func (s *Session) detachLocalCall(callID string) localCallObserver {
+	s.localMu.Lock()
+	sink := s.local[callID]
+	delete(s.local, callID)
+	s.localMu.Unlock()
+	return sink
 }
 
 func (s *Session) replaceClient(client *whatsmeow.Client) {
