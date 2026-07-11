@@ -46,7 +46,6 @@ type CallManager struct {
 	OnIncoming    func(*CallInfo)
 	OnEnded       func(*CallInfo)
 	OnPeerAudio   func([]float32)
-	OnPeerVideo   func([]byte)
 }
 
 func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
@@ -81,7 +80,7 @@ func (m *CallManager) emitState() {
 	}
 }
 
-func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid types.JID, isVideo bool) error {
+func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid types.JID) error {
 	m.mu.Lock()
 	if m.currentCall != nil && !m.currentCall.IsEnded() {
 		m.mu.Unlock()
@@ -89,9 +88,6 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	}
 
 	mediaType := core.CallMediaTypeAudio
-	if isVideo {
-		mediaType = core.CallMediaTypeVideo
-	}
 	creator := m.sock.OwnLID()
 	if creator.IsEmpty() {
 		creator = m.sock.OwnPN()
@@ -111,7 +107,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
-	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved, isVideo)
+	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
 	if err != nil {
 		return err
 	}
@@ -149,12 +145,11 @@ func (m *CallManager) AcceptCall(ctx context.Context, callID string) error {
 	key := call.EncryptionKey
 	peer := wanode.MustJID(call.PeerJid)
 	creator := wanode.MustJID(call.CallCreator)
-	isVideo := call.MediaType == core.CallMediaTypeVideo
 	relayData := call.RelayData
 	m.mu.Unlock()
 
 	if key != nil {
-		acceptNode, err := signaling.BuildAcceptStanza(ctx, m.sock, callID, key, peer, creator, isVideo)
+		acceptNode, err := signaling.BuildAcceptStanza(ctx, m.sock, callID, key, peer, creator)
 		if err != nil {
 			m.log.Error("build accept failed", "err", err)
 		} else if err := m.sock.SendNode(ctx, acceptNode); err != nil {

@@ -76,10 +76,10 @@ func (c *Client) Drain() []*CallManager {
 	return out
 }
 
-func (c *Client) StartCall(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
+func (c *Client) StartCall(ctx context.Context, peer types.JID) (string, error) {
 	callID := signaling.GenerateCallID()
 	cm := c.createCall(callID)
-	if err := cm.StartCall(ctx, callID, peer, isVideo); err != nil {
+	if err := cm.StartCall(ctx, callID, peer); err != nil {
 		c.Remove(callID)
 		return "", err
 	}

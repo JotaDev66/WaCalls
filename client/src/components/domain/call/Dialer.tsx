@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Disc3, Phone, Video } from "lucide-react";
+import { Disc3, Phone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,12 @@ import { useDevices } from "@/stores/devices";
 export const Dialer = ({ sid }: { sid: string }) => {
   const [phone, setPhone] = useState("");
   const [record, setRecord] = useState(false);
-  const [video, setVideo] = useState(false);
   const micId = useDevices((s) => s.micId);
   const startCall = useStartCall(sid, micId);
 
   const submit = () => {
     if (!phone.trim() || startCall.isPending) return;
-    startCall.mutate({ phone: phone.trim(), record, video }, { onSuccess: () => setPhone("") });
+    startCall.mutate({ phone: phone.trim(), record }, { onSuccess: () => setPhone("") });
   };
 
   return (
@@ -46,16 +45,6 @@ export const Dialer = ({ sid }: { sid: string }) => {
           >
             <Disc3 className="h-4 w-4" />
             Record
-          </Button>
-          <Button
-            type="button"
-            variant={video ? "default" : "outline"}
-            size="sm"
-            onClick={() => setVideo((v) => !v)}
-            aria-pressed={video}
-          >
-            <Video className="h-4 w-4" />
-            Video
           </Button>
           <Button onClick={submit} disabled={startCall.isPending || !phone.trim()}>
             <Phone className="h-4 w-4" />

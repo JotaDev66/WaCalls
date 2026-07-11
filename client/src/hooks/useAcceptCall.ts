@@ -6,10 +6,10 @@ import { registerOwnConnection, clearIncoming } from "@/stores/calls";
 
 export const useAcceptCall = (micId: string | null) =>
   useMutation({
-    mutationFn: async (vars: { sid: string; callId: string; video: boolean }) => {
+    mutationFn: async (vars: { sid: string; callId: string }) => {
       const res = await acceptCall(vars.sid, vars.callId);
       try {
-        const conn = await openCall(vars.sid, res.call.callId, micId, { video: vars.video });
+        const conn = await openCall(vars.sid, res.call.callId, micId);
         registerOwnConnection(res.call.callId, conn);
       } catch (wrtcErr) {
         try {

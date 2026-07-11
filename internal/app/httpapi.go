@@ -184,7 +184,6 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		Phone      string `json:"phone"`
 		DurationMs int    `json:"duration_ms"`
 		Record     bool   `json:"record"`
-		Video      bool   `json:"video"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Phone) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "phone required"})
@@ -201,7 +200,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 	}
 	peer := types.NewJID(normalizePhone(body.Phone), types.DefaultUserServer)
 
-	callID, err := sess.startOutgoing(r.Context(), peer, body.Video)
+	callID, err := sess.startOutgoing(r.Context(), peer)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -235,9 +234,6 @@ func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 
 	bridge.OnBrowserPCM = func(pcm []float32) {
 		cm.FeedCapturedPCM(pcm)
-	}
-	bridge.OnBrowserVideo = func(au []byte) {
-		cm.FeedCapturedVideo(au)
 	}
 	bridge.OnTerminalICE = func() {
 		go sess.terminateCall(callID, core.EndCallReasonUserEnded)

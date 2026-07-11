@@ -74,7 +74,7 @@ export const IncomingCallModal = () => {
           <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
             <PhoneIncoming className="h-7 w-7" />
           </div>
-          <DialogTitle>{incoming?.video ? "Incoming video call" : "Incoming call"}</DialogTitle>
+          <DialogTitle>Incoming call</DialogTitle>
           <DialogDescription className="truncate">{incoming?.peer}</DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex items-center justify-center gap-6">
@@ -92,7 +92,7 @@ export const IncomingCallModal = () => {
             size="icon"
             className="h-14 w-14 rounded-full"
             disabled={busy}
-            onClick={() => incoming && accept.mutate({ sid: incoming.sessionId, callId: incoming.callId, video: !!incoming.video })}
+            onClick={() => incoming && accept.mutate({ sid: incoming.sessionId, callId: incoming.callId })}
             aria-label="Accept"
           >
             <Phone className="h-6 w-6" />

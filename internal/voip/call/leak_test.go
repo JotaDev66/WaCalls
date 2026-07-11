@@ -87,12 +87,17 @@ func TestCallLifecycleNoLeak(t *testing.T) {
 	}
 
 	memBeforeSend := obs.memNow()
-	frame := make([]float32, codec.FrameSize())
-	enc, err := codec.Encode(frame)
+	encCodec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
+	if err != nil {
+		t.Fatalf("enc codec: %v", err)
+	}
+	frameSize := encCodec.FrameSize()
+	enc, err := encCodec.Encode(make([]float32, frameSize))
+	encCodec.Close()
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if err := cm.sendAudioFrame(enc, codec.FrameSize()); err != nil {
+	if err := cm.sendAudioFrame(enc, frameSize); err != nil {
 		t.Fatalf("sendAudioFrame: %v", err)
 	}
 	if obs.memNow() <= memBeforeSend {

@@ -46,7 +46,7 @@ export const ensureCallsWired = (): void => {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.history });
     } else if (ev.type === "incoming") {
-      useCalls.setState({ incoming: { sessionId: ev.sessionId, callId: ev.id, peer: ev.peer, video: ev.video, offeredAt: ev.offeredAt } });
+      useCalls.setState({ incoming: { sessionId: ev.sessionId, callId: ev.id, peer: ev.peer, offeredAt: ev.offeredAt } });
     } else if (ev.type === "incoming-claimed") {
       useCalls.setState((s) => (s.incoming?.callId === ev.id ? { incoming: null } : s));
     }

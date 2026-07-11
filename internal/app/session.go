@@ -13,7 +13,6 @@ import (
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
-	"wacalls/internal/voip/extension/video"
 	"wacalls/internal/wa"
 
 	"github.com/mdp/qrterminal/v3"
@@ -60,7 +59,6 @@ func (s *Session) makeExtensions() []engine.Extension {
 	} else {
 		s.log.Warn("MLow codec unavailable; call runs without audio", "err", err)
 	}
-	exts = append(exts, video.New())
 	return exts
 }
 
@@ -70,8 +68,8 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
 			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid, c.MediaType == core.CallMediaTypeVideo)
-		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound", Video: c.MediaType == core.CallMediaTypeVideo})
+		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid)
+		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound"})
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
@@ -86,7 +84,7 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		}
 		existing, _ := s.mgr.broker.getCall(c.CallID)
 		if existing == nil {
-			s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: dir, Video: c.MediaType == core.CallMediaTypeVideo})
+			s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: dir})
 		}
 		if mapStatus(c.StateData.State) == StatusConnected && c.StateData.ConnectedAt != nil {
 			s.mgr.tracer.MarkActive(c.CallID, c.StateData.ConnectedAt.Sub(c.CreatedAt))
@@ -111,15 +109,10 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			_ = b.WritePCM(pcm16)
 		}
 	}
-	cm.OnPeerVideo = func(au []byte) {
-		if b := s.getBridge(callID); b != nil {
-			_ = b.WriteVideo(au)
-		}
-	}
 }
 
-func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
-	return s.calls.StartCall(ctx, peer, isVideo)
+func (s *Session) startOutgoing(ctx context.Context, peer types.JID) (string, error) {
+	return s.calls.StartCall(ctx, peer)
 }
 
 func (s *Session) callFor(callID string) (*call.CallManager, bool) {

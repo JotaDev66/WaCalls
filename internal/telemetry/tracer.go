@@ -13,7 +13,6 @@ type CallAttrs struct {
 	Session   string
 	Peer      string
 	Direction string
-	Video     bool
 }
 
 type CallTracer interface {
@@ -48,7 +47,6 @@ func (t *otelTracer) StartCall(callID string, a CallAttrs) {
 		attribute.String("session", a.Session),
 		attribute.String("peer", a.Peer),
 		attribute.String("direction", a.Direction),
-		attribute.Bool("video", a.Video),
 	))
 	t.mu.Lock()
 	if _, exists := t.spans[callID]; exists {
