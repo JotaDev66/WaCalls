@@ -2,12 +2,13 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
+    tags-ignore: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -20,10 +21,10 @@ jobs:
     env:
       CGO_ENABLED: "0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -53,6 +54,24 @@ jobs:
           CGO_ENABLED: "0"
         run: go test -count=1 ./...
 
+  race:
+    name: race
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      CGO_ENABLED: "1"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Race test
+        run: go test -race -count=1 ./internal/voip/...
+
   client:
     name: client
     runs-on: ubuntu-latest
@@ -60,10 +79,10 @@ jobs:
       run:
         working-directory: client
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
