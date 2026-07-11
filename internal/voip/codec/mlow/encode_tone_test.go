@@ -29,9 +29,9 @@ func TestEncodeRoundTripsATone(t *testing.T) {
 	enc := NewMlowEncoder()
 	dec := NewMlowDecoder()
 	var best float64
-	for f := 0; f < 8; f++ {
+	for f := range 8 {
 		pcm := make([]float32, 960)
-		for i := 0; i < 960; i++ {
+		for i := range 960 {
 			tt := float64(f*960+i) / 16000.0
 			pcm[i] = float32(0.5 * math.Sin(2.0*math.Pi*550.0*tt))
 		}

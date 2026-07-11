@@ -40,11 +40,8 @@ func DecodeSmplPitch(dec *RangeDecoder, mem *SmplMem, st *SmplLsfState, p2, p3, 
 	// reads the Group-D heap window via mem). Both selects key on p6 (active WB path
 	// is p6==0 HR; the p6!=0 LR variant); the filter CDFs are shared across p6.
 	var gainAccum int32
-	take := int(p3)
-	if take > 4 {
-		take = 4
-	}
-	for sf := 0; sf < take; sf++ {
+	take := min(int(p3), 4)
+	for sf := range take {
 		cnt := subfrCounts[sf]
 		var gi int32
 		if p6 != 0 {
@@ -87,10 +84,7 @@ func DecodeSmplPitch(dec *RangeDecoder, mem *SmplMem, st *SmplLsfState, p2, p3, 
 	// primary lag:
 	var lag int32
 	if st.PrevLag < 0 {
-		cnt := numContours + 1
-		if cnt < 0 {
-			cnt = 0
-		}
+		cnt := max(numContours+1, 0)
 		lag = dec.DecodeCDF(mem.CDFAt(lagCdf, int(cnt)))
 	} else {
 		di := dec.DecodeCDF(mem.CDFAt(deltaCdf+uint32(st.PrevLag)*20, 10))
@@ -108,7 +102,7 @@ func DecodeSmplPitch(dec *RangeDecoder, mem *SmplMem, st *SmplLsfState, p2, p3, 
 	// contour-map search: find index where contour_map[i] == lag+1.
 	target := lag + 1
 	contour := int32(-1)
-	for i := int32(0); i < 217; i++ {
+	for i := range int32(217) {
 		if int32(mem.U8(contourMap+uint32(i))) == target {
 			contour = i
 			break
@@ -139,7 +133,7 @@ func DecodeSmplPitch(dec *RangeDecoder, mem *SmplMem, st *SmplLsfState, p2, p3, 
 		st.PrevFracLag = curLag2
 		st.PrevLag = baseLag
 		segLen0 := mem.I32(ctrBase + 0x1d58)
-		for i := int32(0); i < segLen0; i++ {
+		for range segLen0 {
 			if subfrW < 4 {
 				res.IntLagQ6[subfrW] = curLag2
 			}
@@ -184,7 +178,7 @@ func DecodeSmplPitch(dec *RangeDecoder, mem *SmplMem, st *SmplLsfState, p2, p3, 
 			res.SampleLagQ6[seg] = l3
 		}
 		segLen := mem.I32(ctrBase + 0x1d58 + uint32(seg)*4)
-		for i := int32(0); i < segLen; i++ {
+		for range segLen {
 			if subfrW < 4 {
 				res.IntLagQ6[subfrW] = l3
 			}
@@ -306,7 +300,7 @@ func encodeLagsWire(tab *PitchTables, enc *RangeEncoder, blocksegsIx int, lagind
 	deltaBlk := blk - prevLagblk
 	startSeg := 0
 	lagindsIx := 0
-	if !(prevLagblk > -1 && deltaBlk >= -1 && deltaBlk <= 2) {
+	if prevLagblk <= -1 || deltaBlk < -1 || deltaBlk > 2 {
 		idxMod := uint32(laginds[lagindsIx] - blk*blocksize)
 		enc.Encode(idxMod, idxMod+1, uint32(blocksize))
 		prevLagblk = blk

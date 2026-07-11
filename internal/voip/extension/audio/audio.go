@@ -118,7 +118,7 @@ func (a *Audio) startSendLoopLocked() {
 			codec := a.codec
 			a.mu.Unlock()
 			if enc, err := codec.Encode(frame); err == nil {
-				scope.SendAudioFrame(enc, codec.FrameSize())
+				_ = scope.SendAudioFrame(enc, codec.FrameSize())
 			}
 		}
 	}()

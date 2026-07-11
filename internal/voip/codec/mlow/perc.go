@@ -83,25 +83,25 @@ var smplRateControlThrsComp5 = [4][2]uint16{{7500, 10000}, {4500, 5750}, {4000, 
 // --- leaf vector helpers (smpl_codec_util.c) -------------------------------
 
 func percMulVec(input, win, out []float32, l int) {
-	for i := 0; i < l; i++ {
+	for i := range l {
 		out[i] = win[i] * input[i]
 	}
 }
 
 func percScaleVec(x, y []float32, l int, g float32) {
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] = x[i] * g
 	}
 }
 
 func percAddScaleVec(x0, x1, y []float32, l int, g float32) {
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] = x0[i] + g*x1[i]
 	}
 }
 
 func percAddScaleVecInplace(x, y []float32, l int, g float32) {
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] += g * x[i]
 	}
 }
@@ -126,10 +126,10 @@ func percAc2rcDbl(corr []float64, order int, reg float64, rc []float32) {
 	copy(c0, corr[:order+1])
 	c0[0] *= 1.0 + reg
 	copy(c1, c0)
-	for i := 0; i < order; i++ {
+	for i := range order {
 		rc[i] = 0.0
 	}
-	for k := 0; k < order; k++ {
+	for k := range order {
 		if c0[k+1] > c1[0] {
 			rc[k] = -1.0
 			break
@@ -167,7 +167,7 @@ func percRc2a(rc []float32, order int, a []float32) {
 		a[v] = 0.0
 	}
 	a[0] = 1.0
-	for k := 0; k < order; k++ {
+	for k := range order {
 		rcTmp := rc[k]
 		for n := 0; n < (k+1)/2; n++ {
 			tmp1 := a[n+1]
@@ -195,7 +195,7 @@ func rfftBackwardOrdered(f []float32, time []float32) {
 	}
 	tout := make([]cpx, n)
 	cfft(spec, tout, 1.0)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		time[i] = tout[i].re
 	}
 }
@@ -275,7 +275,7 @@ type PercModelState struct {
 func NewPercModelState() *PercModelState {
 	fsStep := (percwFsKhz * 1000.0) / float32(percwNfft)
 	smthcoef := make([]float32, percwNfft/2+1)
-	for i := 0; i < percwNfft/2+1; i++ {
+	for i := range percwNfft/2 + 1 {
 		percWidthPerBin := percMaskSmth * (fsStep*float32(i) + percMelFcHz) / fsStep
 		smthcoef[i] = percWidthPerBin / (percWidthPerBin + 1.0)
 	}
@@ -367,7 +367,6 @@ type BitrateController struct {
 	prevVoiced           int32
 	rateContWnrgSmth     float32
 	rateContBitrateScale [smplCelpMaxRates]float32
-	bitrateDeltaSmth     [smplCelpMaxRates]float32
 	rateContBitrate      [smplCelpMaxRates]float32
 	adjustmentFactor     [smplCelpMaxRates]float32
 }

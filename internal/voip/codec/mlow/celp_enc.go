@@ -23,7 +23,7 @@ const (
 	celpMaxpitchLen      = 320
 
 	celpGAcbRdMu float32 = 0.014999999664723873
-	fcbgVDeltaN          = 67
+	fcbgVDeltaN  int     = 67
 
 	vGainMinDb   float32 = -100.0
 	vGainMaxDb   float32 = 0.0
@@ -98,7 +98,7 @@ var celpFcbgVDeltaDcmf = [fcbgVDeltaN]uint8{
 func celpDotProd(a, b []float32, l int) float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L202-L208
 	var r float32
-	for i := 0; i < l; i++ {
+	for i := range l {
 		r += a[i] * b[i]
 	}
 	return r
@@ -107,7 +107,7 @@ func celpDotProd(a, b []float32, l int) float32 {
 func celpNrg(x []float32, n int) float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L211-L217
 	var s float32
-	for k := 0; k < n; k++ {
+	for k := range n {
 		s += x[k] * x[k]
 	}
 	return s
@@ -122,56 +122,56 @@ func celpReverse(x []float32, l int) {
 
 func celpSubVec(y, z, x []float32, l int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L243-L247
-	for i := 0; i < l; i++ {
+	for i := range l {
 		x[i] = y[i] - z[i]
 	}
 }
 
 func celpAddVecInplace(y, x []float32, l int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L251-L255
-	for i := 0; i < l; i++ {
+	for i := range l {
 		x[i] += y[i]
 	}
 }
 
 func celpScaleVecInplace(x []float32, l int, g float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L266-L270
-	for i := 0; i < l; i++ {
+	for i := range l {
 		x[i] *= g
 	}
 }
 
 func celpScaleVec(x, y []float32, l int, g float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L273-L277
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] = x[i] * g
 	}
 }
 
 func celpAddScaleVecInplace(x, y []float32, l int, g float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L281-L285
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] += g * x[i]
 	}
 }
 
 func celpAddScaleVec(x0, x1, y []float32, l int, g float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L289-L293
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] = x0[i] + g*x1[i]
 	}
 }
 
 func celpMulVecInplace(x, y []float32, l int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L296-L300
-	for i := 0; i < l; i++ {
+	for i := range l {
 		y[i] *= x[i]
 	}
 }
 
 func celpQ(num, den []float32, l int, q []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L303-L307
-	for i := 0; i < l; i++ {
+	for i := range l {
 		q[i] = (num[i] * num[i]) / den[i]
 	}
 }
@@ -202,9 +202,9 @@ func celpMultSymtoepl2(c []float32, lResp int, x, y []float32, n int) {
 // celpFiltAr16: 16th-order AR filter; the 16-sample state sits in y[yBase-16 .. yBase].
 func celpFiltAr16(x []float32, n int, coef []float32, yBase int, y []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L338-L347
-	for nn := 0; nn < n; nn++ {
+	for nn := range n {
 		res := x[nn]
-		for i := 0; i < 16; i++ {
+		for i := range 16 {
 			res -= coef[16-i] * y[yBase+nn-16+i]
 		}
 		y[yBase+nn] = res
@@ -216,18 +216,18 @@ func celpFiltMa(x []float32, xBase, n int, coef []float32, coefLen int, y []floa
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L350-L370
 	var i int
 	if coef[0] == 1.0 {
-		for k := 0; k < n; k++ {
+		for k := range n {
 			y[k] = x[xBase+k] + coef[1]*x[xBase+k-1]
 		}
 		i = 2
 	} else {
-		for k := 0; k < n; k++ {
+		for k := range n {
 			y[k] = coef[0] * x[xBase+k]
 		}
 		i = 1
 	}
 	for i < coefLen {
-		for k := 0; k < n; k++ {
+		for k := range n {
 			y[k] += coef[i] * x[xBase+k-i]
 		}
 		i++
@@ -237,9 +237,9 @@ func celpFiltMa(x []float32, xBase, n int, coef []float32, coefLen int, y []floa
 // celpFiltMa9: 9th-order MA; the 9-sample history sits before x[xBase].
 func celpFiltMa9(x []float32, xBase, n int, coef []float32, _ int, y []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L373-L388
-	for nn := 0; nn < n; nn++ {
+	for nn := range n {
 		var res float32
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			res += coef[i] * x[xBase+nn-i]
 		}
 		y[nn] = res
@@ -250,7 +250,7 @@ func celpFiltMa9(x []float32, xBase, n int, coef []float32, _ int, y []float32) 
 func celpDcmfToCmf(dcmf []uint8, dcmfLen int, cmf []uint16) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L403-L419
 	var sum int32
-	for n := 0; n < dcmfLen; n++ {
+	for n := range dcmfLen {
 		tmp := int32(dcmf[n]) + 1
 		tmp *= tmp
 		if tmp > 65535 {
@@ -288,11 +288,11 @@ func celpGetMaxi(x []float32, xLen int) int {
 func celpGetMaxiK(x []float32, idx []int32, xLen, k int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L445-L462
 	taken := make([]bool, xLen)
-	for kk := 0; kk < k; kk++ {
+	for kk := range k {
 		var best float32 = -math.MaxFloat32
 		bi := 0
 		found := false
-		for n := 0; n < xLen; n++ {
+		for n := range xLen {
 			if !taken[n] && (!found || x[n] > best) {
 				best = x[n]
 				bi = n
@@ -331,14 +331,14 @@ func buildCelpTables() *celpTables {
 	t := &celpTables{}
 	acbCmfLR := make([]uint16, (acbgN+1)*(acbgN+1))
 	acbCmfHR := make([]uint16, (acbgN+1)*(acbgN+1))
-	for i := 0; i < acbgN+1; i++ {
+	for i := range acbgN + 1 {
 		celpDcmfToCmf(celpAcbgainsDcmfLR[i*acbgN:], acbgN, acbCmfLR[i*(acbgN+1):])
 		celpDcmfToCmf(celpAcbgainsDcmfHR[i*acbgN:], acbgN, acbCmfHR[i*(acbgN+1):])
 	}
-	for i := 0; i < acbgN+1; i++ {
+	for i := range acbgN + 1 {
 		celpCmfToBits(acbCmfLR[i*(acbgN+1):], acbgN+1, t.acbgInvProbLR[i*acbgN:])
 		celpCmfToBits(acbCmfHR[i*(acbgN+1):], acbgN+1, t.acbgInvProbHR[i*acbgN:])
-		for j := 0; j < acbgN; j++ {
+		for j := range acbgN {
 			t.acbgInvProbLR[i*acbgN+j] = float32(math.Pow(2.0, float64(t.acbgInvProbLR[i*acbgN+j]*celpGAcbRdMu)))
 			t.acbgInvProbHR[i*acbgN+j] = float32(math.Pow(2.0, float64(t.acbgInvProbHR[i*acbgN+j]*celpGAcbRdMu)))
 		}
@@ -348,14 +348,14 @@ func buildCelpTables() *celpTables {
 	celpDcmfToCmf(celpFcbgVDcmf[:], fcbgVN, fcbgVCmf)
 	celpDcmfToCmf(celpFcbgVDeltaDcmf[:], fcbgVDeltaN, fcbgVDeltaCmf)
 	celpCmfToBits(fcbgVCmf, fcbgVN+1, t.fcbgVInvProb[:])
-	for i := 0; i < fcbgVN; i++ {
+	for i := range fcbgVN {
 		t.fcbgVInvProb[i] = float32(math.Pow(2.0, float64(t.fcbgVInvProb[i]*celpGAcbRdMu)))
 	}
 	celpCmfToBits(fcbgVDeltaCmf, fcbgVDeltaN+1, t.fcbgVDeltaInvProb[:])
-	for i := 0; i < fcbgVDeltaN; i++ {
+	for i := range fcbgVDeltaN {
 		t.fcbgVDeltaInvProb[i] = float32(math.Pow(2.0, float64(t.fcbgVDeltaInvProb[i]*celpGAcbRdMu)))
 	}
-	for ix := 0; ix < fcbgVN; ix++ {
+	for ix := range fcbgVN {
 		db := float32(ix)*vGainStepDb + vGainMinDb
 		t.fcbgainsV[ix] = float32(math.Pow(10.0, float64(0.05*db)))
 	}
@@ -375,7 +375,7 @@ func celpAcbDequant(lowRate bool, acbIdx int32, acbG *[acbgM]float32) {
 		cb = &cbAcbgainsLRQ14
 	}
 	scQ14 := 1.0 / float32(int32(1)<<14)
-	for m := 0; m < acbgM; m++ {
+	for m := range acbgM {
 		acbG[m] = float32(cb[int(acbIdx)*acbgM+m]) * scQ14
 	}
 }
@@ -397,17 +397,17 @@ func celpPitchSharp(x []float32, lag, l int) {
 func celpSynLtpBasis(lags []float32, nLags int, state []float32, stateLen int, acbBasis []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L607-L678
 	p := stateLen - nLags*celpLagSubfrlen
-	for subfr := 0; subfr < nLags; subfr++ {
+	for subfr := range nLags {
 		iLag := int32(math.Floor(float64(lags[subfr])))
 		if float32(iLag) == lags[subfr] {
 			il := int(iLag)
-			for i := 0; i < celpLagSubfrlen; i++ {
+			for i := range celpLagSubfrlen {
 				state[p+i] = state[(p+i)-il]
 			}
-			for i := 0; i < celpLagSubfrlen; i++ {
+			for i := range celpLagSubfrlen {
 				acbBasis[subfr*celpLagSubfrlen+i] = state[p+i]
 			}
-			for i := 0; i < celpLagSubfrlen; i++ {
+			for i := range celpLagSubfrlen {
 				a := state[(p+i)-il-1]
 				b := state[(p+i)-il+1]
 				acbBasis[(nLags+subfr)*celpLagSubfrlen+i] = a + b
@@ -417,9 +417,9 @@ func celpSynLtpBasis(lags []float32, nLags int, state []float32, stateLen int, a
 			baseFirst := p + (-1 - il - celpLtpInterpolDelay)
 			first := celpDotProd(state[baseFirst:], celpInterpolKernel[:], 2*celpLtpInterpolDelay)
 			srcBase := p + (-il - celpLtpInterpolDelay)
-			for nn := 0; nn < celpLagSubfrlen; nn++ {
+			for nn := range celpLagSubfrlen {
 				var ret float32
-				for i := 0; i < 8; i++ {
+				for i := range 8 {
 					s0 := state[srcBase+nn+i]
 					s1 := state[srcBase+nn+15-i]
 					ret += (s0 + s1) * celpInterpolKernel[i]
@@ -428,12 +428,12 @@ func celpSynLtpBasis(lags []float32, nLags int, state []float32, stateLen int, a
 			}
 			baseLast := p + (celpLagSubfrlen - 1 - il - celpLtpInterpolDelay)
 			last := celpDotProd(state[baseLast:], celpInterpolKernel[:], 2*celpLtpInterpolDelay)
-			for i := 0; i < celpLagSubfrlen; i++ {
+			for i := range celpLagSubfrlen {
 				acbBasis[subfr*celpLagSubfrlen+i] = state[p+i]
 			}
 			b1 := (nLags + subfr) * celpLagSubfrlen
 			acbBasis[b1] = first + state[p+1]
-			for i := 0; i < celpLagSubfrlen-2; i++ {
+			for i := range celpLagSubfrlen - 2 {
 				acbBasis[b1+1+i] = state[p+i] + state[p+i+2]
 			}
 			iLast := celpLagSubfrlen - 1
@@ -447,7 +447,7 @@ func celpSynLtpBasis(lags []float32, nLags int, state []float32, stateLen int, a
 
 func celpCalcDAbsAndSign(d []float32, l int, dAbs, dSign []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L726-L736
-	for i := 0; i < l; i++ {
+	for i := range l {
 		if d[i] > 0.0 {
 			dAbs[i] = d[i]
 			dSign[i] = 1.0
@@ -472,14 +472,8 @@ func celpPhiColOffset(col int32) int32 { return int32(smplMaxSfLen) - col }
 
 func celpNonZeroRange(col int32, percRespLen, fcbSubfrlen int) (int, int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L756-L760
-	lo := col - int32(percRespLen) + 1
-	if lo < 0 {
-		lo = 0
-	}
-	hi := col + int32(percRespLen)
-	if hi > int32(fcbSubfrlen) {
-		hi = int32(fcbSubfrlen)
-	}
+	lo := max(col-int32(percRespLen)+1, 0)
+	hi := min(col+int32(percRespLen), int32(fcbSubfrlen))
 	return int(lo), int(hi)
 }
 
@@ -572,7 +566,7 @@ func NewCelpEncoder(lowRate bool, percRespLen, fcbSubfrlen, subfrPerPacket int) 
 
 	hanningWin := make([]float32, percRespLen)
 	scale := 1.0 / float32(2*smplPercRespLen+1)
-	for i := 0; i < percRespLen; i++ {
+	for i := range percRespLen {
 		hanningWin[i] = float32(math.Sin(float64(smplPI * float32(percRespLen+i+1) * scale)))
 	}
 
@@ -622,7 +616,7 @@ func (e *CelpEncoder) smplFcbSearch(d []float32, wnrgPerPulse *[smplCelpMaxRates
 	phi0 := e.phi[0]
 	celpCalcDAbsAndSign(d, fcbSubfrlen, dAbs, dSign)
 
-	for i := 0; i < fcbSubfrlen; i++ {
+	for i := range fcbSubfrlen {
 		den[i] = phi0 + 1e-16
 	}
 	copy(num[:fcbSubfrlen], dAbs[:fcbSubfrlen])
@@ -650,7 +644,7 @@ func (e *CelpEncoder) smplFcbSearch(d []float32, wnrgPerPulse *[smplCelpMaxRates
 	for pulseNr := 1; pulseNr < int(fcbPulsesMax[smplCelpIdxMain]); pulseNr++ {
 		position := positions[pulseNr-1]
 		sgn := dSign[position]
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			num[i] += dAbs[position]
 		}
 		nz0, nz1 := celpNonZeroRange(position, percRespLen, fcbSubfrlen)
@@ -662,7 +656,7 @@ func (e *CelpEncoder) smplFcbSearch(d []float32, wnrgPerPulse *[smplCelpMaxRates
 		}
 		dDen *= 2.0 * sgn
 		dDen += e.phiFlip[int(colOff+position)]
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			den[i] += dDen
 		}
 		for i := nz0; i < nz1; i++ {
@@ -766,10 +760,10 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 	wi := sc.writeIdx
 
 	add := dAbs[fcbPosNew]
-	for i := 0; i < fcbSubfrlen; i++ {
+	for i := range fcbSubfrlen {
 		sc.fcbStates[wi][idx].num[i] = sc.fcbStates[ri][fcbStateIdx].num[i] + add
 	}
-	for i := 0; i < fcbSubfrlen; i++ {
+	for i := range fcbSubfrlen {
 		sc.fcbStates[wi][idx].den[i] = sc.fcbStates[ri][fcbStateIdx].den[i]
 	}
 
@@ -784,7 +778,7 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 		}
 		dDen *= 2.0 * fcbSignNew
 		dDen += e.phiFlip[int(colOff+fcbPosNew)]
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			sc.fcbStates[wi][idx].den[i] += dDen
 		}
 		for i := nz0; i < nz1; i++ {
@@ -818,7 +812,7 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 			}
 			g1 *= pitchSharp
 		}
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			sc.fcbStates[wi][idx].den[i] += dDen
 		}
 		ddDen := make([]float32, smplMaxSfLen)
@@ -828,14 +822,8 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 			colOff := celpPhiColOffset(pos)
 			g2 := g1
 			for k := int32(0); k < int32(fcbSubfrlen); k += lag {
-				startI := int32(nz0) - k
-				if startI < 0 {
-					startI = 0
-				}
-				endI := int32(fcbSubfrlen) - k
-				if int32(nz1)-k < endI {
-					endI = int32(nz1) - k
-				}
+				startI := max(int32(nz0)-k, 0)
+				endI := min(int32(nz1)-k, int32(fcbSubfrlen)-k)
 				for i := startI; i < endI; i++ {
 					ddDen[i] += g2 * e.phiFlip[int(colOff+i+k)]
 				}
@@ -843,7 +831,7 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 			}
 			g1 *= pitchSharp
 		}
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			sc.fcbStates[wi][idx].den[i] += 2.0 * fcbSignNew * dSign[i] * ddDen[i]
 		}
 	}
@@ -860,7 +848,7 @@ func (e *CelpEncoder) addPulse(sc *fcbSearchScratch, fcbIdxIn int, dAbs, dSign [
 	celpQ(sc.fcbStates[wi][idx].num, sc.fcbStates[wi][idx].den, fcbSubfrlen, q)
 	var sortIx [celpMaxNumsurv]int32
 	celpGetMaxiK(q, sortIx[:], fcbSubfrlen, numsurv)
-	for i := 0; i < numsurv; i++ {
+	for i := range numsurv {
 		pos := int(sortIx[i])
 		sgntr := fcbSgntrBase + e.sgntrs[pos]
 		if sc.isUnique(sgntr) {
@@ -885,7 +873,7 @@ func (e *CelpEncoder) smplFcbSearchDeldec(d []float32, pitchSharp float32, lag i
 
 	if pitchSharp != 0.0 && lag > 0 && lag < int32(fcbSubfrlen) {
 		copy(dNew[:fcbSubfrlen], d[:fcbSubfrlen])
-		for j := 0; j < fcbSubfrlen; j++ {
+		for j := range fcbSubfrlen {
 			g := pitchSharp
 			for i := lag + int32(j); i < int32(fcbSubfrlen); i += lag {
 				dNew[j] += g * d[i]
@@ -908,7 +896,7 @@ func (e *CelpEncoder) smplFcbSearchDeldec(d []float32, pitchSharp float32, lag i
 		wi := sc.writeIdx
 		copy(sc.fcbStates[wi][0].num[:fcbSubfrlen], dAbs[:fcbSubfrlen])
 		if pitchSharp == 0.0 {
-			for i := 0; i < fcbSubfrlen; i++ {
+			for i := range fcbSubfrlen {
 				sc.fcbStates[wi][0].den[i] = phi0 + 1e-16
 			}
 		} else {
@@ -925,11 +913,8 @@ func (e *CelpEncoder) smplFcbSearchDeldec(d []float32, pitchSharp float32, lag i
 					}
 					g1 *= pitchSharp
 				}
-				length := lag
-				if offset+1 < length {
-					length = offset + 1
-				}
-				for jj := int32(0); jj < length; jj++ {
+				length := min(offset+1, lag)
+				for jj := range length {
 					sc.fcbStates[wi][0].den[offset-jj] = res
 				}
 				offset -= length
@@ -975,12 +960,12 @@ func (e *CelpEncoder) smplFcbSearchDeldec(d []float32, pitchSharp float32, lag i
 			sc.fcbCandidatesSize = 0
 			sc.uniqueSgntrSize = 0
 			fcbsSize := sc.fcbsSize
-			for i := 0; i < fcbsSize; i++ {
+			for i := range fcbsSize {
 				e.addPulse(sc, i, dAbs, dSign, int(surv[pulseNr-1]), i, lag, pitchSharp)
 			}
 			sc.swapRw()
 			candSize := sc.fcbCandidatesSize
-			for i := 0; i < candSize; i++ {
+			for i := range candSize {
 				q[i] = sc.fcbCandidates[i].wnrg
 			}
 			celpGetMaxiK(q, sortIx[:], candSize, int(surv[pulseNr-1]))
@@ -997,7 +982,7 @@ func (e *CelpEncoder) smplFcbSearchDeldec(d []float32, pitchSharp float32, lag i
 		sc.fcbCandidatesSize = 0
 		sc.uniqueSgntrSize = 0
 		fcbsSize := sc.fcbsSize
-		for i := 0; i < fcbsSize; i++ {
+		for i := range fcbsSize {
 			e.addPulse(sc, i, dAbs, dSign, 1, i, lag, pitchSharp)
 		}
 		sc.swapRw()
@@ -1085,10 +1070,10 @@ func celpQuantGainUv(gainFromSearch float32) int16 {
 
 func celpFcbSynthesize(fcbSubfrlen int, pulses []int16, nPulses int, fcb []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L1558-L1568
-	for i := 0; i < fcbSubfrlen; i++ {
+	for i := range fcbSubfrlen {
 		fcb[i] = 0.0
 	}
-	for n := 0; n < nPulses; n++ {
+	for n := range nPulses {
 		sign := int32(1) + 2*(int32(pulses[n])>>15)
 		pos := int32(pulses[n])*sign - 1
 		fcb[pos] += float32(sign)
@@ -1098,12 +1083,12 @@ func celpFcbSynthesize(fcbSubfrlen int, pulses []int16, nPulses int, fcb []float
 func (e *CelpEncoder) calcAcbGain(lResp int, acbBasis, dLpc []float32, acbg *acbgParams, dLtp []float32) int32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_celp.rs#L1572-L1646
 	fcbSubfrlen := e.fcbSubfrlen
-	for m := 0; m < acbgM; m++ {
+	for m := range acbgM {
 		cOff := smplMaxSfLen - lResp + 1
 		tmp := make([]float32, fcbSubfrlen)
 		celpMultSymtoepl2(e.phiFlip[cOff:], lResp, acbBasis[m*fcbSubfrlen:], tmp, fcbSubfrlen)
 		copy(acbg.acbBasisPhi[m*fcbSubfrlen:m*fcbSubfrlen+fcbSubfrlen], tmp)
-		for i := 0; i < acbgM; i++ {
+		for i := range acbgM {
 			acbg.phiAcb[m*acbgM+i] = celpDotProd(acbBasis[i*fcbSubfrlen:], acbg.acbBasisPhi[m*fcbSubfrlen:], fcbSubfrlen)
 		}
 		acbg.dAcbLpc[m] = celpDotProd(acbBasis[m*fcbSubfrlen:], dLpc, fcbSubfrlen)
@@ -1123,8 +1108,8 @@ func (e *CelpEncoder) calcAcbGain(lResp int, acbBasis, dLpc []float32, acbg *acb
 	}
 	scQ14 := 1.0 / float32(int32(1)<<14)
 	var acbGains [acbgM]float32
-	for n := 0; n < acbgN; n++ {
-		for m := 0; m < acbgM; m++ {
+	for n := range acbgN {
+		for m := range acbgM {
 			acbGains[m] = float32(cb[n*acbgM+m]) * scQ14
 		}
 		werrOut := acbg.werrIn + celpWnrg2(acbg.phiAcb[:], acbGains[:]) -
@@ -1173,17 +1158,17 @@ func (e *CelpEncoder) calcGainsV(fcbWnrg, gainFromSearch float32, excFcb, dLpc [
 	bestFcbgIdx := int32(0)
 
 	var acbFcb [acbgM]float32
-	for i := 0; i < acbgM; i++ {
+	for i := range acbgM {
 		acbFcb[i] = celpDotProd(acbg.acbBasisPhi[i*fcbSubfrlen:], excFcb, fcbSubfrlen)
 	}
 	var phiAll [(acbgM + 1) * (acbgM + 1)]float32
 	stride := acbgM + 1
-	for i := 0; i < acbgM; i++ {
-		for j := 0; j < acbgM; j++ {
+	for i := range acbgM {
+		for j := range acbgM {
 			phiAll[i*stride+j] = acbg.phiAcb[i*acbgM+j]
 		}
 	}
-	for i := 0; i < acbgM; i++ {
+	for i := range acbgM {
 		phiAll[i*stride+acbgM] = acbFcb[i]
 		phiAll[acbgM*stride+i] = acbFcb[i]
 	}
@@ -1196,15 +1181,10 @@ func (e *CelpEncoder) calcGainsV(fcbWnrg, gainFromSearch float32, excFcb, dLpc [
 	var gainIdxs [nGainSteps]int32
 	var fcbgains [nGainSteps]float32
 	var fcbgInvProb [nGainSteps]float32
-	firstGainIdx := int32(math.Floor(float64((gainDb-vGainMinDb)/vGainStepDb))) - (nGainSteps-1)/2
-	if firstGainIdx < 0 {
-		firstGainIdx = 0
-	}
-	if firstGainIdx > maxGainIdx-1 {
-		firstGainIdx = maxGainIdx - 1
-	}
+	firstGainIdx := max(int32(math.Floor(float64((gainDb-vGainMinDb)/vGainStepDb)))-(nGainSteps-1)/2, 0)
+	firstGainIdx = min(firstGainIdx, maxGainIdx-1)
 	offset := int32(math.Floor(float64((vGainMinDb - vGainMaxDb) / vGainStepDb)))
-	for i := 0; i < nGainSteps; i++ {
+	for i := range nGainSteps {
 		gainIdxs[i] = firstGainIdx + int32(i)
 		fcbgains[i] = tbl.fcbgainsV[gainIdxs[i]]
 		if e.prevFcbIdx[rateIdx] == -1 {
@@ -1227,12 +1207,12 @@ func (e *CelpEncoder) calcGainsV(fcbWnrg, gainFromSearch float32, excFcb, dLpc [
 	}
 	invProb := e.acbgInvProb()[int(transitionIdx)*acbgN:]
 	scQ14 := 1.0 / float32(int32(1)<<14)
-	for n := 0; n < acbgN; n++ {
+	for n := range acbgN {
 		var gains [acbgM + 1]float32
-		for m := 0; m < acbgM; m++ {
+		for m := range acbgM {
 			gains[m] = float32(cb[n*acbgM+m]) * scQ14
 		}
-		for i := 0; i < nGainSteps; i++ {
+		for i := range nGainSteps {
 			gains[acbgM] = fcbgains[i]
 			werrOut := acbg.werrIn + celpWnrg3(phiAll[:], gains[:]) -
 				2.0*(dall[0]*gains[0]+dall[1]*gains[1]+dall[2]*gains[2])
@@ -1245,13 +1225,8 @@ func (e *CelpEncoder) calcGainsV(fcbWnrg, gainFromSearch float32, excFcb, dLpc [
 		}
 	}
 	acbIdx[rateIdx] = int16(bestAcbgIdx)
-	fcbIdx[rateIdx] = int16(bestFcbgIdx)
-	if fcbIdx[rateIdx] < 0 {
-		fcbIdx[rateIdx] = 0
-	}
-	if fcbIdx[rateIdx] > int16(maxGainIdx) {
-		fcbIdx[rateIdx] = int16(maxGainIdx)
-	}
+	fcbIdx[rateIdx] = max(int16(bestFcbgIdx), 0)
+	fcbIdx[rateIdx] = min(fcbIdx[rateIdx], int16(maxGainIdx))
 	return tbl.fcbgainsV[fcbIdx[rateIdx]]
 }
 
@@ -1269,7 +1244,7 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 	revBase := smplMaxLResp - 1
 	{
 		imp := e.impLpcBuf[SmplLPCOrder:]
-		for i := 0; i < lResp; i++ {
+		for i := range lResp {
 			impLpcRev[revBase+i] = imp[lResp-i-1]
 		}
 	}
@@ -1309,22 +1284,19 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 		htZir := make([]float32, 2*smplMaxLResp-1)
 		ht := smplMaxLResp - 1
 
-		stateLen := SmplLPCOrder
-		if lResp-1 > stateLen {
-			stateLen = lResp - 1
-		}
-		for i := 0; i < stateLen; i++ {
+		stateLen := max(lResp-1, SmplLPCOrder)
+		for i := range stateLen {
 			zirTmp[zt-stateLen+i] = e.stateWghtBuf[SmplLPCOrder+(fcbSubfrlen-stateLen)+i]
 		}
-		for nn := 0; nn < lResp; nn++ {
+		for nn := range lResp {
 			res := zirTmp[zt+nn]
-			for i := 0; i < 16; i++ {
+			for i := range 16 {
 				res -= predcoef[16-i] * zirTmp[zt+nn-16+i]
 			}
 			zirTmp[zt+nn] = res
 		}
 		e.percFiltMa(zirTmp, zt, lResp, percWghtResp, lResp, zirLpc)
-		for i := 0; i < lResp; i++ {
+		for i := range lResp {
 			zirTmp[zt+i] = zirLpc[lResp-i-1]
 		}
 		for i := 0; i < lResp-1; i++ {
@@ -1340,11 +1312,11 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 			acbg.werrIn = celpDotProd(dLpc, resLpc, fcbSubfrlen) +
 				2.0*celpDotProd(htZir[ht:], resLpc, lResp) + celpNrg(zirLpc, lResp)
 		}
-		for i := 0; i < lResp; i++ {
+		for i := range lResp {
 			dLpc[i] += htZir[ht+i]
 		}
 	} else {
-		for i := 0; i < lResp; i++ {
+		for i := range lResp {
 			zirLpc[i] = 0.0
 		}
 		if voiced {
@@ -1372,7 +1344,7 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 	wtgt := make([]float32, smplMaxSfLen+smplMaxLResp)
 	copy(wtgtTmp[wt:wt+fcbSubfrlen], resLpc[:fcbSubfrlen])
 	if voiced {
-		for i := 0; i < fcbSubfrlen; i++ {
+		for i := range fcbSubfrlen {
 			wtgtTmp[wt+i] += -rateAcbScale * acb[i]
 		}
 	}
@@ -1380,12 +1352,12 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 		imp := append([]float32(nil), e.impLpcBuf[SmplLPCOrder:SmplLPCOrder+lResp]...)
 		e.percFiltMa(wtgtTmp, wt, fcbSubfrlen+lResp, imp, lResp, wtgt)
 	}
-	for i := 0; i < lResp; i++ {
+	for i := range lResp {
 		wtgt[i] += zirLpc[i]
 	}
 	nrgWtgt := celpNrg(wtgt, fcbSubfrlen+lResp)
 	var wnrgPerPulse [smplCelpMaxRates]float32
-	for r := 0; r < smplCelpMaxRates; r++ {
+	for r := range smplCelpMaxRates {
 		wnrgPerPulse[r] = nrgWtgt / (subfrImportance[r] + 1.0e-3)
 	}
 	iLag := int32(lags[(fcbSubfrlen/celpLagSubfrlen)-1])
@@ -1418,7 +1390,7 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 	var fcbgain float32
 	excFcb := make([]float32, smplMaxSfLen)
 	tbl := getCelpTables()
-	for r := 0; r < smplCelpMaxRates; r++ {
+	for r := range smplCelpMaxRates {
 		excFcbRaw := make([]float32, smplMaxSfLen)
 		celpFcbSynthesize(fcbSubfrlen, pulses[r][:], int(nPulses[r]), excFcbRaw)
 		copy(excFcb[:fcbSubfrlen], excFcbRaw[:fcbSubfrlen])
@@ -1452,24 +1424,24 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 	if !e.ignoreZir {
 		lpcResErr := make([]float32, smplMaxSfLen)
 		celpSubVec(resLpc, excLpc, lpcResErr, fcbSubfrlen)
-		for i := 0; i < SmplLPCOrder; i++ {
+		for i := range SmplLPCOrder {
 			e.stateWghtBuf[i] = e.stateErrLpcSyn[i]
 		}
 		celpFiltAr16(lpcResErr, fcbSubfrlen, predcoef[:], SmplLPCOrder, e.stateWghtBuf)
-		for i := 0; i < SmplLPCOrder; i++ {
+		for i := range SmplLPCOrder {
 			e.stateErrLpcSyn[i] = e.stateWghtBuf[SmplLPCOrder+(fcbSubfrlen-SmplLPCOrder)+i]
 		}
 	}
 
 	e.subfrCnt++
 	if e.subfrCnt == e.subfrPerPacket {
-		for r := 0; r < smplCelpMaxRates; r++ {
+		for r := range smplCelpMaxRates {
 			e.prevAcbIdx[r] = -1
 			e.prevFcbIdx[r] = -1
 		}
 		e.subfrCnt = 0
 	} else {
-		for r := 0; r < smplCelpMaxRates; r++ {
+		for r := range smplCelpMaxRates {
 			if voiced {
 				e.prevAcbIdx[r] = int32(acbIdx[r])
 				e.prevFcbIdx[r] = int32(gainIdx[r])
@@ -1481,14 +1453,8 @@ func (e *CelpEncoder) EncodeSubframe(resLpc []float32, predcoef *[17]float32, pe
 	}
 	e.fcbgain = fcbgain
 
-	nFec := int(nPulses[smplCelpIdxFec])
-	if nFec < 0 {
-		nFec = 0
-	}
-	nMain := int(nPulses[smplCelpIdxMain])
-	if nMain < 0 {
-		nMain = 0
-	}
+	nFec := max(int(nPulses[smplCelpIdxFec]), 0)
+	nMain := max(int(nPulses[smplCelpIdxMain]), 0)
 	pulsesFec := append([]int16(nil), pulses[smplCelpIdxFec][:nFec]...)
 	pulsesMain := append([]int16(nil), pulses[smplCelpIdxMain][:nMain]...)
 
@@ -1513,10 +1479,7 @@ func smplDistributeFcbSurv(numsurv []int16, maxPulses, totSurv int32) {
 	}
 	sumSurv := maxPulses
 	extraSurv := totSurv - maxPulses
-	extra := extraSurv / (maxPulses - 1)
-	if extra > fcbSrvMax-1 {
-		extra = fcbSrvMax - 1
-	}
+	extra := min(extraSurv/(maxPulses-1), fcbSrvMax-1)
 	for i := 0; i < int(maxPulses-1); i++ {
 		numsurv[i] += int16(extra)
 	}

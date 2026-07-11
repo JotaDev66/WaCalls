@@ -31,17 +31,14 @@ func DecodeSmplGains(dec *RangeDecoder, _ *SmplMem, p3 int32, subfrCounts [4]int
 	// gain reconstruction: base7 = gain_main*nrg_step - 0x154000; cbv = gain_recon[sf + p3*delta].
 	off6 := p3 * gainDelta
 	base7 := gainMain*cc.NrgStep(cfgSel) - 0x154000
-	take := int(p3)
-	if take > 4 {
-		take = 4
-	}
-	for sf := 0; sf < take; sf++ {
+	take := min(int(p3), 4)
+	for sf := range take {
 		cbv := cc.GainRecon(p3 == 4, int32(sf)+off6)
 		res.GainQ[sf] = base7 + (cbv << 4)
 	}
 
 	// nrgres: per-subframe bucketed CDF (n=92) sliced by the gain-derived offset.
-	for sf := 0; sf < take; sf++ {
+	for sf := range take {
 		cnt := subfrCounts[sf]
 		if cnt <= 0 {
 			continue
@@ -53,10 +50,7 @@ func DecodeSmplGains(dec *RangeDecoder, _ *SmplMem, p3 int32, subfrCounts [4]int
 			bucket = (cnt & 0xffff) / 10
 		}
 		// g = clamp((gainQ[sf]+8192)>>14, floor -85); min_offset = -neg_part (forward entry shift).
-		g := (res.GainQ[sf] + 8192) >> 14
-		if g < -85 {
-			g = -85
-		}
+		g := max((res.GainQ[sf]+8192)>>14, -85)
 		negPart := (g >> 31) & g
 		minOffset := int(-negPart)
 		res.NrgRes[sf] = dec.DecodeCDF(cc.FcbgOffset(int(cfgSel), int(bucket), minOffset))

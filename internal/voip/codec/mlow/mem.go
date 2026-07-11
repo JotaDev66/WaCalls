@@ -65,14 +65,14 @@ func buildSmplMemFromSeed() *SmplMem {
 	}
 	for _, rec := range w.records {
 		blocks, seglens := rec[0], rec[1]
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			v := 0
 			if i < len(blocks) {
 				v = blocks[i]
 			}
 			put32(int32(v))
 		}
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			v := 0
 			if i < len(seglens) {
 				v = seglens[i]

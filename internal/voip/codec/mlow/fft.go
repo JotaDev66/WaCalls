@@ -46,10 +46,10 @@ func fftRec(x []cpx, stride, n int, sign float32, out []cpx) {
 	}
 	p := smallestFactor(n)
 	if p == n {
-		for k := 0; k < n; k++ {
+		for k := range n {
 			var acc cpx
 			angK := sign * 2.0 * smplPI * float32(k) / float32(n)
-			for j := 0; j < n; j++ {
+			for j := range n {
 				ang := angK * float32(j)
 				w := cpx{re: float32(math.Cos(float64(ang))), im: float32(math.Sin(float64(ang)))}
 				acc = acc.add(x[j*stride].mul(w))
@@ -60,13 +60,13 @@ func fftRec(x []cpx, stride, n int, sign float32, out []cpx) {
 	}
 	m := n / p
 	sub := make([]cpx, n)
-	for q := 0; q < p; q++ {
+	for q := range p {
 		fftRec(x[q*stride:], stride*p, m, sign, sub[q*m:(q+1)*m])
 	}
-	for k := 0; k < n; k++ {
+	for k := range n {
 		kmod := k % m
 		var acc cpx
-		for q := 0; q < p; q++ {
+		for q := range p {
 			ang := sign * 2.0 * smplPI * float32(k) * float32(q) / float32(n)
 			tw := cpx{re: float32(math.Cos(float64(ang))), im: float32(math.Sin(float64(ang)))}
 			acc = acc.add(sub[q*m+kmod].mul(tw))
@@ -89,7 +89,7 @@ func rfftForwardOrdered(time, f []float32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/smpl_perc.rs#L416-L432
 	n := len(time)
 	cin := make([]cpx, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cin[i].re = time[i]
 	}
 	spec := make([]cpx, n)

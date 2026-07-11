@@ -58,7 +58,7 @@ func (s *sessionStore) List(ctx context.Context) ([]core.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []core.Session
 	for rows.Next() {
 		var r core.Session

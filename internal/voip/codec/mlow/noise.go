@@ -157,7 +157,7 @@ func smplFiltMA1(x []float32, n int, coef [2]float32, state *float32, y []float3
 			y[k] = x[k] + coef[1]*x[k-1]
 		}
 	} else {
-		for k := 0; k < n; k++ {
+		for k := range n {
 			y[k] = coef[0] * x[k]
 		}
 		for k := 1; k < n; k++ {
@@ -172,7 +172,7 @@ func smplFiltMA1(x []float32, n int, coef [2]float32, state *float32, y []float3
 func smplFiltAR1(x []float32, n int, coef [2]float32, state *float32, y []float32) {
 	ar1 := -coef[1]
 	ytmp := *state
-	for nn := 0; nn < n; nn++ {
+	for nn := range n {
 		ytmp = x[nn] + ytmp*ar1
 		y[nn] = ytmp
 	}
@@ -197,7 +197,7 @@ func smplFiltMA2(x []float32, n int, coef [3]float32, state *[2]float32, y []flo
 			y[i] = x[i] + coef[1]*x[i-1]
 		}
 	} else {
-		for i := 0; i < n; i++ {
+		for i := range n {
 			y[i] = coef[0] * x[i]
 		}
 		for i := 1; i < n; i++ {
@@ -220,7 +220,7 @@ func smplSpecFact2(cIn [3]float32, a *[3]float32) {
 	invC0 := 1.0 / c[0]
 	r2 := c[2] * invC0
 	r1 := c[1] / (c[0] * (1.0 + r2))
-	for iter := 0; iter < 2; iter++ {
+	for range 2 {
 		v0 := 1.0 + r1*r1 + r2*r2
 		v1 := r1 + r1*r2
 		s := -2.0 / v0
@@ -266,10 +266,10 @@ func smplSpecFact2(cIn [3]float32, a *[3]float32) {
 func noiseDCT() *[smplNoiseCorrOrder + 1][smplNoiseDCTOrder]float32 {
 	noiseDCTOnce.Do(func() {
 		sc := 1.0 / float32(math.Sqrt(float64(smplNoiseDCTOrder)))
-		for i := 0; i < smplNoiseDCTOrder; i++ {
+		for i := range smplNoiseDCTOrder {
 			dOmega := ((0.5 + float32(i)) * smplPiNoise) / float32(smplNoiseDCTOrder)
 			var omega float32
-			for j := 0; j < smplNoiseCorrOrder+1; j++ {
+			for j := range smplNoiseCorrOrder + 1 {
 				noiseDCTMat[j][i] = float32(math.Cos(float64(omega))) * sc
 				omega += dOmega
 			}
@@ -287,12 +287,12 @@ var (
 func noiseMatMultTransp16(c *[smplNoiseCorrOrder + 1][smplNoiseDCTOrder]float32, x, y []float32, lenX int) {
 	var yt [smplNoiseDCTOrder]float32
 	xtmp := x[0]
-	for i := 0; i < smplNoiseDCTOrder; i++ {
+	for i := range smplNoiseDCTOrder {
 		yt[i] = c[0][i] * xtmp
 	}
 	for j := 1; j < lenX; j++ {
 		xt := x[j]
-		for i := 0; i < smplNoiseDCTOrder; i++ {
+		for i := range smplNoiseDCTOrder {
 			yt[i] += c[j][i] * xt
 		}
 	}
@@ -301,9 +301,9 @@ func noiseMatMultTransp16(c *[smplNoiseCorrOrder + 1][smplNoiseDCTOrder]float32,
 
 // noiseMatMult: y[i] = dot(C[i], x) over DCT_ORDER, for i in 0..CORR+1.
 func noiseMatMult(c *[smplNoiseCorrOrder + 1][smplNoiseDCTOrder]float32, x, y []float32) {
-	for i := 0; i < smplNoiseCorrOrder+1; i++ {
+	for i := range smplNoiseCorrOrder + 1 {
 		var acc float32
-		for k := 0; k < smplNoiseDCTOrder; k++ {
+		for k := range smplNoiseDCTOrder {
 			acc += c[i][k] * x[k]
 		}
 		y[i] = acc
@@ -342,7 +342,7 @@ func addNoiseUV(ng *NoiseGenerator, excNoiseUV []float32, l int, lsf []float32, 
 	var filtered [smplMaxSFLen]float32
 	smplFiltARMA1(excNoiseUV, l, coefMAUV, coefARUV, &ng.OutStateUV, filtered[:])
 	copy(excNoiseUV[:l], filtered[:l])
-	for i := 0; i < l; i++ {
+	for i := range l {
 		noise[i] += excNoiseUV[i]
 	}
 }
@@ -363,7 +363,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 
 	if voiced {
 		var corrs, c, ctgt [smplNoiseCorrOrder + 1]float32
-		for i := 0; i < smplNoiseCorrOrder+1; i++ {
+		for i := range smplNoiseCorrOrder + 1 {
 			var acc float32
 			for k := 0; k < l-i; k++ {
 				acc += excLpc[k] * excLpc[k+i]
@@ -375,11 +375,11 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 		if l == smplCelpFsKHz*10 {
 			corrSmthCoef = 0.4
 		}
-		for i := 0; i < smplNoiseCorrOrder+1; i++ {
+		for i := range smplNoiseCorrOrder + 1 {
 			ng.CorrSmth[i] += corrSmthCoef * (corrs[i] - ng.CorrSmth[i])
 		}
 		scale := decNoiseVNoiseGain * decNoiseVNoiseGain * corrs[0] / ng.CorrSmth[0]
-		for i := 0; i < smplNoiseCorrOrder+1; i++ {
+		for i := range smplNoiseCorrOrder + 1 {
 			c[i] = ng.CorrSmth[i] * scale
 		}
 		c[1] *= 2.0
@@ -389,7 +389,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 		var f2, f2Tgt [smplNoiseDCTOrder]float32
 		noiseMatMultTransp16(dct, c[:], f2[:], smplNoiseCorrOrder+1)
 		m := smplMaximum(f2[:smplNoiseDCTOrder]) * 1.5
-		for i := 0; i < smplNoiseDCTOrder; i++ {
+		for i := range smplNoiseDCTOrder {
 			f2Tgt[i] = m - f2[i]
 		}
 		noiseMatMult(dct, f2Tgt[:], ctgt[:])
@@ -398,12 +398,12 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 			ng.EnvSmth = ng.EnvLast
 		}
 		smplGetEnv(excLpc, l, envSmthCoefV, &ng.EnvSmth, env[:])
-		for i := 0; i < l; i++ {
+		for i := range l {
 			noiseV[i] *= env[i]
 		}
 		nrgNoise := smplNrg(noiseV[:l])
 		inv := 1.0 / (nrgNoise + 1e-12)
-		for i := 0; i < smplNoiseCorrOrder+1; i++ {
+		for i := range smplNoiseCorrOrder + 1 {
 			ctgt[i] *= inv
 		}
 		var coefMA [smplNoiseCorrOrder + 1]float32
@@ -419,7 +419,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 				envVal *= envSmthCoefUVV * envSmthCoefUVV
 			}
 		} else if ng.SinceUnvoiced < 2 {
-			for i := 0; i < l; i++ {
+			for i := range l {
 				noiseUV[i] = 0.0
 			}
 		}
@@ -431,7 +431,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 		for i := range ng.ShapeState {
 			ng.ShapeState[i] = 0.0
 		}
-		for i := 0; i < l; i++ {
+		for i := range l {
 			noiseV2[i] = 0.0
 		}
 
@@ -490,7 +490,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 		smplGenRandPulses(noiseUV[:], l, &ng.RandSeed)
 		if numPulses > 0 {
 			maxVal := fcbgainsUV[fcbgIdx] * 0.5
-			for i := 0; i < l; i++ {
+			for i := range l {
 				if excLpc[i] == 0.0 {
 					noiseUV[i] *= minF32(f+gg*env[i], maxVal)
 				} else {
@@ -499,7 +499,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 			}
 			ng.EnvLast = minF32(f+gg*env[l-1], maxVal)
 		} else {
-			for i := 0; i < l; i++ {
+			for i := range l {
 				noiseUV[i] *= f + gg*env[i]
 			}
 			ng.EnvLast = f + gg*env[l-1]
@@ -509,7 +509,7 @@ func SmplCelpGenNoise(ng *NoiseGenerator, excLpc []float32, l int, voiced bool, 
 	if ng.PrevVoiced || voiced {
 		smplFiltMA2(noiseV2[:], l, coefMAV, &ng.OutStateV, noise)
 	} else {
-		for i := 0; i < l; i++ {
+		for i := range l {
 			noise[i] = 0.0
 		}
 	}

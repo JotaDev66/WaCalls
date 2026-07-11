@@ -38,7 +38,7 @@ func TestHpPostfilter(t *testing.T) {
 		t.Fatal("no hp_postfilter frames")
 	}
 	var worst float32
-	for f := int32(0); f < count; f++ {
+	for range count {
 		pfRdI32(data, &o) // packet
 		pfRdI32(data, &o) // frame
 		var lags [8]float32
@@ -88,7 +88,7 @@ func TestHpPostfilter(t *testing.T) {
 		}
 		out := make([]float32, frameLen)
 		SmplHpPostfilter(st, yPre, frameLen, lag, out)
-		for i := 0; i < frameLen; i++ {
+		for i := range frameLen {
 			if d := absF32(out[i] - yPost[i]); d > worst {
 				worst = d
 			}
@@ -120,7 +120,7 @@ func TestHarmPostfilter(t *testing.T) {
 	}
 	st := NewHarmPostfilterState()
 	var worst, worstSteady float32
-	for p := int32(0); p < count; p++ {
+	for range count {
 		pfRdI32(data, &o) // packet
 		plen := int(pfRdI32(data, &o))
 		nlags := int(pfRdI32(data, &o))
@@ -140,12 +140,12 @@ func TestHarmPostfilter(t *testing.T) {
 
 		transition := lags[0] == 0.0
 		SmplHarmPostfilter(st, inp, plen, lags, nlags, nbr)
-		for i := 0; i < plen; i++ {
+		for i := range plen {
 			d := absF32(inp[i] - cout[i])
 			if d > worst {
 				worst = d
 			}
-			if !(transition && i < totPostfiltDelay) && d > worstSteady {
+			if (!transition || i >= totPostfiltDelay) && d > worstSteady {
 				worstSteady = d
 			}
 		}

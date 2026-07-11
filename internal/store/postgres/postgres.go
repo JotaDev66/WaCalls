@@ -27,17 +27,17 @@ func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 	if err := db.PingContext(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	container := sqlstore.NewWithDB(db, "postgres", waLog.Noop)
 	if err := container.Upgrade(ctx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	sessions, err := newSessionStore(ctx, db)
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return &Bundle{Container: container, Sessions: sessions, db: db}, nil
@@ -65,7 +65,7 @@ func (s *sessionStore) List(ctx context.Context) ([]core.Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []core.Session
 	for rows.Next() {
 		var r core.Session

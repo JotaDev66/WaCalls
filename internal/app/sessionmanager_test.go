@@ -20,7 +20,7 @@ func newTestManager(t *testing.T) *SessionManager {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { bundle.Close() })
+	t.Cleanup(func() { _ = bundle.Close() })
 	return newSessionManager(ctx, bundle.Container, NewBroker(), bundle.Sessions, waLog.Noop, slog.Default(), 0, nil, nil)
 }
 

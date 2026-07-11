@@ -106,12 +106,10 @@ func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string,
 
 func extractEncFromParticipant(nodes []waBinary.Node) *waBinary.Node {
 	for _, n := range nodes {
-		n := n
 		if n.Tag == "enc" {
 			return &n
 		}
 		for _, c := range wanode.NodeChildren(&n) {
-			c := c
 			if c.Tag == "enc" {
 				return &c
 			}

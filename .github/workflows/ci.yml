@@ -34,17 +34,10 @@ jobs:
           go mod download
           go mod verify
 
-      - name: Vet
-        run: go vet ./...
-
-      - name: Check formatting
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "::error::The following files are not gofmt'd:"
-            echo "$unformatted"
-            exit 1
-          fi
+      - name: Lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
 
       - name: Build
         run: go build ./...

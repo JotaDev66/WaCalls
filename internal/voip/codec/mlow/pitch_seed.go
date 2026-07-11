@@ -79,7 +79,7 @@ func loadPitchSeed() *pitchSeed {
 		panic("mlow: inflate pitch seed: " + err.Error())
 	}
 	raw, err := io.ReadAll(zr)
-	zr.Close()
+	_ = zr.Close()
 	if err != nil {
 		panic("mlow: read pitch seed: " + err.Error())
 	}
@@ -109,7 +109,7 @@ func decodeBlockseg(dec *RangeDecoder) pitchBlockSeg {
 	length := int(ecDecodeUniform(dec, 6) + 1)
 	blocks := make([]int, length)
 	seglens := make([]int, length)
-	for j := 0; j < length; j++ {
+	for j := range length {
 		blocks[j] = int(ecDecodeUniform(dec, 9))
 		seglens[j] = int(ecDecodeUniform(dec, 4) + 1)
 	}
@@ -120,7 +120,7 @@ func decodeBlockseg(dec *RangeDecoder) pitchBlockSeg {
 func genBlocktracks(blocksegs []pitchBlockSeg, blocksegsIx [][2]int) []pitchBlockTrack {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/dbf10066a15f5c8c83c27908ad4284873331e1a4/wacore/src/voip/mlow/smpl_pitch_seed.rs#L60-L86
 	out := make([]pitchBlockTrack, 0, pitchNumBlocktracks)
-	for trackIdx := 0; trackIdx < pitchNumBlocktracks; trackIdx++ {
+	for trackIdx := range pitchNumBlocktracks {
 		seg := &blocksegs[blocksegsIx[trackIdx][0]]
 		var track [NumSubframes]int
 		segIdx := 0
@@ -151,7 +151,7 @@ func pitchDcmfToCmf(dcmf []byte) []uint32 {
 	n := len(dcmf)
 	cmf := make([]uint32, n+1)
 	var sum int64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tmp := int32(dcmf[i]) + 1
 		tmp *= tmp
 		if tmp > 65535 {
@@ -196,7 +196,7 @@ func buildContourWindow() *contourWindowParts {
 	s := loadPitchSeed()
 	dec := NewRangeDecoder(s.blocksegsBitstream)
 	records := make([][2][]int, 0, pitchNumBlocksegs)
-	for i := 0; i < pitchNumBlocksegs; i++ {
+	for range pitchNumBlocksegs {
 		bs := decodeBlockseg(dec)
 		records = append(records, [2][]int{bs.Blocks, bs.Seglens})
 	}
@@ -221,7 +221,7 @@ func buildPitchTablesFromSeed() *PitchTables {
 	s := loadPitchSeed()
 	dec := NewRangeDecoder(s.blocksegsBitstream)
 	blocksegs := make([]pitchBlockSeg, 0, pitchNumBlocksegs)
-	for i := 0; i < pitchNumBlocksegs; i++ {
+	for range pitchNumBlocksegs {
 		blocksegs = append(blocksegs, decodeBlockseg(dec))
 	}
 	blocksegsIx := chunkPairs(s.blocksegsIx)

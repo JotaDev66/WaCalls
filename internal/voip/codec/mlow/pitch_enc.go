@@ -54,7 +54,7 @@ const (
 func pePitchHpFilter(x []float32, out []float32) {
 	n := len(x)
 	var stateMa float32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		out[i] = x[i] - stateMa
 		stateMa = x[i]
 	}
@@ -91,7 +91,7 @@ var peDownsampFilt = [2*peDownsampDelay + 1]float32{
 func pePitchDownsample(ptrIn []float32, l int, ptrOut []float32) int {
 	d := peDownsampDelay
 	n := (l - 2*d) / 2
-	for j := 0; j < n; j++ {
+	for j := range n {
 		tmp := ptrIn[2*j+d] * peDownsampFilt[d]
 		for i := 0; i < d; i += 2 {
 			tmp += (ptrIn[2*j+i] + ptrIn[2*j+2*d-i]) * peDownsampFilt[i]
@@ -110,7 +110,7 @@ var peInterpolFiltC = [2 * peInterpolDelayC]float32{
 func peUpsampECore(buf []float32, xEnd, yEnd, length int) {
 	xi := xEnd
 	yi := yEnd
-	for k := 0; k < length; k++ {
+	for range length {
 		v := (buf[xi] + buf[xi+1]) * 0.5
 		buf[yi] = v
 		yi--
@@ -124,9 +124,9 @@ func peUpsampECore(buf []float32, xEnd, yEnd, length int) {
 func peUpsampCCore(buf []float32, xEnd, yEnd, length int) {
 	xi := xEnd
 	yi := yEnd
-	for k := 0; k < length; k++ {
+	for range length {
 		var tmp float32
-		for j := 0; j < peInterpolDelayC; j++ {
+		for j := range peInterpolDelayC {
 			a := buf[xi+j-(peInterpolDelayC-1)]
 			b := buf[xi+peInterpolDelayC-j]
 			tmp += (a + b) * peInterpolFiltC[j]
@@ -174,10 +174,10 @@ func peGetMaxi(x []float32) int {
 func peGetMaxiK(x []float32, k int) []int {
 	taken := make([]bool, len(x))
 	out := make([]int, 0, k)
-	for c := 0; c < k; c++ {
+	for range k {
 		bi := -1
 		var best float32
-		for n := 0; n < len(x); n++ {
+		for n := range x {
 			if !taken[n] && (bi < 0 || x[n] > best) {
 				best = x[n]
 				bi = n
@@ -194,7 +194,7 @@ func peGetMaxiK(x []float32, k int) []int {
 
 func peDotProd(a, b []float32, n int) float32 {
 	var r float32
-	for i := 0; i < n; i++ {
+	for i := range n {
 		r += a[i] * b[i]
 	}
 	return r
@@ -202,7 +202,7 @@ func peDotProd(a, b []float32, n int) float32 {
 
 func peDotProd40(a, b []float32) float32 {
 	var r float32
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		r += a[i] * b[i]
 	}
 	return r
@@ -229,8 +229,8 @@ func peCalcE1(e1, ltpbuf []float32, ltpbufLen, numsubfrs, minpitch, maxpitch, la
 	e1Ext := make([]float32, numlags_)
 	peCalcE1Inner(e1Ext, ltpbuf, t, minpitch, maxpitch_, lagSubfrlen)
 	offset := numlags_ - numlags
-	for sf := 0; sf < numsubfrs; sf++ {
-		for i := 0; i < numlags; i++ {
+	for sf := range numsubfrs {
+		for i := range numlags {
 			e1[sf*numlags+i] = e1Ext[offset+i]
 		}
 		offset -= lagSubfrlen
@@ -240,10 +240,10 @@ func peCalcE1(e1, ltpbuf []float32, ltpbufLen, numsubfrs, minpitch, maxpitch, la
 // peCalcCE2 is smpl_pitch_calc_C_E2: stage-1 cross-correlation C + target energy E2.
 func peCalcCE2(c, e2, ltpbuf []float32, ltpbufLen, numsubfrs int) {
 	t := ltpbufLen - peLagSubfrlenStage1*numsubfrs
-	for sf := 0; sf < numsubfrs; sf++ {
+	for sf := range numsubfrs {
 		tgt := ltpbuf[t : t+20]
 		reg0 := t - peMinpitchStage1
-		for i := 0; i < peNumLagsStage1; i++ {
+		for i := range peNumLagsStage1 {
 			r := ltpbuf[reg0-i : reg0-i+20]
 			c[sf*peNumLagsStage1+i] = peDotProd(tgt, r, 20)
 		}
@@ -325,7 +325,7 @@ func peEncodeLagsBits(tab *PitchTables, blocksegsIx int, laginds *[NumSubframes]
 	deltaBlk := blk - prevLagblk
 	startSeg := 0
 	lagindsIx := 0
-	if !(prevLagblk > -1 && deltaBlk >= -1 && deltaBlk <= 2) {
+	if prevLagblk <= -1 || deltaBlk < -1 || deltaBlk > 2 {
 		nBits += 6.0 // uniform first-lag cost
 		prevLagblk = blk
 		prevLagidx = laginds[lagindsIx]
@@ -399,7 +399,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 		st.PrevLagblk = -1
 		st.PrevLagidx = -1
 		res := PitchResult{Pitchcorr: 0.0, AvgLag: minLag, HarmStrength: 0.0, BlocksegIdx: 0}
-		for i := 0; i < NumSubframes; i++ {
+		for i := range NumSubframes {
 			res.Lags[i] = minLag
 		}
 		return res
@@ -427,13 +427,13 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	copy(c[:numlags0*numsubfrs], cStage1)
 
 	numlags := numlags0
-	for sf := 0; sf < numsubfrs; sf++ {
+	for sf := range numsubfrs {
 		sqrtE1 := make([]float32, numlags)
-		for i := 0; i < numlags; i++ {
+		for i := range numlags {
 			sqrtE1[i] = float32(math.Sqrt(float64(e1[sf*numlags+i] + 1e-30)))
 		}
 		sqrtE2 := float32(math.Sqrt(float64(e2[sf] + 1e-30)))
-		for i := 0; i < numlags; i++ {
+		for i := range numlags {
 			tmp := 0.5 * (sqrtE1[i] + sqrtE2)
 			e[sf*numlags+i] = tmp * tmp
 		}
@@ -456,8 +456,8 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	offsetE0 := minpitchCoarse - minpitchE
 
 	h := make([]float32, numlagsCoarse*numsubfrs*2+64)
-	for sf := 0; sf < numsubfrs; sf++ {
-		for i := 0; i < numlagsCoarse; i++ {
+	for sf := range numsubfrs {
+		for i := range numlagsCoarse {
 			cv := c[sf*numlagsC+offsetC0+i]
 			ev := e[sf*numlagsE+offsetE0+i]
 			h[sf*numlagsCoarse+i] = cv / ev
@@ -466,8 +466,8 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 
 	pitchblockCoarse := pePitchblockMs * peCoarseFsKhz // 32
 	var hblk [NumSubframes][pitchNumBlocks]float32
-	for sf := 0; sf < numsubfrs; sf++ {
-		for block := 0; block < pitchNumBlocks; block++ {
+	for sf := range numsubfrs {
+		for block := range pitchNumBlocks {
 			base := sf*numlagsCoarse + block*pitchblockCoarse
 			hblk[sf][block] = peMaximum(h[base : base+pitchblockCoarse])
 		}
@@ -479,19 +479,19 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	var sfWght [NumSubframes]float32
 	{
 		var sumE2 float32
-		for sf := 0; sf < numsubfrs; sf++ {
+		for sf := range numsubfrs {
 			sumE2 += e2[sf]
 		}
-		for sf := 0; sf < numsubfrs; sf++ {
+		for sf := range numsubfrs {
 			sfWght[sf] = e2[sf] / sumE2
 		}
 	}
 	numBlocktracks := len(tab.Blocktracks)
 	utils := make([]float32, numBlocktracks)
-	for i := 0; i < numBlocktracks; i++ {
+	for i := range numBlocktracks {
 		bt := &tab.Blocktracks[i]
 		var corr float32
-		for sf := 0; sf < numsubfrs; sf++ {
+		for sf := range numsubfrs {
 			corr += hblk[sf][bt.Track[sf]] * sfWght[sf]
 		}
 		shortlagbias1 := (float32(peMaxpitchLen)/((bt.Meanblock+1.5)*float32(pePitchblock)) - 1.0) * pePitchShortwght1
@@ -505,7 +505,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	var uniqueblocks [NumSubframes]uint16
 	for _, ti := range trackIdx {
 		track := &tab.Blocktracks[ti].Track
-		for sf := 0; sf < numsubfrs; sf++ {
+		for sf := range numsubfrs {
 			uniqueblocks[sf] |= 1 << uint(track[sf])
 		}
 	}
@@ -516,7 +516,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	}
 	offsetC := peMinpitchMs*peFsKhz - minpitchC
 	offsetE := peMinpitchMs*peFsKhz - minpitchE
-	for sf := 0; sf < numsubfrs; sf++ {
+	for sf := range numsubfrs {
 		var mask uint16 = 1
 		cPtr := offsetC + sf*numlagsC
 		ePtr := offsetE + sf*numlagsE
@@ -526,17 +526,17 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 		e2sf := maxF32(peDotProd40(ltpBufHp[ltpOff:], ltpBufHp[ltpOff:]), 1e-9)
 		e2[sf] = e2sf
 		sqrtE2 := float32(math.Sqrt(float64(e2sf + 1e-30)))
-		for block := 0; block < pitchNumBlocks; block++ {
+		for block := range pitchNumBlocks {
 			if uniqueblocks[sf]&mask != 0 {
 				var sqrtE1 [pePitchblock + 1]float32
-				for i := 0; i < pePitchblock+1; i++ {
+				for i := range pePitchblock + 1 {
 					sqrtE1[i] = float32(math.Sqrt(float64(e1Fs[e1Ptr+block*pePitchblock+i] + 1e-30)))
 				}
-				for i := 0; i < pePitchblock+1; i++ {
+				for i := range pePitchblock + 1 {
 					tmp := 0.5 * (sqrtE1[i] + sqrtE2)
 					e[ePtr+block*pePitchblock+i] = 0.5 * tmp * tmp
 				}
-				for i := 0; i < pePitchblock; i++ {
+				for i := range pePitchblock {
 					if h[hPtr+block*pePitchblock+i] > hThres {
 						lag := peMinpitchLen + block*pePitchblock + i
 						a := ltpBufHp[ltpOff:]
@@ -570,7 +570,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 				} else {
 					peUpsampCCore(c, cin+pePitchblock-1, cout+2*pePitchblock-1, pePitchblock)
 				}
-				for i := 0; i < 2*pePitchblock; i++ {
+				for i := range 2 * pePitchblock {
 					h[hPtr+block*2*pePitchblock+i] = c[cout+i] / e[eout+i]
 				}
 			}
@@ -599,7 +599,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 					}
 					for sf := startSf; sf < startSf+pblockseg.Seglens[n]; sf++ {
 						hPtr := sf*2*pePitchblock*pitchNumBlocks + pblockseg.Blocks[n]*2*pePitchblock
-						for i := 0; i < 2*pePitchblock; i++ {
+						for i := range 2 * pePitchblock {
 							hComb[i] += h[hPtr+i] * e2[sf]
 						}
 					}
@@ -629,9 +629,9 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 	bestSurv := 0
 	pitchDeltawghtFs := pePitchDeltawght / float32(blocksizeFs)
 
-	for surv := 0; surv < nlaginds; surv++ {
+	for surv := range nlaginds {
 		var sumC, sumE float32
-		for sf := 0; sf < numsubfrs; sf++ {
+		for sf := range numsubfrs {
 			cBase := offsetC + sf*strideC
 			eBase := offsetE + sf*strideE
 			li := int(lagindsSurv[surv][sf])
@@ -656,7 +656,7 @@ func SmplPitch(st *PitchEstState, ltpBuf []float32, f2 *[SmplFLen]float32, coded
 
 	var lags [NumSubframes]float32
 	var lagindsOut [NumSubframes]int32
-	for sf := 0; sf < numsubfrs; sf++ {
+	for sf := range numsubfrs {
 		lags[sf] = float32(lagindsSurv[bestSurv][sf])*0.5 + float32(peMinpitchLen)
 		lagindsOut[sf] = lagindsSurv[bestSurv][sf]
 	}

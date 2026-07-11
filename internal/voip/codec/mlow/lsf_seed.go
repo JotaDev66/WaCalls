@@ -112,7 +112,7 @@ func loadLsfSeed() *lsfSeed {
 		panic("mlow: inflate lsf seed: " + err.Error())
 	}
 	raw, err := io.ReadAll(zr)
-	zr.Close()
+	_ = zr.Close()
 	if err != nil {
 		panic("mlow: read lsf seed: " + err.Error())
 	}
@@ -121,10 +121,10 @@ func loadLsfSeed() *lsfSeed {
 
 	// rot_8 [2][16][16][16] u8 (flat row-major).
 	p := 0
-	for v := 0; v < 2; v++ {
-		for c := 0; c < lsfCentroids; c++ {
-			for i := 0; i < lsfOrder; i++ {
-				for j := 0; j < lsfOrder; j++ {
+	for v := range 2 {
+		for c := range lsfCentroids {
+			for i := range lsfOrder {
+				for j := range lsfOrder {
 					s.rot8[v][c][i][j] = f[1].bytes[p]
 					p++
 				}
@@ -133,10 +133,10 @@ func loadLsfSeed() *lsfSeed {
 	}
 	// rot_cond_8 [2][2][16][16] u8.
 	p = 0
-	for v := 0; v < 2; v++ {
-		for lr := 0; lr < 2; lr++ {
-			for i := 0; i < lsfOrder; i++ {
-				for j := 0; j < lsfOrder; j++ {
+	for v := range 2 {
+		for lr := range 2 {
+			for i := range lsfOrder {
+				for j := range lsfOrder {
 					s.rotCond8[v][lr][i][j] = f[2].bytes[p]
 					p++
 				}
@@ -148,10 +148,10 @@ func loadLsfSeed() *lsfSeed {
 	// st2_min_qi / st2_max_qi [2][2][17][16] i8.
 	for idx, src := range [][]byte{f[5].bytes, f[6].bytes} {
 		p = 0
-		for v := 0; v < 2; v++ {
-			for lr := 0; lr < 2; lr++ {
-				for c := 0; c < 17; c++ {
-					for i := 0; i < lsfOrder; i++ {
+		for v := range 2 {
+			for lr := range 2 {
+				for c := range 17 {
+					for i := range lsfOrder {
 						q := int8(src[p])
 						if idx == 0 {
 							s.minQi[v][lr][c][i] = q
@@ -167,9 +167,9 @@ func loadLsfSeed() *lsfSeed {
 	// cb_16 [2][16][16] (u32 -> u16).
 	cb := decodeVarintsU32(f[7].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for c := 0; c < lsfCentroids; c++ {
-			for i := 0; i < lsfOrder; i++ {
+	for v := range 2 {
+		for c := range lsfCentroids {
+			for i := range lsfOrder {
 				s.cb16[v][c][i] = uint16(cb[p])
 				p++
 			}
@@ -178,8 +178,8 @@ func loadLsfSeed() *lsfSeed {
 	// cinv_16 [2][136].
 	cinv := decodeVarintsU32(f[8].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < lsfCinvLen; i++ {
+	for v := range 2 {
+		for i := range lsfCinvLen {
 			s.cinv16[v][i] = uint16(cinv[p])
 			p++
 		}
@@ -187,8 +187,8 @@ func loadLsfSeed() *lsfSeed {
 	// cmf [2][17].
 	cmf := decodeVarintsU32(f[9].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < 17; i++ {
+	for v := range 2 {
+		for i := range 17 {
 			s.cmf[v][i] = uint16(cmf[p])
 			p++
 		}
@@ -196,8 +196,8 @@ func loadLsfSeed() *lsfSeed {
 	// cmf_cond [2][18].
 	cmfc := decodeVarintsU32(f[10].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < 18; i++ {
+	for v := range 2 {
+		for i := range 18 {
 			s.cmfCond[v][i] = uint16(cmfc[p])
 			p++
 		}
@@ -205,22 +205,22 @@ func loadLsfSeed() *lsfSeed {
 	// lsf_sel [3][3].
 	sel := decodeVarintsU32(f[11].bytes)
 	p = 0
-	for a := 0; a < 3; a++ {
-		for b := 0; b < 3; b++ {
+	for a := range 3 {
+		for b := range 3 {
 			s.lsfSel[a][b] = uint16(sel[p])
 			p++
 		}
 	}
 	// lsf_extra [3].
 	ex := decodeVarintsU32(f[12].bytes)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		s.lsfExtra[i] = uint16(ex[i])
 	}
 	// mean [2][16].
 	mean := decodeFloats(f[13].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < lsfOrder; i++ {
+	for v := range 2 {
+		for i := range lsfOrder {
 			s.mean[v][i] = mean[p]
 			p++
 		}
@@ -228,8 +228,8 @@ func loadLsfSeed() *lsfSeed {
 	// min_dist [2][17].
 	md := decodeFloats(f[14].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < 17; i++ {
+	for v := range 2 {
+		for i := range 17 {
 			s.minDist[v][i] = md[p]
 			p++
 		}
@@ -240,8 +240,8 @@ func loadLsfSeed() *lsfSeed {
 	// qstep [2][2].
 	qs := decodeFloats(f[16].bytes)
 	p = 0
-	for v := 0; v < 2; v++ {
-		for i := 0; i < 2; i++ {
+	for v := range 2 {
+		for i := range 2 {
 			s.qstep[v][i] = qs[p]
 			p++
 		}
@@ -257,12 +257,12 @@ func lsfMatMultTransp16(c *[lsfOrder][lsfOrder]float32, x *[lsfOrder]float32) [l
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/dbf10066a15f5c8c83c27908ad4284873331e1a4/wacore/src/voip/mlow/smpl_lsf_seed.rs#L210-L225
 	var y [lsfOrder]float32
 	x0 := x[0]
-	for i := 0; i < lsfOrder; i++ {
+	for i := range lsfOrder {
 		y[i] = c[0][i] * x0
 	}
 	for j := 1; j < lsfOrder; j++ {
 		xj := x[j]
-		for i := 0; i < lsfOrder; i++ {
+		for i := range lsfOrder {
 			// Round the product before accumulating: Go would otherwise fuse
 			// `y[i] + c*xj` into an FMA (one rounding), but the reference rounds
 			// the multiply and the add separately.
@@ -284,7 +284,7 @@ func lsfSeedLaroia(lsf *[lsfOrder]float32) [lsfOrder]float32 {
 	}
 	inv[lsfOrder] = 1.0 / maxF32(smplPi-lsf[lsfOrder-1], minDist)
 	var w [lsfOrder]float32
-	for i := 0; i < lsfOrder; i++ {
+	for i := range lsfOrder {
 		w[i] = inv[i] + inv[i+1]
 	}
 	return w
@@ -299,11 +299,11 @@ func lsfRotApplyWght(rot *[lsfOrder][lsfOrder]float32, lsf *[lsfOrder]float32) (
 		lsfw[i] = sqrtF32(lsfw[i])
 	}
 	var lsfwInv [lsfOrder]float32
-	for i := 0; i < lsfOrder; i++ {
+	for i := range lsfOrder {
 		lsfwInv[i] = 1.0 / lsfw[i]
 	}
-	for i := 0; i < lsfOrder; i++ {
-		for j := 0; j < lsfOrder; j++ {
+	for i := range lsfOrder {
+		for j := range lsfOrder {
 			we[i][j] = rot[i][j] * lsfwInv[j]
 			wie[j][i] = rot[i][j] * lsfw[j]
 		}
@@ -330,7 +330,7 @@ func lsfDcmfToCmf(dcmf []byte) []uint16 {
 	n := len(dcmf)
 	cmf := make([]uint16, n+1)
 	var sum int64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tmp := int32(dcmf[i]) + 1
 		tmp *= tmp
 		if tmp > 65535 {
@@ -352,8 +352,8 @@ func lsfDcmfToCmf(dcmf []byte) []uint16 {
 func lsfUnpack8(packed *[lsfOrder][lsfOrder]byte, scale, min float32) [lsfOrder][lsfOrder]float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/dbf10066a15f5c8c83c27908ad4284873331e1a4/wacore/src/voip/mlow/smpl_lsf_seed.rs#L304-L312
 	var out [lsfOrder][lsfOrder]float32
-	for i := 0; i < lsfOrder; i++ {
-		for j := 0; j < lsfOrder; j++ {
+	for i := range lsfOrder {
+		for j := range lsfOrder {
 			// Round packed*scale before adding min (defeat FMA fusion; reference rounds separately).
 			prod := float32(float32(packed[i][j]) * scale)
 			out[i][j] = min + prod
@@ -395,11 +395,11 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 	// grid==16 decorr matrices: the same Rotcond unpack8(rot_cond_8), flattened [lr][256].
 	synthGrid16Matrices := make([][][]float32, 2)
 
-	for voiced := 0; voiced < 2; voiced++ {
+	for voiced := range 2 {
 		// cInv (symmetric lower-triangular fill).
 		var cInv [lsfOrder][lsfOrder]float32
 		p := 0
-		for i := 0; i < lsfOrder; i++ {
+		for i := range lsfOrder {
 			for j := 0; j <= i; j++ {
 				// Round scale*cinv before adding min (defeat FMA fusion).
 				prod := float32(lsfCinvScale[voiced] * float32(s.cinv16[voiced][p]))
@@ -414,9 +414,9 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 		var cbCinv [lsfCentroids][lsfOrder]float32
 		var we [lsfCentroids][lsfOrder][lsfOrder]float32
 		var wie [lsfCentroids][lsfOrder][lsfOrder]float32
-		for c := 0; c < lsfCentroids; c++ {
+		for c := range lsfCentroids {
 			var lsfCB [lsfOrder]float32
-			for i := 0; i < lsfOrder; i++ {
+			for i := range lsfOrder {
 				// Round cb16*scale before the additions (defeat FMA fusion of min + cb16*scale).
 				prod := float32(float32(s.cb16[voiced][c][i]) * lsfCBScale[voiced])
 				lsfCB[i] = lsfCBMin[voiced] + prod + s.mean[voiced][i]
@@ -431,7 +431,7 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 
 		// Rotcond[lowRate] = unpack8(rot_cond_8[lowRate]).
 		var rotcond [2][lsfOrder][lsfOrder]float32
-		for lr := 0; lr < 2; lr++ {
+		for lr := range 2 {
 			rotcond[lr] = lsfUnpack8(&s.rotCond8[voiced][lr], lsfRotCondScale[voiced], lsfRotCondMin[voiced])
 		}
 
@@ -448,7 +448,7 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 			Bits:     bits,
 			Wie:      make([][][]float32, lsfCentroids),
 		}
-		for c := 0; c < lsfCentroids; c++ {
+		for c := range lsfCentroids {
 			t.Cbhalf[c] = arr16ToSlice(&cbhalf[c])
 			t.CbCinv[c] = arr16ToSlice(&cbCinv[c])
 			t.We[c] = mat16ToSlice(&we[c])
@@ -460,7 +460,7 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 		// grid==16 row is never read (grid==16 returns before indexing it), so not appended.
 		sc := make([][]float32, lsfCentroids)
 		sm := make([][][]float32, lsfCentroids)
-		for g := 0; g < lsfCentroids; g++ {
+		for g := range lsfCentroids {
 			sc[g] = arr16ToSlice(&cbhalf[g])
 			sm[g] = mat16ToSlice(&we[g])
 		}
@@ -468,9 +468,9 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 		synthMatrices[voiced] = sm
 		// grid16_matrices[voiced][lr] = the Rotcond computed above, flattened row-major to 256.
 		g16 := make([][]float32, 2)
-		for lr := 0; lr < 2; lr++ {
+		for lr := range 2 {
 			flat := make([]float32, 0, lsfOrder*lsfOrder)
-			for i := 0; i < lsfOrder; i++ {
+			for i := range lsfOrder {
 				flat = append(flat, rotcond[lr][i][:]...)
 			}
 			g16[lr] = flat
@@ -487,20 +487,20 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 	var numbitsSlices [2][2][17][lsfOrder][]float32
 
 	qPtr, q8Ptr, dcmfPtr := 0, 0, 0
-	for voiced := 0; voiced < 2; voiced++ {
-		for lr := 0; lr < 2; lr++ {
-			for c := 0; c < lsfCentroids+1; c++ {
+	for voiced := range 2 {
+		for lr := range 2 {
+			for c := range lsfCentroids + 1 {
 				qstep := s.qstep[voiced][lr]
 				if c == lsfCentroids {
 					qstep *= lsfQstepCondMult
 				}
-				for i := 0; i < lsfOrder; i++ {
+				for i := range lsfOrder {
 					minQi := int32(s.minQi[voiced][lr][c][i])
 					maxQi := int32(s.maxQi[voiced][lr][c][i])
 					numQlvls := int(maxQi - minQi + 1)
 					numqlvlsFlat[voiced][lr][c][i] = int32(numQlvls)
 					qoffFlat[voiced][lr][c][i] = qPtr
-					for lvl := 0; lvl < numQlvls; lvl++ {
+					for lvl := range numQlvls {
 						q8 := float32(s.st2Qlvls8[q8Ptr])
 						// Round scale*q8 before adding min (defeat FMA fusion).
 						prod := float32(lsfST2QlvlsScale * q8)
@@ -528,21 +528,21 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 	st2 := make([][][]st2Tables, 2)
 	valtables := make([][][][][]float32, 2)
 	lsfStage2 := make([][][][][]uint16, 2)
-	for voiced := 0; voiced < 2; voiced++ {
+	for voiced := range 2 {
 		st2[voiced] = make([][]st2Tables, 2)
 		valtables[voiced] = make([][][][]float32, 2)
 		lsfStage2[voiced] = make([][][][]uint16, 2)
-		for lr := 0; lr < 2; lr++ {
+		for lr := range 2 {
 			st2[voiced][lr] = make([]st2Tables, lsfCentroids+1)
 			valtables[voiced][lr] = make([][][]float32, lsfCentroids+1)
 			lsfStage2[voiced][lr] = make([][][]uint16, lsfCentroids+1)
-			for c := 0; c < lsfCentroids+1; c++ {
+			for c := range lsfCentroids + 1 {
 				nq := make([]int32, lsfOrder)
 				qlvls := make([][]float32, lsfOrder)
 				vt := make([][]float32, lsfOrder)
 				nb := make([][]float32, lsfOrder)
 				cmfRows := make([][]uint16, lsfOrder)
-				for i := 0; i < lsfOrder; i++ {
+				for i := range lsfOrder {
 					n := int(numqlvlsFlat[voiced][lr][c][i])
 					off := qoffFlat[voiced][lr][c][i]
 					slice := append([]float32(nil), qlvlsFlat[off:off+n]...)
@@ -611,13 +611,13 @@ func buildLsfFromSeed(s *lsfSeed) *lsfBuilt {
 func lsfCloneQi(qi *[2][2][17][lsfOrder]int8) [][][][]int32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/dbf10066a15f5c8c83c27908ad4284873331e1a4/wacore/src/voip/mlow/smpl_lsf_seed.rs#L581-L593
 	out := make([][][][]int32, 2)
-	for v := 0; v < 2; v++ {
+	for v := range 2 {
 		out[v] = make([][][]int32, 2)
-		for lr := 0; lr < 2; lr++ {
+		for lr := range 2 {
 			out[v][lr] = make([][]int32, 17)
-			for c := 0; c < 17; c++ {
+			for c := range 17 {
 				row := make([]int32, lsfOrder)
-				for i := 0; i < lsfOrder; i++ {
+				for i := range lsfOrder {
 					row[i] = int32(qi[v][lr][c][i])
 				}
 				out[v][lr][c] = row

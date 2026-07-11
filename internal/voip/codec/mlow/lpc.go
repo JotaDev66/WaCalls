@@ -57,7 +57,7 @@ var smplLSFInterpol4Tbl = [2][smplSubfrs]float32{
 func genSinWin(n int) []float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/smpl_lpc.rs#L39-L43
 	w := make([]float32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		t := (float32(i) + 1.0) / (float32(n) + 1.0) * smplPI / 2.0
 		w[i] = float32(math.Sin(float64(t)))
 	}
@@ -67,7 +67,7 @@ func genSinWin(n int) []float32 {
 func genCosWin(n int) []float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/smpl_lpc.rs#L46-L50
 	w := make([]float32, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		t := (float32(i) + 1.0) / (float32(n) + 1.0) * smplPI / 2.0
 		w[i] = float32(math.Cos(float64(t)))
 	}
@@ -88,7 +88,7 @@ func smplWindowLPC20(input *[SmplLPCBufLen]float32, useLongWin bool) [SmplLPCBuf
 		win3, win3len = genCosWin(smplWin3ShortLen), smplWin3ShortLen
 	}
 	var out [SmplLPCBufLen]float32
-	for i := 0; i < smplLPCWin120msLen; i++ {
+	for i := range smplLPCWin120msLen {
 		out[i] = input[i] * win1[i]
 	}
 	mid := SmplLPCBufLen - smplLPCWin120msLen - smplWin3LongLen
@@ -112,7 +112,7 @@ func genCosRow(domega, scale float64) [nfft4]float64 {
 	var row [nfft4]float64
 	omega := 0.0
 	twoPi := 2.0 * smplPIF64
-	for k := 0; k < nfft4; k++ {
+	for k := range nfft4 {
 		row[k] = math.Cos(omega) * scale
 		omega = math.Mod(omega+domega, twoPi)
 		if omega < 0 {
@@ -133,13 +133,13 @@ func buildDctTables() dctTables {
 	twoPi := 2.0 * smplPIF64
 	nfft := float64(SmplLPCNFFT)
 	var t dctTables
-	for j := 0; j < SmplLPCOrder/2; j++ {
+	for j := range SmplLPCOrder / 2 {
 		t.cdif[j] = genCosRow(float64(1+j*2)*twoPi/nfft, 2.0/nfft)
 	}
-	for j := 0; j < SmplLPCOrder/4; j++ {
+	for j := range SmplLPCOrder / 4 {
 		t.csumdiff[j] = genCosRow(float64(2+j*4)*twoPi/nfft, 1.0/nfft)
 	}
-	for j := 0; j < SmplLPCOrder/4; j++ {
+	for j := range SmplLPCOrder / 4 {
 		t.csumsum[j] = genCosRow(float64(4+j*4)*twoPi/nfft, 1.0/nfft)
 	}
 	return t
@@ -152,7 +152,7 @@ func bruteDct(t *dctTables, f2 []float64, order int, r []float64) {
 	half := SmplLPCNFFT / 2
 	f2sum := 0.0
 	var f2dif, f2sumsum, f2sumdif [nfft4]float64
-	for n := 0; n < nfft4; n++ {
+	for n := range nfft4 {
 		f2sum += f2[n] + f2[nfft4+n]
 		f2dif[n] = f2[n] - f2[half-n]
 		f2sumsum[n] = f2[n] + f2[half-n] + f2[nfft4+n] + f2[nfft4-n]
@@ -163,7 +163,7 @@ func bruteDct(t *dctTables, f2 []float64, order int, r []float64) {
 	for j := 0; j < order/2; j++ {
 		rtmp := 0.0
 		row := &t.cdif[j]
-		for k := 0; k < nfft4; k++ {
+		for k := range nfft4 {
 			rtmp += row[k] * f2dif[k]
 		}
 		r[1+j*2] = rtmp
@@ -171,7 +171,7 @@ func bruteDct(t *dctTables, f2 []float64, order int, r []float64) {
 	for j := 0; j < order/4; j++ {
 		rtmp := 0.0
 		row := &t.csumdiff[j]
-		for k := 0; k < nfft4; k++ {
+		for k := range nfft4 {
 			rtmp += row[k] * f2sumdif[k]
 		}
 		r[2+j*4] = rtmp
@@ -179,7 +179,7 @@ func bruteDct(t *dctTables, f2 []float64, order int, r []float64) {
 	for j := 0; j < order/4; j++ {
 		rtmp := 0.0
 		row := &t.csumsum[j]
-		for k := 0; k < nfft4; k++ {
+		for k := range nfft4 {
 			rtmp += row[k] * f2sumsum[k]
 		}
 		r[4+j*4] = rtmp
@@ -195,10 +195,10 @@ func ac2rcDbl(corr []float64, order int, reg float32, rc []float32) {
 	copy(c0, corr[:order+1])
 	c0[0] *= float64(1.0 + reg)
 	copy(c1, c0[:order+1])
-	for i := 0; i < order; i++ {
+	for i := range order {
 		rc[i] = 0
 	}
-	for k := 0; k < order; k++ {
+	for k := range order {
 		if c0[k+1] > c1[0] {
 			rc[k] = -1.0
 			break
@@ -228,7 +228,7 @@ func rc2a(rc []float32, order int, a []float32) {
 		a[i] = 0
 	}
 	a[0] = 1.0
-	for k := 0; k < order; k++ {
+	for k := range order {
 		rcTmp := rc[k]
 		for n := 0; n < (k+1)/2; n++ {
 			tmp1 := a[n+1]
@@ -267,7 +267,7 @@ func smplLPCAnalyzeWithF2(windowed *[SmplLPCBufLen]float32) ([SmplLPCOrder + 1]f
 		f2[i] = f[2*i]*f[2*i] + f[2*i+1]*f[2*i+1]
 	}
 	f2d := make([]float64, SmplFLen)
-	for i := 0; i < SmplFLen; i++ {
+	for i := range SmplFLen {
 		f2d[i] = float64(f2[i])
 	}
 
@@ -292,7 +292,7 @@ func lpcIsStable(a []float32) bool {
 		return false
 	}
 	var a0, a1 [SmplLPCOrder]float64
-	for i := 0; i < order; i++ {
+	for i := range order {
 		a0[i] = float64(a[i+1])
 	}
 	m := order - 1
@@ -371,12 +371,12 @@ func smplLPCInterpolIdx(
 	} else {
 		copy(prev[:], lsf[:SmplLPCOrder])
 	}
-	for j := 0; j < smplSubfrs; j++ {
+	for j := range smplSubfrs {
 		w := interp[j]
 		if w == 1.0 {
 			copy(ilsf[:], lsf[:SmplLPCOrder])
 		} else {
-			for k := 0; k < SmplLPCOrder; k++ {
+			for k := range SmplLPCOrder {
 				ilsf[k] = (1.0-w)*prev[k] + w*lsf[k]
 			}
 		}
@@ -447,7 +447,7 @@ func silkA2NLSFInit(aQ16, p, q []int32, dd int) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/smpl_lpc.rs#L477-L490
 	p[dd] = 1 << 16
 	q[dd] = 1 << 16
-	for k := 0; k < dd; k++ {
+	for k := range dd {
 		p[k] = -aQ16[dd-k-1] - aQ16[dd+k]
 		q[k] = -aQ16[dd-k-1] + aQ16[dd+k]
 	}
@@ -499,7 +499,7 @@ func silkA2NLSF(nlsf, aQ16 []int32, d int) {
 			}
 			xloL, yloL, xhiL := xlo, ylo, xhi
 			ffrac := int32(-256)
-			for m := int32(0); m < binDivStepsA2NLSFFix; m++ {
+			for m := range int32(binDivStepsA2NLSFFix) {
 				xmid := silkRshiftRound(xloL+xhiL, 1)
 				ymid := silkA2NLSFEvalPoly(poly(), xmid, dd)
 				if (yloL <= 0 && ymid >= 0) || (yloL >= 0 && ymid <= 0) {

@@ -31,7 +31,6 @@ func ParseRelayFromAck(ackNode *waBinary.Node) ParsedRelayAck {
 	}
 
 	for _, child := range wanode.NodeChildren(ackNode) {
-		child := child
 
 		if child.Tag == "user" {
 			for _, deviceNode := range wanode.NodeChildren(&child) {
@@ -70,7 +69,6 @@ func ParseRelayFromAck(ackNode *waBinary.Node) ParsedRelayAck {
 		rawAuthTokens := map[string][]byte{}
 
 		for _, rc := range relayContent {
-			rc := rc
 			switch rc.Tag {
 			case "key":
 				if b := wanode.NodeBytes(&rc); b != nil {
@@ -103,7 +101,6 @@ func ParseRelayFromAck(ackNode *waBinary.Node) ParsedRelayAck {
 		}
 
 		for _, rc := range relayContent {
-			rc := rc
 			if rc.Tag != "te2" {
 				continue
 			}

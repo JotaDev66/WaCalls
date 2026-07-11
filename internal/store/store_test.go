@@ -33,7 +33,7 @@ func TestSessionStoreContract(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { bundle.Close() })
+			t.Cleanup(func() { _ = bundle.Close() })
 			st := bundle.Sessions
 
 			existing, err := st.List(ctx)

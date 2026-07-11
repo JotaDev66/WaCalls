@@ -153,13 +153,13 @@ func (c *SrtpContext) generateIV(ssrc uint32, index uint64) []byte {
 
 	var ssrcBuf [4]byte
 	binary.BigEndian.PutUint32(ssrcBuf[:], ssrc)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		iv[4+i] ^= ssrcBuf[i]
 	}
 
 	var idxBuf [8]byte
 	binary.BigEndian.PutUint64(idxBuf[:], index)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		iv[8+i] ^= idxBuf[2+i]
 	}
 

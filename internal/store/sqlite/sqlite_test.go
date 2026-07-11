@@ -12,7 +12,7 @@ func TestOpenConcurrencyConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer bundle.Close()
+	defer func() { _ = bundle.Close() }()
 	db := bundle.Sessions.(*sessionStore).db
 
 	if got := db.Stats().MaxOpenConnections; got != 1 {

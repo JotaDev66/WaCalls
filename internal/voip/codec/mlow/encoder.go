@@ -46,7 +46,7 @@ func smplInvSigmoid(x float32) float32 {
 func vuvDot(a, b []float32, l int) float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_signal_mode.rs#L35-L42
 	var s float32
-	for i := 0; i < l; i++ {
+	for i := range l {
 		s += a[i] * b[i]
 	}
 	return s
@@ -105,32 +105,20 @@ func recomputeHarmonicity(harmHz, invF2StepHz float32, f2w []float32) float32 {
 	if harmWidth > 1.97 {
 		var peakValleyMags [2*numHarms + 1]float32
 		invHarmWidth := 1.0 / harmWidth
-		for numHarm := 0; numHarm < len(peakValleyMags); numHarm++ {
+		for numHarm := range len(peakValleyMags) {
 			ixStart := 0.5 * float32(numHarm) * harmWidth
 			ixEnd := ixStart + harmWidth
 			idxStart := int32(math.Ceil(float64(ixStart)))
 			idxEnd := int32(math.Floor(float64(ixEnd)))
-			weightsLen := int(idxEnd - idxStart + 1)
-			if weightsLen < 0 {
-				weightsLen = 0
-			}
+			weightsLen := max(int(idxEnd-idxStart+1), 0)
 			var weights [20]float32
 			for i := 0; i < weightsLen && i < len(weights); i++ {
 				tmp := (float32(idxStart) - ixStart + float32(i)) * invHarmWidth
 				tmp -= tmp * tmp
 				weights[i] = tmp * tmp
 			}
-			base := int(idxStart)
-			if base < 0 {
-				base = 0
-			}
-			if base > len(f2w) {
-				base = len(f2w)
-			}
-			avail := len(f2w) - base
-			if avail > weightsLen {
-				avail = weightsLen
-			}
+			base := min(max(int(idxStart), 0), len(f2w))
+			avail := min(len(f2w)-base, weightsLen)
 			peakValleyNrg := vuvDot(f2w[base:], weights[:], avail) / vuvSum(weights[:], weightsLen)
 			peakValleyMags[numHarm] = float32(math.Sqrt(float64(peakValleyNrg + 1e-30)))
 		}
@@ -138,7 +126,7 @@ func recomputeHarmonicity(harmHz, invF2StepHz float32, f2w []float32) float32 {
 		var magWeights [numHarms]float32
 		magPeakW := [3]float32{1.0, 10.0, 1.0}
 		magValleyW := [3]float32{5.0, 2.0, 5.0}
-		for numHarm := 0; numHarm < numHarms; numHarm++ {
+		for numHarm := range numHarms {
 			magPeak := magPeakW[0]*peakValleyMags[2*numHarm] +
 				magPeakW[1]*peakValleyMags[2*numHarm+1] +
 				magPeakW[2]*peakValleyMags[2*numHarm+2]
@@ -348,7 +336,7 @@ func encodeSmplLsf(enc *RangeEncoder, t *SmplTables, st *SmplLsfState, config, i
 	st.HavePrev = true
 
 	st2 := t.LsfStage2[int(stage1)][config][int(lsf.Grid)]
-	for k := 0; k < 16; k++ {
+	for k := range 16 {
 		enc.EncodeCDF(lsf.Stage2[k], st2[k])
 	}
 	enc.EncodeCDF(lsf.Extra, t.LsfExtra)
@@ -390,14 +378,8 @@ func encodeSmplPulses(enc *RangeEncoder, _ *SmplMem, p2, p3, p4, p6, s1 int32, p
 
 	// --- recursive binary SPLIT ---
 	finalSum := pp.Subfr[0] + pp.Subfr[1]
-	initSum := total - subfrLen16*2
-	if initSum < 0 {
-		initSum = 0
-	}
-	lo := total - 80
-	if lo < 0 {
-		lo = 0
-	}
+	initSum := max(total-subfrLen16*2, 0)
+	lo := max(total-80, 0)
 	if initSum < lo {
 		return
 	}
@@ -416,7 +398,7 @@ func encodeSmplPulses(enc *RangeEncoder, _ *SmplMem, p2, p3, p4, p6, s1 int32, p
 	// --- MAGNITUDE block: replay recorded run-length symbols through the same loop ---
 	posPer := p2 / p3
 	magIdx := 0
-	for subfr := int32(0); subfr < p3; subfr++ {
+	for subfr := range p3 {
 		cnt := pp.Subfr[subfr]
 		if cnt <= 0 {
 			continue
@@ -449,14 +431,8 @@ func encodeSmplPulses(enc *RangeEncoder, _ *SmplMem, p2, p3, p4, p6, s1 int32, p
 func encodeSplit3537(enc *RangeEncoder, cc *CcTables, count, granularity int32, s0 int32) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/encode.rs#L273-L292
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/encode.rs#L273-L292 (seed cc-table rewire: SplitCmf)
-	lo := count
-	if granularity < lo {
-		lo = granularity
-	}
-	minSplit := count - granularity
-	if minSplit < 0 {
-		minSplit = 0
-	}
+	lo := min(granularity, count)
+	minSplit := max(count-granularity, 0)
 	if lo < minSplit || minSplit == lo {
 		return
 	}
@@ -477,16 +453,13 @@ func encodeSmplGains(enc *RangeEncoder, _ *SmplMem, p3 int32, subfrCounts [4]int
 	off6 := p3 * gp.GainDelta
 	base7 := gp.GainMain*cc.NrgStep(cfgSel) - 0x154000
 	var gainQ [4]int32
-	take := int(p3)
-	if take > 4 {
-		take = 4
-	}
-	for sf := 0; sf < take; sf++ {
+	take := min(int(p3), 4)
+	for sf := range take {
 		cbv := cc.GainRecon(p3 == 4, int32(sf)+off6)
 		gainQ[sf] = base7 + (cbv << 4)
 	}
 
-	for sf := 0; sf < take; sf++ {
+	for sf := range take {
 		cnt := subfrCounts[sf]
 		if cnt <= 0 {
 			continue
@@ -497,10 +470,7 @@ func encodeSmplGains(enc *RangeEncoder, _ *SmplMem, p3 int32, subfrCounts [4]int
 		} else {
 			bucket = (cnt & 0xffff) / 10
 		}
-		g := (gainQ[sf] + 8192) >> 14
-		if g < -85 {
-			g = -85
-		}
+		g := max((gainQ[sf]+8192)>>14, -85)
 		negPart := (g >> 31) & g
 		minOffset := int(-negPart)
 		enc.EncodeCDF(gp.NrgRes[sf], cc.FcbgOffset(int(cfgSel), int(bucket), minOffset))
@@ -516,11 +486,8 @@ func encodeSmplPitch(enc *RangeEncoder, _ *SmplMem, st *SmplLsfState, p2, p3, p6
 	cc := LoadCcTables()
 
 	var gainAccum int32
-	take := int(p3)
-	if take > 4 {
-		take = 4
-	}
-	for sf := 0; sf < take; sf++ {
+	take := min(int(p3), 4)
+	for sf := range take {
 		cnt := subfrCounts[sf]
 		gi := pp.GainIdx[sf]
 		if p6 != 0 {
@@ -575,7 +542,7 @@ func EncodeSmplFrame(fp *SmplFrameParams, log ...zerolog.Logger) ([]byte, error)
 	mem := LoadSmplMem()
 	enc := NewRangeEncoder(1 + SmplEncodeBufBytes)
 	var st SmplLsfState
-	for f := 0; f < 3; f++ {
+	for f := range 3 {
 		ip := &fp.Internal[f]
 		lg.Trace().Int("intf", f).Bool("voiced", ip.Lsf.Stage1 == 1).Int32("stage1", ip.Lsf.Stage1).
 			Int32("total_pulses", ip.Pulses.Total).Bool("has_pitch", ip.HasPitch).Msg("encode internal frame params")

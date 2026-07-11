@@ -250,7 +250,7 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 			}
 			flusher.Flush()
 		case <-keepalive.C:
-			w.Write([]byte(": ping\n\n"))
+			_, _ = w.Write([]byte(": ping\n\n"))
 			flusher.Flush()
 		}
 	}
@@ -258,6 +258,6 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 
 func writeSSE(w http.ResponseWriter, f http.Flusher, ev any) {
 	data, _ := json.Marshal(ev)
-	w.Write(append(append([]byte("data: "), data...), '\n', '\n'))
+	_, _ = w.Write(append(append([]byte("data: "), data...), '\n', '\n'))
 	f.Flush()
 }

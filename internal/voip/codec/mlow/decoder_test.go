@@ -44,14 +44,14 @@ func TestE2EDecodeMatchesUseSmpl(t *testing.T) {
 
 	n := len(refp)
 	var mr, mo float64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		mr += refp[i]
 		mo += out[i]
 	}
 	mr /= float64(n)
 	mo /= float64(n)
 	var sxy, sxx, syy float64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dr := refp[i] - mr
 		dz := out[i] - mo
 		sxy += dr * dz
