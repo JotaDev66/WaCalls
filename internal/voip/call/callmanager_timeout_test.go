@@ -16,6 +16,12 @@ func watchdogCM(t Timeouts) *CallManager {
 	return m
 }
 
+func stateOf(m *CallManager) (core.CallState, core.EndCallReason) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.currentCall.StateData.State, m.currentCall.StateData.EndReason
+}
+
 func TestWatchdogExpiresUnansweredOutgoing(t *testing.T) {
 	m := watchdogCM(Timeouts{Answer: 30 * time.Millisecond})
 	ended := make(chan *CallInfo, 1)
@@ -45,8 +51,8 @@ func TestWatchdogExpiresStuckConnecting(t *testing.T) {
 	}
 	m.startWatchdog()
 
-	waitFor(t, 2*time.Second, func() bool { return m.CurrentCall().IsEnded() })
-	if r := m.CurrentCall().StateData.EndReason; r != core.EndCallReasonTimeout {
+	waitFor(t, 2*time.Second, func() bool { s, _ := stateOf(m); return s == core.CallStateEnded })
+	if _, r := stateOf(m); r != core.EndCallReasonTimeout {
 		t.Fatalf("expected timeout reason, got %s", r)
 	}
 }
@@ -63,8 +69,8 @@ func TestWatchdogDoesNotKillHealthyCall(t *testing.T) {
 	m.startWatchdog()
 
 	time.Sleep(80 * time.Millisecond)
-	if !m.CurrentCall().IsActive() {
-		t.Fatalf("active call must survive ring/answer deadlines, got %s", m.CurrentCall().StateData.State)
+	if s, _ := stateOf(m); s != core.CallStateActive {
+		t.Fatalf("active call must survive ring/answer deadlines, got %s", s)
 	}
 	_ = m.EndCall(context.Background(), core.EndCallReasonUserEnded)
 }
@@ -76,8 +82,8 @@ func TestWatchdogCapsActiveCallDuration(t *testing.T) {
 	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionMediaConnected})
 	m.startWatchdog()
 
-	waitFor(t, 2*time.Second, func() bool { return m.CurrentCall().IsEnded() })
-	if r := m.CurrentCall().StateData.EndReason; r != core.EndCallReasonTimeout {
+	waitFor(t, 2*time.Second, func() bool { s, _ := stateOf(m); return s == core.CallStateEnded })
+	if _, r := stateOf(m); r != core.EndCallReasonTimeout {
 		t.Fatalf("expected timeout reason, got %s", r)
 	}
 }
@@ -90,6 +96,6 @@ func TestWatchdogGoroutineStopsAfterEnd(t *testing.T) {
 	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionOfferSent})
 	m.startWatchdog()
 
-	waitFor(t, 2*time.Second, func() bool { return m.CurrentCall().IsEnded() })
+	waitFor(t, 2*time.Second, func() bool { s, _ := stateOf(m); return s == core.CallStateEnded })
 	waitFor(t, 2*time.Second, func() bool { return obs.gorNow() == 0 })
 }
