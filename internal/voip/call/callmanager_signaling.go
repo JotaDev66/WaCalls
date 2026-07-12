@@ -227,6 +227,61 @@ func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.No
 	m.connectRelays(relays)
 }
 
+func (m *CallManager) HandleCallRelayLatency(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
+	m.mu.Lock()
+	call := m.currentCall
+	m.mu.Unlock()
+	if call == nil {
+		return
+	}
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil || len(call.RelayData.Endpoints) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			call.RelayData = &core.RelayData{
+				Endpoints: parsed.Relays, ParticipantJids: parsed.ParticipantJids,
+				UUID: parsed.UUID, SelfPid: parsed.SelfPid, PeerPid: parsed.PeerPid, HbhKey: parsed.HbhKey,
+			}
+			m.log.Info("relay data harvested from relaylatency", "call_id", call.CallID, "relays", len(parsed.Relays))
+		}
+	}
+	incoming := call.Direction == core.CallDirectionIncoming
+	creator := call.CallCreator
+	callID := call.CallID
+	m.mu.Unlock()
+	if !incoming {
+		return
+	}
+	creatorJid := wanode.MustJID(creator)
+	echoed := 0
+	for _, te := range wanode.NodeChildren(info.InnerNode) {
+		if te.Tag != "te" {
+			continue
+		}
+		relayName := wanode.AttrString(te.Attrs, "relay_name")
+		if relayName == "" {
+			continue
+		}
+		entry := signaling.RelayLatencyEntry{
+			RelayName:    relayName,
+			Latency:      signaling.DecodeLatency(wanode.AttrString(te.Attrs, "latency")),
+			AddressBytes: wanode.NodeBytes(&te),
+		}
+		echo := signaling.BuildRelayLatencyStanza(peerJid, callID, creatorJid, []signaling.RelayLatencyEntry{entry}, nil)
+		if err := m.sock.SendNode(ctx, echo); err != nil {
+			m.log.Debug("relaylatency echo send failed", "call_id", callID, "err", err)
+			return
+		}
+		echoed++
+	}
+	if echoed > 0 {
+		m.log.Info("relaylatency probes echoed", "call_id", callID, "probes", echoed)
+	}
+}
+
 func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
 	if t := wanode.AttrString(node.Attrs, "type"); t != "offer" {
 		return
