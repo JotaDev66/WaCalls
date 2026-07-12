@@ -83,7 +83,7 @@ func TestBroadcastKicksLaggingSubscriber(t *testing.T) {
 	sub := b.subscribe("slow")
 	defer b.unsubscribe(sub)
 
-	for i := 0; i < 33; i++ {
+	for i := range 33 {
 		b.broadcast(map[string]any{"type": "call-list", "n": i})
 	}
 
