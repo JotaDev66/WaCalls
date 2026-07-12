@@ -27,3 +27,20 @@ type SessionStore interface {
 	SetJID(ctx context.Context, id, jid string) error
 	Delete(ctx context.Context, id string) error
 }
+
+type CallRecord struct {
+	CallID    string
+	SessionID string
+	Owner     *string
+	Direction string
+	Peer      string
+	StartedAt int64
+	EndedAt   int64
+	EndReason string
+}
+
+type CallRecordStore interface {
+	Insert(ctx context.Context, r CallRecord) error
+	List(ctx context.Context, sessionID string, limit int) ([]CallRecord, error)
+	Prune(ctx context.Context, keep int) error
+}
