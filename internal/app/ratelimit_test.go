@@ -10,8 +10,10 @@ import (
 
 func TestIPRateLimiterBurstAndDeny(t *testing.T) {
 	l := newIPRateLimiter(1)
-	if !l.allow("10.0.0.1:1234") || !l.allow("10.0.0.1:1234") {
-		t.Fatal("burst requests should be allowed")
+	for i := range 2 {
+		if !l.allow("10.0.0.1:1234") {
+			t.Fatalf("burst request %d should be allowed", i)
+		}
 	}
 	if l.allow("10.0.0.1:1234") {
 		t.Fatal("request beyond burst should be denied")

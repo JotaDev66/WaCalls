@@ -28,10 +28,7 @@ type ipRateLimiter struct {
 }
 
 func newIPRateLimiter(rps float64) *ipRateLimiter {
-	burst := int(2 * rps)
-	if burst < 1 {
-		burst = 1
-	}
+	burst := max(1, int(2*rps))
 	return &ipRateLimiter{
 		perIP: map[string]*ipLimiterEntry{},
 		rps:   rate.Limit(rps),
