@@ -281,8 +281,10 @@ cd client && npm run build    # client type-check + production build
 Set `WACALLS_API_TOKEN` to require a bearer token on every `/api` and `/debug` route;
 leave it empty to disable auth (trusted LAN only). Clients send it as
 `Authorization: Bearer <token>`; the SSE stream (`/api/events`) takes it as a
-`?access_token=<token>` query parameter. `wacalls.db` holds WhatsApp session
-credentials (secrets): **do not commit it** and keep it protected.
+`?access_token=<token>` query parameter. Set `WACALLS_CORS_ORIGINS` to a comma-separated
+list of browser origins when the web client is served from a different origin than the
+API; empty means same-origin only. `wacalls.db` holds WhatsApp session credentials
+(secrets): **do not commit it** and keep it protected.
 
 ---
 
