@@ -30,6 +30,8 @@ packetization, **STUN**, the **WebRTC/SCTP relay** transport and the `<call>` si
 integrated with [**whatsmeow**](https://github.com/tulir/whatsmeow) and served to a
 **React 19** client. There is **no cgo and no native DLL** — the MLow codec is a vendored
 pure-Go package, so a plain `go build` produces a self-contained binary with live audio.
+Peers whose clients lack MLow fall back to standard Opus on the receive path, decoded in
+pure Go via [pion/opus](https://github.com/pion/opus).
 
 Multiple WhatsApp accounts can be paired and operated side by side, each with its own
 pairing QR, connection status, and history. A single account can also run **several
@@ -75,7 +77,8 @@ concurrent 1:1 calls** at once — one per browser operator — routed independe
 | `internal/wa` | `VoipSocket` — sends/receives `<call>` stanzas via whatsmeow |
 | `internal/voip/core` | Domain types, constants, the `VoipSocket` interface |
 | `internal/voip/wanode` | Shared WhatsApp-node and JID helpers |
-| `internal/voip/media` | MLow codec (vendored pure-Go `mlow/`), RTP, SRTP, SSRC, PCM helpers, key derivation |
+| `internal/voip/codec` | Audio codecs: vendored pure-Go MLow (`mlow/`) and the standard-Opus recv fallback (`opus/`) |
+| `internal/voip/media` | RTP, SRTP, SSRC, PCM helpers, key derivation |
 | `internal/voip/transport` | SCTP relay, STUN, subscription encoding |
 | `internal/voip/signaling` | `<call>` stanza build/parse, call-key crypto, relay-ack parsing |
 | `internal/voip/call` | `CallManager` — orchestrates a single call end to end |
@@ -103,7 +106,7 @@ call sequence:
 
 5. SRTP media flowing        → state goes ACTIVE
    ├── uplink   (you → peer): browser 16 kHz PCM (data channel) → MLow encode → SRTP → relay
-   └── downlink (peer → you): relay → SRTP → MLow decode → 16 kHz PCM (data channel) → browser
+   └── downlink (peer → you): relay → SRTP → MLow decode (or standard Opus for peers without MLow) → 16 kHz PCM (data channel) → browser
 
 6. Teardown                  → DELETE .../calls/{id} or events.CallTerminate
                                CallManager.EndCall + bridge cleanup
@@ -121,7 +124,7 @@ by tests in `internal/voip` (`go test ./...`).
 - **Node 22+** and **npm** (only to build/run the React client)
 
 No C compiler, cgo, or native libraries are required — the MLow codec is vendored
-pure Go (`internal/voip/media/mlow`).
+pure Go (`internal/voip/codec/mlow`).
 
 ---
 
@@ -319,7 +322,8 @@ This project builds on the work of:
 
 - [**whatsmeow**](https://github.com/tulir/whatsmeow) — Go WhatsApp Web protocol library
 - [**pion/webrtc**](https://github.com/pion/webrtc) — pure-Go WebRTC stack (ICE + DTLS + SCTP)
-- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) — reference MLow codec implementation (ported to the vendored pure-Go `internal/voip/media/mlow`)
+- [**pion/opus**](https://github.com/pion/opus) — pure-Go Opus decoder (standard-Opus receive fallback)
+- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) — reference MLow codec implementation (ported to the vendored pure-Go `internal/voip/codec/mlow`)
 - [**meowcaller**](https://github.com/purpshell/meowcaller) — WhatsApp VoIP calling engine reference
 - [**zapo**](https://github.com/w3nder/zapo) — VoIP media-stack reference
 
