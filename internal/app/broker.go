@@ -291,7 +291,7 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 	}
 	writeSSE(w, flusher, map[string]any{"type": "call-list", "calls": b.callList()})
 
-	keepalive := time.NewTicker(20 * time.Second)
+	keepalive := time.NewTicker(10 * time.Second)
 	defer keepalive.Stop()
 
 	for {

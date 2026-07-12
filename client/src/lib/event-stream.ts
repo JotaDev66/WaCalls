@@ -29,9 +29,9 @@ type StatusListener = (connected: boolean) => void;
 
 const reconnectDelayMs = 3_000;
 const livenessCheckMs = 10_000;
-// The server emits a ping event every 20s; two missed pings mean the socket is dead
+// The server emits a ping event every 10s; two missed pings mean the socket is dead
 // even if the browser (or a proxy in between) still thinks it is open.
-const staleAfterMs = 45_000;
+const staleAfterMs = 25_000;
 
 class EventStream {
   #es: EventSource | null = null;
