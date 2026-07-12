@@ -3,8 +3,11 @@ package app
 import (
 	"context"
 	"log/slog"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"wacalls/internal/voip/core"
 )
@@ -72,6 +75,44 @@ func TestEndCallPersistsRecord(t *testing.T) {
 	rows, err := b.historyRows(context.Background(), "s1", 10)
 	if err != nil || len(rows) != 1 || rows[0].Status != StatusEnded || rows[0].CallID != "c1" {
 		t.Fatalf("history must read from the store, got %+v err %v", rows, err)
+	}
+}
+
+func TestBroadcastKicksLaggingSubscriber(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	sub := b.subscribe("slow")
+	defer b.unsubscribe(sub)
+
+	for i := range 33 {
+		b.broadcast(map[string]any{"type": "call-list", "n": i})
+	}
+
+	select {
+	case <-sub.kick:
+	default:
+		t.Fatal("lagging subscriber must be kicked after buffer overflow")
+	}
+}
+
+func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	b.SnapshotFn = func() []any {
+		return []any{map[string]any{"type": "session-list", "sessions": []SessionInfo{}}}
+	}
+	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	r := httptest.NewRequest("GET", "/api/events", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	b.serveSSE(rec, r, "test-client")
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `"session-list"`) {
+		t.Fatalf("snapshot must include session-list, got %q", body)
+	}
+	if !strings.Contains(body, `"call-list"`) || !strings.Contains(body, `"c1"`) {
+		t.Fatalf("snapshot must include the live call list, got %q", body)
 	}
 }
 
