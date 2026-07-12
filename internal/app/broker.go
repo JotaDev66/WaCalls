@@ -306,8 +306,9 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 			}
 			flusher.Flush()
 		case <-keepalive.C:
-			_, _ = w.Write([]byte(": ping\n\n"))
-			flusher.Flush()
+			// A data event instead of an SSE comment so the client can track
+			// stream liveness and force a reconnect when pings stop arriving.
+			writeSSE(w, flusher, map[string]any{"type": "ping"})
 		}
 	}
 }
