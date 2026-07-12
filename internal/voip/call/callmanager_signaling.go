@@ -182,17 +182,49 @@ func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.No
 		return
 	}
 	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
-	m.log.Info("call transport received", "call_id", call.CallID,
-		"relays", len(relays), "already_connected", m.relay.HasConnection())
-	if len(relays) > 0 && !m.relay.HasConnection() {
-		m.mu.Lock()
-		if call.RelayData == nil {
-			call.RelayData = &core.RelayData{}
+	var structured *signaling.ParsedRelayAck
+	if len(relays) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			relays = parsed.Relays
+			structured = &parsed
+			m.log.Info("transport relays parsed via structured (te2) format", "call_id", call.CallID, "relays", len(relays))
 		}
-		call.RelayData.Endpoints = relays
-		m.mu.Unlock()
-		m.connectRelays(relays)
 	}
+	m.log.Info("call transport received", "call_id", call.CallID,
+		"relays", len(relays), "already_connected", m.relay.HasConnection(),
+		"type", wanode.AttrString(info.InnerNode.Attrs, "transport-message-type"),
+		"children", childTagSummary(info.InnerNode))
+	if len(relays) == 0 || m.relay.HasConnection() {
+		return
+	}
+	if len(buildRelayConfigs(relays)) == 0 {
+		m.log.Warn("transport relays not dialable; keeping stored endpoints", "call_id", call.CallID)
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil {
+		call.RelayData = &core.RelayData{}
+	}
+	call.RelayData.Endpoints = relays
+	if structured != nil {
+		if call.RelayData.HbhKey == nil {
+			call.RelayData.HbhKey = structured.HbhKey
+		}
+		if len(call.RelayData.ParticipantJids) == 0 {
+			call.RelayData.ParticipantJids = structured.ParticipantJids
+		}
+		if call.RelayData.UUID == "" {
+			call.RelayData.UUID = structured.UUID
+		}
+		if call.RelayData.SelfPid == nil {
+			call.RelayData.SelfPid = structured.SelfPid
+		}
+		if call.RelayData.PeerPid == nil {
+			call.RelayData.PeerPid = structured.PeerPid
+		}
+	}
+	m.mu.Unlock()
+	m.connectRelays(relays)
 }
 
 func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
