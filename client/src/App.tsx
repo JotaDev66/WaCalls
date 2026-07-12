@@ -10,6 +10,7 @@ import { IncomingCallModal } from "@/components/domain/call/IncomingCallModal";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ensureSessionsWired, useSessions } from "@/stores/sessions";
 import { ensureCallsWired } from "@/stores/calls";
+import { ensureConnectionWired } from "@/stores/connection";
 import { useTheme } from "@/stores/theme";
 import { setOnUnauthorized } from "@/lib/api";
 import { promptForToken } from "@/stores/auth";
@@ -22,6 +23,7 @@ export const App = () => {
 
   useEffect(() => {
     setOnUnauthorized(promptForToken);
+    ensureConnectionWired();
     ensureSessionsWired();
     ensureCallsWired();
   }, []);

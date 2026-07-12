@@ -25,28 +25,40 @@ export type BrokerEvent =
   | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };
 
 type Listener = (ev: BrokerEvent) => void;
+type StatusListener = (connected: boolean) => void;
 
 class EventStream {
   #es: EventSource | null = null;
   #listeners = new Set<Listener>();
+  #statusListeners = new Set<StatusListener>();
 
   connect(clientId: string): void {
     if (this.#es) return;
     const token = getToken();
     const auth = token ? `&access_token=${encodeURIComponent(token)}` : "";
     this.#es = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}${auth}`);
+    this.#es.onopen = () => this.#emitStatus(true);
     this.#es.onmessage = (ev) => {
       try {
         const parsed: BrokerEvent = JSON.parse(ev.data);
         for (const l of this.#listeners) l(parsed);
       } catch {}
     };
-    this.#es.onerror = () => {};
+    this.#es.onerror = () => this.#emitStatus(false);
+  }
+
+  #emitStatus(connected: boolean): void {
+    for (const l of this.#statusListeners) l(connected);
   }
 
   on(l: Listener): () => void {
     this.#listeners.add(l);
     return () => this.#listeners.delete(l);
+  }
+
+  onStatus(l: StatusListener): () => void {
+    this.#statusListeners.add(l);
+    return () => this.#statusListeners.delete(l);
   }
 
   close(): void {

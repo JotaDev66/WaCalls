@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
+import { ConnectionBanner } from "@/components/shared/ConnectionBanner";
 
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -30,6 +31,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         </div>
         <ThemeToggle />
       </header>
+      <ConnectionBanner />
       <div className="flex flex-1">
         <aside className="hidden w-64 shrink-0 border-r md:block">
           <Sidebar />
