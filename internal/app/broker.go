@@ -16,10 +16,11 @@ const historyCap = 10000
 type CallStatus string
 
 const (
-	StatusStarting  CallStatus = "starting"
-	StatusRinging   CallStatus = "ringing"
-	StatusConnected CallStatus = "connected"
-	StatusEnded     CallStatus = "ended"
+	StatusStarting     CallStatus = "starting"
+	StatusRinging      CallStatus = "ringing"
+	StatusConnected    CallStatus = "connected"
+	StatusReconnecting CallStatus = "reconnecting"
+	StatusEnded        CallStatus = "ended"
 )
 
 type CallRecord struct {
