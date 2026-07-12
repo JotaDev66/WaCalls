@@ -176,6 +176,13 @@ func IsRtpPacket(data []byte) bool {
 	return data[0]&0xc0 == 0x80
 }
 
+func IsRtcpPacket(data []byte) bool {
+	if len(data) < 2 {
+		return false
+	}
+	return data[0] == 0x80 || data[0] == 0x81
+}
+
 type StunAttribute struct {
 	Type     int
 	TypeName string

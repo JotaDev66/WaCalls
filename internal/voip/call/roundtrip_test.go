@@ -181,3 +181,35 @@ func TestStandardOpusRoundtripThroughEngine(t *testing.T) {
 		t.Fatalf("rms %.5f, want > 0.01: standard-opus frame must arrive as audio, not silence", rms)
 	}
 }
+
+func TestInboundRtcpNotTreatedAsAudio(t *testing.T) {
+	k1, k2 := km(1), km(9)
+	recvCodec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
+	if err != nil {
+		t.Fatalf("recv codec: %v", err)
+	}
+	recv := NewCallManager(fakeSock{}, slog.Default(), audio.New(opus.WithFallback(recvCodec)))
+	recv.relay = &fakeRelay{}
+	recv.srtp = engine.NewSrtpManager(k2, k1, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+	recv.selfSsrc = 2000
+	recv.currentCall = NewIncomingCall("c1", "peer@lid", "creator@lid", "", core.CallMediaTypeAudio)
+	var got []float32
+	recv.OnPeerAudio = func(pcm []float32) { got = pcm }
+	recv.ensureExtensionsAttachedLocked("our.0", "peer.0")
+	defer recv.cleanupMedia()
+
+	// RTCP framing (first byte 0x80) with a second byte 0xF8 whose masked PT
+	// (0xF8 & 0x7f = 120) collides with the audio payload type. Before the fix
+	// this reached the RTP path and mutated peer subscription state.
+	pkt := make([]byte, 28)
+	pkt[0] = 0x80
+	pkt[1] = 0xF8
+	recv.onRelayData(pkt)
+
+	if recv.actualPeerSet {
+		t.Fatal("inbound rtcp must not set peer subscription state")
+	}
+	if got != nil {
+		t.Fatal("inbound rtcp must not be delivered as audio")
+	}
+}
