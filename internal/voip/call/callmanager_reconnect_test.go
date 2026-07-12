@@ -2,10 +2,12 @@ package call
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/transport"
 )
 
 func activeCall() *CallInfo {
@@ -104,5 +106,62 @@ func TestTerminateDuringReconnectingKeepsDuration(t *testing.T) {
 	}
 	if c.StateData.DurationSecs < 89 {
 		t.Fatalf("terminate during reconnecting must keep duration, got %d", c.StateData.DurationSecs)
+	}
+}
+
+func TestUsableZeroMovesActiveToReconnectingAndRedials(t *testing.T) {
+	configured := make(chan int, 1)
+	m := NewCallManager(fakeSock{}, slog.Default())
+	m.relay = &fakeRelay{onConfigure: func(r []transport.RelayConfig) { configured <- len(r) }}
+	m.currentCall = activeCall()
+	m.currentCall.RelayData = &core.RelayData{Endpoints: []core.RelayEndpoint{{
+		IP: "9.9.9.9", Port: 3480, Key: "k", RawToken: []byte{1}, Protocol: 0,
+	}}}
+
+	m.onRelayUsableChange(0)
+
+	if s, _ := stateOf(m); s != core.CallStateReconnecting {
+		t.Fatalf("expected reconnecting, got %s", s)
+	}
+	select {
+	case n := <-configured:
+		if n != 1 {
+			t.Fatalf("expected 1 relay config redialed, got %d", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("redial was not attempted")
+	}
+}
+
+func TestUsablePositiveRestoresActive(t *testing.T) {
+	m := NewCallManager(fakeSock{}, slog.Default())
+	m.relay = &fakeRelay{}
+	m.currentCall = activeCall()
+	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionMediaLost})
+
+	m.onRelayUsableChange(1)
+
+	if s, _ := stateOf(m); s != core.CallStateActive {
+		t.Fatalf("expected active after restore, got %s", s)
+	}
+	if m.currentCall.StateData.MediaLostAt != nil {
+		t.Fatal("MediaLostAt must be cleared")
+	}
+}
+
+func TestUsableChangeNoopOutsideActiveOrReconnecting(t *testing.T) {
+	m := NewCallManager(fakeSock{}, slog.Default())
+	m.relay = &fakeRelay{}
+	m.onRelayUsableChange(0)
+
+	m.currentCall = NewIncomingCall("c1", "peer@lid", "creator@lid", "", core.CallMediaTypeAudio)
+	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionLocalAccepted})
+	m.onRelayUsableChange(0)
+	if s, _ := stateOf(m); s != core.CallStateConnecting {
+		t.Fatalf("connecting call must not react to usable=0, got %s", s)
+	}
+	m.onRelayUsableChange(1)
+	if s, _ := stateOf(m); s != core.CallStateConnecting {
+		t.Fatalf("connecting call must not react to usable=1, got %s", s)
 	}
 }

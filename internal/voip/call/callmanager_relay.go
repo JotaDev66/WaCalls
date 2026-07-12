@@ -15,6 +15,7 @@ type RelayTransport interface {
 	SetStreamSsrcs(selfSsrcs, peerSsrcs []uint32)
 	SetOnConnected(fn func(ip string, port int))
 	SetOnReceive(fn func(data []byte))
+	SetOnUsableChange(fn func(usable int))
 	SetObserver(o core.CallObserver)
 	ResendSubscriptions()
 	ConfigureRelays(relays []transport.RelayConfig)
@@ -37,6 +38,43 @@ func (m *CallManager) onRelayConnected() {
 		}
 	}
 	m.mu.Unlock()
+}
+
+func (m *CallManager) onRelayUsableChange(usable int) {
+	if usable > 0 {
+		m.mu.Lock()
+		call := m.currentCall
+		if call != nil && call.StateData.State == core.CallStateReconnecting {
+			if err := call.ApplyTransition(Transition{Type: TransitionMediaRestored}); err == nil {
+				m.emitState()
+				m.log.Info("media path restored", "call_id", call.CallID)
+			}
+		}
+		m.mu.Unlock()
+		return
+	}
+
+	m.mu.Lock()
+	call := m.currentCall
+	var endpoints []core.RelayEndpoint
+	if call != nil && call.StateData.State == core.CallStateActive {
+		if err := call.ApplyTransition(Transition{Type: TransitionMediaLost}); err == nil {
+			m.emitState()
+			if call.RelayData != nil {
+				endpoints = call.RelayData.Endpoints
+			}
+			m.log.Warn("media path lost; waiting for recovery", "call_id", call.CallID)
+		}
+	}
+	m.mu.Unlock()
+
+	if len(endpoints) > 0 {
+		redialDone := m.observer.TrackGoroutine()
+		go func() {
+			defer redialDone()
+			m.connectRelays(endpoints)
+		}()
+	}
 }
 
 func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {

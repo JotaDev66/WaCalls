@@ -72,6 +72,7 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 	relay := transport.NewSctpRelayManager(log)
 	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected() })
 	relay.SetOnReceive(func(data []byte) { m.onRelayData(data) })
+	relay.SetOnUsableChange(func(usable int) { m.onRelayUsableChange(usable) })
 	m.relay = relay
 	return m
 }
