@@ -43,7 +43,7 @@ type Server struct {
 
 func parseOrigins(raw string) map[string]struct{} {
 	set := map[string]struct{}{}
-	for _, o := range strings.Split(raw, ",") {
+	for o := range strings.SplitSeq(raw, ",") {
 		if o = strings.TrimSpace(o); o != "" {
 			set[o] = struct{}{}
 		}
