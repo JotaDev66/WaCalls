@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"wacalls/internal/store"
@@ -14,16 +15,43 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-type Server struct {
-	broker    *Broker
-	sessions  *SessionManager
-	log       *slog.Logger
-	staticDir string
-	debug     bool
-	authorize func(*http.Request) bool
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 15 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       idleTimeout,
+	}
 }
 
-func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, apiToken string, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+type Server struct {
+	broker         *Broker
+	sessions       *SessionManager
+	log            *slog.Logger
+	staticDir      string
+	debug          bool
+	authorize      func(*http.Request) bool
+	allowedOrigins map[string]struct{}
+}
+
+func parseOrigins(raw string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for o := range strings.SplitSeq(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			set[o] = struct{}{}
+		}
+	}
+	return set
+}
+
+func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, apiToken string, corsOrigins string, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
 	bundle, err := store.Open(ctx, storeCfg)
 	if err != nil {
 		return nil, err
@@ -38,7 +66,15 @@ func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, max
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, debug: debug, authorize: bearerAuthorizer(apiToken)}, nil
+	return &Server{
+		broker:         broker,
+		sessions:       mgr,
+		log:            log,
+		staticDir:      staticDir,
+		debug:          debug,
+		authorize:      bearerAuthorizer(apiToken),
+		allowedOrigins: parseOrigins(corsOrigins),
+	}, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
@@ -46,7 +82,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	if err := s.sessions.Restore(ctx); err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Addr: addr, Handler: s.routes()}
+	httpSrv := newHTTPServer(addr, s.routes())
 	go func() {
 		s.log.Info("HTTP server listening", "addr", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
