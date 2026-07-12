@@ -134,7 +134,7 @@ func TestUsableZeroMovesActiveToReconnectingAndRedials(t *testing.T) {
 	}
 }
 
-func TestUsablePositiveRestoresActive(t *testing.T) {
+func TestUsablePositiveKeepsReconnectingUntilMedia(t *testing.T) {
 	m := NewCallManager(fakeSock{}, slog.Default())
 	m.relay = &fakeRelay{}
 	m.currentCall = activeCall()
@@ -142,12 +142,69 @@ func TestUsablePositiveRestoresActive(t *testing.T) {
 
 	m.onRelayUsableChange(1)
 
+	if s, _ := stateOf(m); s != core.CallStateReconnecting {
+		t.Fatalf("transport recovery alone must not leave reconnecting, got %s", s)
+	}
+}
+
+func TestInboundMediaRestoresActive(t *testing.T) {
+	m := NewCallManager(fakeSock{}, slog.Default())
+	m.relay = &fakeRelay{}
+	m.selfSsrc = 1000
+	m.currentCall = activeCall()
+	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionMediaLost})
+
+	pkt := make([]byte, 12)
+	pkt[0] = 0x80
+	pkt[1] = 120
+	pkt[11] = 0xD0
+	m.onRelayData(pkt)
+
 	if s, _ := stateOf(m); s != core.CallStateActive {
-		t.Fatalf("expected active after restore, got %s", s)
+		t.Fatalf("inbound peer media must restore active, got %s", s)
 	}
 	if m.currentCall.StateData.MediaLostAt != nil {
 		t.Fatal("MediaLostAt must be cleared")
 	}
+}
+
+func TestWatchdogRecyclesOnMediaInactivity(t *testing.T) {
+	dropped := make(chan struct{}, 1)
+	configured := make(chan int, 1)
+	m := watchdogCM(Timeouts{MediaInactivity: 30 * time.Millisecond, ReconnectGrace: 10 * time.Second})
+	m.relay = &fakeRelay{
+		onDrop: func() {
+			select {
+			case dropped <- struct{}{}:
+			default:
+			}
+		},
+		onConfigure: func(r []transport.RelayConfig) {
+			select {
+			case configured <- len(r):
+			default:
+			}
+		},
+	}
+	m.currentCall = activeCall()
+	m.currentCall.RelayData = &core.RelayData{Endpoints: []core.RelayEndpoint{{
+		IP: "9.9.9.9", Port: 3480, Key: "k", RawToken: []byte{1}, Protocol: 0,
+	}}}
+	m.lastMediaRecv.Store(time.Now().Add(-time.Second).UnixMilli())
+	m.startWatchdog()
+
+	waitFor(t, 2*time.Second, func() bool { s, _ := stateOf(m); return s == core.CallStateReconnecting })
+	select {
+	case <-dropped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stale media must drop the surviving relay connections")
+	}
+	select {
+	case <-configured:
+	case <-time.After(2 * time.Second):
+		t.Fatal("recycle must redial the stored endpoints")
+	}
+	_ = m.EndCall(context.Background(), core.EndCallReasonUserEnded)
 }
 
 func TestMediaRestoredNotifiesPeerTransport(t *testing.T) {

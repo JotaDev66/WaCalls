@@ -22,6 +22,7 @@ type RelayTransport interface {
 	SetObserver(o core.CallObserver)
 	ResendSubscriptions()
 	ConfigureRelays(relays []transport.RelayConfig)
+	DropConnections()
 	Broadcast(data []byte)
 	BufferedAmount() uint64
 	HasConnection() bool
@@ -47,21 +48,17 @@ func (m *CallManager) onRelayUsableChange(usable int) {
 	if usable > 0 {
 		m.mu.Lock()
 		call := m.currentCall
-		restored := false
+		reconnecting := call != nil && call.StateData.State == core.CallStateReconnecting
 		var peer, creator types.JID
 		callID := ""
-		if call != nil && call.StateData.State == core.CallStateReconnecting {
-			if err := call.ApplyTransition(Transition{Type: TransitionMediaRestored}); err == nil {
-				m.emitState()
-				m.log.Info("media path restored", "call_id", call.CallID)
-				restored = true
-				peer = wanode.MustJID(call.PeerJid)
-				creator = wanode.MustJID(call.CallCreator)
-				callID = call.CallID
-			}
+		if reconnecting {
+			peer = wanode.MustJID(call.PeerJid)
+			creator = wanode.MustJID(call.CallCreator)
+			callID = call.CallID
+			m.log.Info("relay transport recovered; waiting for peer media", "call_id", callID)
 		}
 		m.mu.Unlock()
-		if restored {
+		if reconnecting {
 			m.relay.ResendSubscriptions()
 			notifyDone := m.observer.TrackGoroutine()
 			go func() {
@@ -86,6 +83,35 @@ func (m *CallManager) onRelayUsableChange(usable int) {
 	}
 	m.mu.Unlock()
 
+	if len(endpoints) > 0 {
+		redialDone := m.observer.TrackGoroutine()
+		go func() {
+			defer redialDone()
+			m.connectRelays(endpoints)
+		}()
+	}
+}
+
+func (m *CallManager) forceMediaLost() {
+	m.mu.Lock()
+	call := m.currentCall
+	var endpoints []core.RelayEndpoint
+	lost := false
+	if call != nil && call.StateData.State == core.CallStateActive {
+		if err := call.ApplyTransition(Transition{Type: TransitionMediaLost}); err == nil {
+			m.emitState()
+			lost = true
+			if call.RelayData != nil {
+				endpoints = call.RelayData.Endpoints
+			}
+			m.log.Warn("media inactivity; recycling relay connections", "call_id", call.CallID)
+		}
+	}
+	m.mu.Unlock()
+	if !lost {
+		return
+	}
+	m.relay.DropConnections()
 	if len(endpoints) > 0 {
 		redialDone := m.observer.TrackGoroutine()
 		go func() {
@@ -156,6 +182,7 @@ func (m *CallManager) cleanupMedia() {
 	m.outgoingPreacceptSent = false
 	m.actualPeerSet = false
 	m.extAttached = false
+	m.lastMediaRecv.Store(0)
 	if m.watchdogStop != nil {
 		close(m.watchdogStop)
 		m.watchdogStop = nil

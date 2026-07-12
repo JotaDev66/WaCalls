@@ -54,6 +54,7 @@ func (fakeSock) ResolveLIDForPN(ctx context.Context, pn types.JID) types.JID {
 type fakeRelay struct {
 	onData      func([]byte)
 	onConfigure func([]transport.RelayConfig)
+	onDrop      func()
 }
 
 var _ RelayTransport = (*fakeRelay)(nil)
@@ -74,6 +75,11 @@ func (r *fakeRelay) ResendSubscriptions()              {}
 func (r *fakeRelay) ConfigureRelays(relays []transport.RelayConfig) {
 	if r.onConfigure != nil {
 		r.onConfigure(relays)
+	}
+}
+func (r *fakeRelay) DropConnections() {
+	if r.onDrop != nil {
+		r.onDrop()
 	}
 }
 func (r *fakeRelay) BufferedAmount() uint64        { return 0 }

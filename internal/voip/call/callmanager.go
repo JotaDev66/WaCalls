@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"wacalls/internal/voip/core"
@@ -38,9 +39,10 @@ type CallManager struct {
 	acceptedByJid         string
 	debeEnabled           bool
 
-	timeouts     Timeouts
-	watchdogTick time.Duration
-	watchdogStop chan struct{}
+	timeouts      Timeouts
+	watchdogTick  time.Duration
+	watchdogStop  chan struct{}
+	lastMediaRecv atomic.Int64
 
 	extensions   []engine.Extension
 	extMu        sync.Mutex

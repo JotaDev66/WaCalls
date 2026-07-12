@@ -594,6 +594,20 @@ func (m *SctpRelayManager) teardown(conn *relayConnection) {
 	})
 }
 
+func (m *SctpRelayManager) DropConnections() {
+	m.mu.Lock()
+	conns := make([]*relayConnection, 0, len(m.connections))
+	for _, c := range m.connections {
+		conns = append(conns, c)
+	}
+	m.connections = map[string]*relayConnection{}
+	m.mu.Unlock()
+	for _, c := range conns {
+		m.teardown(c)
+	}
+	m.recomputeHealth()
+}
+
 func (m *SctpRelayManager) Cleanup() {
 	m.mu.Lock()
 	conns := make([]*relayConnection, 0, len(m.connections))

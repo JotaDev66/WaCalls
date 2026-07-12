@@ -84,6 +84,31 @@ func TestIceFailedStillTearsDown(t *testing.T) {
 	}
 }
 
+func TestDropConnectionsTearsDownButKeepsIdentity(t *testing.T) {
+	m := NewSctpRelayManager(nil)
+	rec := &usableRecorder{}
+	m.SetOnUsableChange(rec.record)
+	m.SetSsrc(42)
+	c1 := addFakeConn(m, "1.1.1.1:3480", 0)
+	c2 := addFakeConn(m, "2.2.2.2:3480", 0)
+	m.recomputeHealth()
+
+	m.DropConnections()
+
+	if m.HasConnection() {
+		t.Fatal("DropConnections must remove every connection")
+	}
+	if !isClosed(c1.stopCh) || !isClosed(c2.stopCh) {
+		t.Fatal("DropConnections must tear each connection down")
+	}
+	if last, ok := rec.last(); !ok || last != 0 {
+		t.Fatalf("expected usable=0 reported, got %v %v", last, ok)
+	}
+	if m.audioSsrc.Load() != 42 {
+		t.Fatal("DropConnections must keep ssrcs for the live call")
+	}
+}
+
 func TestCleanupResetsUsableWithoutCallback(t *testing.T) {
 	m := NewSctpRelayManager(nil)
 	rec := &usableRecorder{}
