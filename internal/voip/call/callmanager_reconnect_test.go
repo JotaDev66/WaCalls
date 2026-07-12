@@ -3,6 +3,7 @@ package call
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
@@ -159,12 +160,7 @@ func TestMediaRestoredNotifiesPeerTransport(t *testing.T) {
 	m.onRelayUsableChange(1)
 
 	waitFor(t, 2*time.Second, func() bool {
-		for _, tag := range sock.sentInnerTags() {
-			if tag == "transport" {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(sock.sentInnerTags(), "transport")
 	})
 }
 
