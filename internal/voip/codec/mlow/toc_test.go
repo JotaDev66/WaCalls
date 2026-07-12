@@ -65,3 +65,25 @@ func TestParseSmplTOC(t *testing.T) {
 		}
 	}
 }
+
+// TestIsStandardOpusFrameBoundary pins the inbound router split exactly as the
+// reference does: every 0xC0..=0xFF byte is stock Opus, and real MLow TOCs
+// (bare frames and the 0x92 SplitRed container) are not.
+// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/main/wacore/src/voip/mlow/mod.rs (opus_split_boundary_table)
+func TestIsStandardOpusFrameBoundary(t *testing.T) {
+	for b := 0xC0; b <= 0xFF; b++ {
+		if !IsStandardOpusFrame(byte(b)) {
+			t.Errorf("0x%02x must be standard opus", b)
+		}
+	}
+	for _, mlowToc := range []byte{0x10, 0x12, 0x50, 0x92} {
+		if IsStandardOpusFrame(mlowToc) {
+			t.Errorf("mlow TOC 0x%02x must not route to standard opus", mlowToc)
+		}
+	}
+	for b := 0; b <= 0xFF; b++ {
+		if IsStandardOpusFrame(byte(b)) != ParseSmplTOC(byte(b)).StdOpus {
+			t.Errorf("0x%02x: IsStandardOpusFrame disagrees with ParseSmplTOC.StdOpus", b)
+		}
+	}
+}

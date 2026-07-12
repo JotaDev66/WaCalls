@@ -2,10 +2,13 @@ package call
 
 import (
 	"context"
+	"encoding/hex"
 	"log/slog"
+	"math"
 	"testing"
 
 	"wacalls/internal/voip/codec/mlow"
+	"wacalls/internal/voip/codec/opus"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
@@ -126,5 +129,55 @@ func TestMediaRoundtripThroughEngine(t *testing.T) {
 
 	if len(got) == 0 {
 		t.Fatal("peer audio was not delivered through the extracted engine path")
+	}
+}
+
+// One real 20 ms CELT-FB mono frame (TOC 0xF8) of a 440 Hz tone, encoded with
+// ffmpeg/libopus; same provenance as the vectors in codec/opus/decoder_test.go.
+const stdOpusFrameHex = "f8b04e7f9fc6d1ed077136f42f3ac682c4f17fde50d7458761fb93aa48ecde8240596372c8ae1d51b1dd0782c428b28459b8fdf58db57179cc2a4a2140ed68513d0b06d9a06c01066356124a46776549897d0d4e9d0b087c292b726822654ddb30e2ce12decc90499e11d89b3cc38bcc8737e75b97591166d6427026673e4744864e0c829faf2cc88a7598590afb45da51b9f3c1187ed6317dd5db1ba38d4fee"
+
+// A peer without MLow sends standard Opus on the same PT 120 stream; the full
+// recv path (RTP parse, SRTP unprotect, extension routing, fallback decode)
+// must deliver audible PCM, not silence.
+func TestStandardOpusRoundtripThroughEngine(t *testing.T) {
+	k1, k2 := km(1), km(9)
+
+	recvCodec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
+	if err != nil {
+		t.Fatalf("recv codec: %v", err)
+	}
+	recv := NewCallManager(fakeSock{}, slog.Default(), audio.New(opus.WithFallback(recvCodec)))
+	recv.relay = &fakeRelay{}
+	recv.srtp = engine.NewSrtpManager(k2, k1, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+	recv.selfSsrc = 2000
+	recv.currentCall = NewIncomingCall("c1", "peer@lid", "creator@lid", "", core.CallMediaTypeAudio)
+	var got []float32
+	recv.OnPeerAudio = func(pcm []float32) { got = pcm }
+	recv.ensureExtensionsAttachedLocked("our.0", "peer.0")
+	defer recv.cleanupMedia()
+
+	send := NewCallManager(fakeSock{}, slog.Default())
+	send.relay = &fakeRelay{onData: recv.onRelayData}
+	send.srtp = engine.NewSrtpManager(k1, k2, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	send.rtpSession = media.NewWhatsAppOpusSession(1000)
+	send.selfSsrc = 1000
+
+	frame, err := hex.DecodeString(stdOpusFrameHex)
+	if err != nil {
+		t.Fatalf("bad vector: %v", err)
+	}
+	if err := send.sendAudioFrame(frame, 320); err != nil {
+		t.Fatalf("sendAudioFrame: %v", err)
+	}
+
+	if len(got) != 320 {
+		t.Fatalf("got %d samples, want 320 (20 ms @ 16 kHz)", len(got))
+	}
+	var sum float64
+	for _, s := range got {
+		sum += float64(s) * float64(s)
+	}
+	if rms := math.Sqrt(sum / float64(len(got))); rms < 0.01 {
+		t.Fatalf("rms %.5f, want > 0.01: standard-opus frame must arrive as audio, not silence", rms)
 	}
 }

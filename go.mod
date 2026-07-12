@@ -6,6 +6,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/ice/v4 v4.2.7
+	github.com/pion/opus v0.1.0
 	github.com/pion/webrtc/v4 v4.2.15
 	github.com/rs/zerolog v1.35.1
 	go.mau.fi/whatsmeow v0.0.0-20260622185415-5f04eac6dbbb

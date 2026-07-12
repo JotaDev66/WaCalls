@@ -40,11 +40,19 @@ func standardOpusFrameMs(b byte) int {
 	}
 }
 
+// IsStandardOpusFrame reports whether the first payload byte is a STANDARD
+// Opus/CELT TOC rather than an MLow smpl TOC; the inbound path routes such
+// frames to a stock Opus decoder.
+// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/main/wacore/src/voip/mlow/mod.rs#L51-L53
+func IsStandardOpusFrame(b byte) bool {
+	return b&0xC0 == 0xC0
+}
+
 // ParseSmplTOC decodes the TOC byte at the head of an inbound MLow frame.
 func ParseSmplTOC(b byte, log ...zerolog.Logger) SmplTOC {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/toc.rs#L43-L87
 	lg := pickLog(log)
-	if b&0xC0 == 0xC0 {
+	if IsStandardOpusFrame(b) {
 		lg.Trace().Uint8("toc_byte", b).Bool("std_opus", true).Msg("parse toc: standard-Opus packet")
 		return SmplTOC{
 			StdOpus:    true,
