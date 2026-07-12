@@ -9,6 +9,7 @@ const (
 	CallStateConnecting      CallState = "connecting"
 	CallStateActive          CallState = "active"
 	CallStateOnHold          CallState = "on_hold"
+	CallStateReconnecting    CallState = "reconnecting"
 	CallStateEnded           CallState = "ended"
 )
 

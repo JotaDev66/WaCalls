@@ -11,6 +11,7 @@ type CallStateData struct {
 	ConnectedAt  *time.Time
 	AcceptedAt   *time.Time
 	EndedAt      *time.Time
+	MediaLostAt  *time.Time
 	AudioMuted   bool
 	VideoOff     bool
 	Silenced     bool
@@ -100,6 +101,8 @@ const (
 	TransitionLocalRejected    = "local_rejected"
 	TransitionRemoteRejected   = "remote_rejected"
 	TransitionMediaConnected   = "media_connected"
+	TransitionMediaLost        = "media_lost"
+	TransitionMediaRestored    = "media_restored"
 	TransitionTerminated       = "terminated"
 	TransitionHold             = "hold"
 	TransitionResume           = "resume"
@@ -169,11 +172,25 @@ func (c *CallInfo) ApplyTransition(t Transition) error {
 		s.ConnectedAt = &now
 		s.VideoOff = true
 
+	case TransitionMediaLost:
+		if s.State != core.CallStateActive {
+			return &InvalidTransition{string(s.State), t.Type}
+		}
+		s.State = core.CallStateReconnecting
+		s.MediaLostAt = &now
+
+	case TransitionMediaRestored:
+		if s.State != core.CallStateReconnecting {
+			return &InvalidTransition{string(s.State), t.Type}
+		}
+		s.State = core.CallStateActive
+		s.MediaLostAt = nil
+
 	case TransitionTerminated:
 		if s.State == core.CallStateEnded {
 			return &InvalidTransition{string(s.State), t.Type}
 		}
-		if (s.State == core.CallStateActive || s.State == core.CallStateOnHold) && s.ConnectedAt != nil {
+		if (s.State == core.CallStateActive || s.State == core.CallStateOnHold || s.State == core.CallStateReconnecting) && s.ConnectedAt != nil {
 			s.DurationSecs = int(now.Sub(*s.ConnectedAt).Seconds())
 		}
 		s.State = core.CallStateEnded

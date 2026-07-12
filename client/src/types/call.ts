@@ -1,4 +1,4 @@
-export type CallStatus = "starting" | "ringing" | "connected" | "ended";
+export type CallStatus = "starting" | "ringing" | "connected" | "reconnecting" | "ended";
 
 export type CallSummary = {
   sessionId: string;

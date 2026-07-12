@@ -132,19 +132,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 
 	callID := call.CallID
 	creator := wanode.MustJID(call.CallCreator)
-	transport := waBinary.Node{
-		Tag:   "call",
-		Attrs: waBinary.Attrs{"to": peerJid, "id": signaling.GenerateCallStanzaID()},
-		Content: []waBinary.Node{{
-			Tag: "transport",
-			Attrs: waBinary.Attrs{
-				"call-id": callID, "call-creator": creator,
-				"transport-message-type": "1", "p2p-cand-round": "1",
-			},
-			Content: []waBinary.Node{{Tag: "net", Attrs: waBinary.Attrs{"medium": "2", "protocol": "0"}}},
-		}},
-	}
-	_ = m.sock.SendNode(ctx, transport)
+	m.sendTransportUpdate(ctx, peerJid, creator, callID)
 	_ = m.sock.SendNode(ctx, signaling.BuildMuteV2Stanza(peerJid, callID, creator, 0))
 	if acceptMsgID := wanode.AttrString(node.Attrs, "id"); acceptMsgID != "" {
 		ourJid := m.sock.OwnLID()
@@ -164,6 +152,22 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	} else if relayData != nil {
 		m.connectRelays(relayData.Endpoints)
 	}
+}
+
+func (m *CallManager) sendTransportUpdate(ctx context.Context, peer, creator types.JID, callID string) {
+	transport := waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"to": peer, "id": signaling.GenerateCallStanzaID()},
+		Content: []waBinary.Node{{
+			Tag: "transport",
+			Attrs: waBinary.Attrs{
+				"call-id": callID, "call-creator": creator,
+				"transport-message-type": "1", "p2p-cand-round": "1",
+			},
+			Content: []waBinary.Node{{Tag: "net", Attrs: waBinary.Attrs{"medium": "2", "protocol": "0"}}},
+		}},
+	}
+	_ = m.sock.SendNode(ctx, transport)
 }
 
 func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.Node, peerJid types.JID) {

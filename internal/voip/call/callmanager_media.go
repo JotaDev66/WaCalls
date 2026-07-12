@@ -1,6 +1,8 @@
 package call
 
 import (
+	"time"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
@@ -93,6 +95,25 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	return nil
 }
 
+func (m *CallManager) notePeerMedia(ssrc uint32) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if ssrc == m.selfSsrc {
+		return
+	}
+	m.notePeerMediaLocked()
+}
+
+func (m *CallManager) notePeerMediaLocked() {
+	m.lastMediaRecv.Store(time.Now().UnixMilli())
+	if m.currentCall != nil && m.currentCall.StateData.State == core.CallStateReconnecting {
+		if err := m.currentCall.ApplyTransition(Transition{Type: TransitionMediaRestored}); err == nil {
+			m.emitState()
+			m.log.Info("media path restored", "call_id", m.currentCall.CallID)
+		}
+	}
+}
+
 func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsStunPacket(data) {
 		return
@@ -100,6 +121,7 @@ func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsRtcpPacket(data) {
 		ssrc, _ := media.ParseRTCPSenderSSRC(data)
 		m.log.Debug("inbound rtcp dropped", "pt", data[1], "ssrc", ssrc)
+		m.notePeerMedia(ssrc)
 		return
 	}
 	if !transport.IsRtpPacket(data) {
@@ -116,6 +138,7 @@ func (m *CallManager) onRelayData(data []byte) {
 		m.mu.Unlock()
 		return
 	}
+	m.notePeerMediaLocked()
 	if pt == core.PayloadTypeWhatsAppOpus && !m.actualPeerSet {
 		m.actualPeerSet = true
 		if !containsSsrc(m.peerSsrcs, ssrc) {

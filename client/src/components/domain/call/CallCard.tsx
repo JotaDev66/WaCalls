@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PhoneOff } from "lucide-react";
+import { PhoneOff, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +11,11 @@ import { useEndCall } from "@/hooks/useEndCall";
 import { formatCallDuration } from "@/utils/format";
 import type { CallStatus, CallSummary } from "@/types/call";
 
-const statusVariant: Record<CallStatus, "success" | "secondary" | "muted"> = {
+const statusVariant: Record<CallStatus, "success" | "secondary" | "muted" | "warning"> = {
   connected: "success",
   ringing: "secondary",
   starting: "secondary",
+  reconnecting: "warning",
   ended: "muted",
 };
 
@@ -93,6 +94,12 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
             <TooltipContent>End call</TooltipContent>
           </Tooltip>
         </div>
+        {call.status === "reconnecting" && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+            <WifiOff className="h-3.5 w-3.5" />
+            Reconnecting media…
+          </div>
+        )}
         <Meter label="Mic" db={micDb} />
         <Meter label="Peer" db={peerDb} />
         <audio ref={audioRef} autoPlay />
