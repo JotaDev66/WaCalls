@@ -3,6 +3,7 @@ package signaling
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/wanode"
 
@@ -159,6 +160,14 @@ type RelayLatencyEntry struct {
 	RelayName    string
 	Latency      int
 	AddressBytes []byte
+}
+
+func DecodeLatency(enc string) int {
+	v, err := strconv.ParseUint(enc, 10, 32)
+	if err != nil || v < 0x2000000 {
+		return 0
+	}
+	return int(v - 0x2000000)
 }
 
 func BuildRelayLatencyStanza(peerJid types.JID, callID string, callCreator types.JID, relays []RelayLatencyEntry, destinationJids []types.JID) waBinary.Node {
