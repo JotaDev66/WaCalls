@@ -1,4 +1,7 @@
-export const attachMeter = (stream: MediaStream, onDb: (db: number) => void): () => void => {
+export const attachMeter = (
+  stream: MediaStream,
+  onDb: (db: number) => void,
+): (() => void) => {
   const ctx = new AudioContext();
   const src = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
@@ -19,6 +22,10 @@ export const attachMeter = (stream: MediaStream, onDb: (db: number) => void): ()
   tick();
   return () => {
     stopped = true;
-    try { src.disconnect(); analyser.disconnect(); ctx.close(); } catch {}
+    try {
+      src.disconnect();
+      analyser.disconnect();
+      ctx.close();
+    } catch {}
   };
 };

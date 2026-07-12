@@ -18,4 +18,7 @@ export const useTheme = create<{ theme: Theme; toggle: () => void }>((set) => ({
 useTheme.subscribe((s) => {
   document.documentElement.classList.toggle("dark", s.theme === "dark");
 });
-document.documentElement.classList.toggle("dark", useTheme.getState().theme === "dark");
+document.documentElement.classList.toggle(
+  "dark",
+  useTheme.getState().theme === "dark",
+);

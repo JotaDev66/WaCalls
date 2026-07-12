@@ -17,11 +17,38 @@ type CallListRow = {
 export type BrokerEvent =
   | { type: "session-list"; sessions: SessionInfo[] }
   | { type: "session-qr"; sessionId: string; qr: string }
-  | { type: "auth-state"; sessionId: string; paired: boolean; state: SessionState; qr?: string }
+  | {
+      type: "auth-state";
+      sessionId: string;
+      paired: boolean;
+      state: SessionState;
+      qr?: string;
+    }
   | { type: "call-list"; calls: CallListRow[] }
-  | { type: "call-status"; sessionId: string; id: string; owner: string | null; status: CallStatus; peer: string; startedAt: number }
-  | { type: "call-ended"; sessionId: string; id: string; owner: string | null; reason: string; endedAt: number }
-  | { type: "incoming"; sessionId: string; id: string; peer: string; offeredAt: number }
+  | {
+      type: "call-status";
+      sessionId: string;
+      id: string;
+      owner: string | null;
+      status: CallStatus;
+      peer: string;
+      startedAt: number;
+    }
+  | {
+      type: "call-ended";
+      sessionId: string;
+      id: string;
+      owner: string | null;
+      reason: string;
+      endedAt: number;
+    }
+  | {
+      type: "incoming";
+      sessionId: string;
+      id: string;
+      peer: string;
+      offeredAt: number;
+    }
   | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };
 
 type Listener = (ev: BrokerEvent) => void;
@@ -51,7 +78,9 @@ class EventStream {
     if (this.#es) return;
     const token = getToken();
     const auth = token ? `&access_token=${encodeURIComponent(token)}` : "";
-    const es = new EventSource(`/api/events?clientId=${encodeURIComponent(this.#clientId)}${auth}`);
+    const es = new EventSource(
+      `/api/events?clientId=${encodeURIComponent(this.#clientId)}${auth}`,
+    );
     this.#es = es;
     this.#lastActivity = Date.now();
     es.onopen = () => {

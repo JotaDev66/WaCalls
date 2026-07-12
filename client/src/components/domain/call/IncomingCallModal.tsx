@@ -1,6 +1,12 @@
 import { useEffect } from "react";
 import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
@@ -10,7 +16,10 @@ import { useRejectCall } from "@/hooks/useRejectCall";
 type RingHandle = { stop: () => void };
 
 const startRingLoop = (): RingHandle | null => {
-  const AC = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  const AC =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
   if (!AC) return null;
   let ctx: AudioContext;
   try {
@@ -19,7 +28,12 @@ const startRingLoop = (): RingHandle | null => {
     return null;
   }
   let cancelled = false;
-  const playToneAt = (when: number, durationSec: number, freq: number, gainVal = 0.18) => {
+  const playToneAt = (
+    when: number,
+    durationSec: number,
+    freq: number,
+    gainVal = 0.18,
+  ) => {
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = "sine";
@@ -75,7 +89,9 @@ export const IncomingCallModal = () => {
             <PhoneIncoming className="h-7 w-7" />
           </div>
           <DialogTitle>Incoming call</DialogTitle>
-          <DialogDescription className="truncate">{incoming?.peer}</DialogDescription>
+          <DialogDescription className="truncate">
+            {incoming?.peer}
+          </DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex items-center justify-center gap-6">
           <Button
@@ -83,7 +99,13 @@ export const IncomingCallModal = () => {
             size="icon"
             className="h-14 w-14 rounded-full"
             disabled={busy}
-            onClick={() => incoming && reject.mutate({ sid: incoming.sessionId, callId: incoming.callId })}
+            onClick={() =>
+              incoming &&
+              reject.mutate({
+                sid: incoming.sessionId,
+                callId: incoming.callId,
+              })
+            }
             aria-label="Reject"
           >
             <PhoneOff className="h-6 w-6" />
@@ -92,7 +114,13 @@ export const IncomingCallModal = () => {
             size="icon"
             className="h-14 w-14 rounded-full"
             disabled={busy}
-            onClick={() => incoming && accept.mutate({ sid: incoming.sessionId, callId: incoming.callId })}
+            onClick={() =>
+              incoming &&
+              accept.mutate({
+                sid: incoming.sessionId,
+                callId: incoming.callId,
+              })
+            }
             aria-label="Accept"
           >
             <Phone className="h-6 w-6" />

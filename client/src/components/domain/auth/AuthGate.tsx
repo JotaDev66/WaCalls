@@ -22,7 +22,9 @@ export const AuthGate = () => {
       <div className="w-full max-w-sm space-y-4 rounded-lg border bg-card p-6 shadow-lg">
         <div className="space-y-1">
           <h2 className="text-lg font-semibold">Authentication required</h2>
-          <p className="text-sm text-muted-foreground">Enter the API token to continue.</p>
+          <p className="text-sm text-muted-foreground">
+            Enter the API token to continue.
+          </p>
         </div>
         <Input
           type="password"

@@ -1,7 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Menu, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
 import { ConnectionBanner } from "@/components/shared/ConnectionBanner";
@@ -15,7 +20,12 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         <div className="flex items-center gap-2">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="md:hidden" aria-label="Accounts">
+              <Button
+                variant="outline"
+                size="icon"
+                className="md:hidden"
+                aria-label="Accounts"
+              >
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>

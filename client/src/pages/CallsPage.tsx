@@ -16,7 +16,9 @@ export const CallsPage = ({ sid }: { sid: string }) => {
     return () => clearInterval(t);
   }, []);
 
-  const sessionCalls = calls.filter((c) => c.sessionId === sid && c.status !== "ended");
+  const sessionCalls = calls.filter(
+    (c) => c.sessionId === sid && c.status !== "ended",
+  );
   const mine = sessionCalls.filter(isMine);
   const others = sessionCalls.filter((c) => !isMine(c));
 

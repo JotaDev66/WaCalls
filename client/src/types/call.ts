@@ -1,4 +1,5 @@
-export type CallStatus = "starting" | "ringing" | "connected" | "reconnecting" | "ended";
+export type CallStatus =
+  "starting" | "ringing" | "connected" | "reconnecting" | "ended";
 
 export type CallSummary = {
   sessionId: string;
@@ -10,4 +11,9 @@ export type CallSummary = {
   status: CallStatus;
 };
 
-export type IncomingPayload = { sessionId: string; callId: string; peer: string; offeredAt: number };
+export type IncomingPayload = {
+  sessionId: string;
+  callId: string;
+  peer: string;
+  offeredAt: number;
+};

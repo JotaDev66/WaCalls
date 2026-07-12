@@ -29,9 +29,13 @@ For the web client:
 
 ```bash
 cd client
-npx tsc -b       # type-check
+npx tsc -b           # type-check
+npm run lint         # eslint, zero warnings required
+npm run format:check # prettier
 npm run build
 ```
+
+CI also blocks on govulncheck (Go vulnerability scan) for every push and pull request.
 
 CI also runs the race detector (`CGO_ENABLED=1 go test -race ./internal/voip/...`).
 Running it locally requires a C toolchain; on machines without one, use a Go Docker

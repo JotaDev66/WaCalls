@@ -28,7 +28,13 @@ export const ensureCallsWired = (): void => {
       useCalls.setState((s) => ({
         calls: s.calls.map((c) =>
           c.callId === ev.id
-            ? { ...c, sessionId: ev.sessionId, status: ev.status, peer: ev.peer, startedAt: ev.startedAt }
+            ? {
+                ...c,
+                sessionId: ev.sessionId,
+                status: ev.status,
+                peer: ev.peer,
+                startedAt: ev.startedAt,
+              }
             : c,
         ),
       }));
@@ -46,14 +52,24 @@ export const ensureCallsWired = (): void => {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.history });
     } else if (ev.type === "incoming") {
-      useCalls.setState({ incoming: { sessionId: ev.sessionId, callId: ev.id, peer: ev.peer, offeredAt: ev.offeredAt } });
+      useCalls.setState({
+        incoming: {
+          sessionId: ev.sessionId,
+          callId: ev.id,
+          peer: ev.peer,
+          offeredAt: ev.offeredAt,
+        },
+      });
     } else if (ev.type === "incoming-claimed") {
-      useCalls.setState((s) => (s.incoming?.callId === ev.id ? { incoming: null } : s));
+      useCalls.setState((s) =>
+        s.incoming?.callId === ev.id ? { incoming: null } : s,
+      );
     }
   });
 };
 
-export const isMine = (call: CallSummary): boolean => call.owner === getClientId();
+export const isMine = (call: CallSummary): boolean =>
+  call.owner === getClientId();
 
 export const registerOwnConnection = (id: string, conn: OpenCall): void => {
   useCalls.setState((s) => {

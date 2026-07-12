@@ -11,6 +11,7 @@ func TestLoadConfigReadsEnv(t *testing.T) {
 	t.Setenv("WACALLS_CORS_ORIGINS", "https://a.example.com")
 	t.Setenv("WACALLS_WEBRTC_UDP_PORT", "7881")
 	t.Setenv("WACALLS_PUBLIC_IP", " 203.0.113.10 , , 198.51.100.7 ")
+	t.Setenv("WACALLS_RATE_LIMIT", "12.5")
 
 	cfg := LoadConfig(":9000", "x.db", "static", true, 5)
 
@@ -26,6 +27,9 @@ func TestLoadConfigReadsEnv(t *testing.T) {
 	if !reflect.DeepEqual(cfg.PublicIPs, []string{"203.0.113.10", "198.51.100.7"}) {
 		t.Fatalf("PublicIPs = %v, want trimmed split", cfg.PublicIPs)
 	}
+	if cfg.RateLimit != 12.5 {
+		t.Fatalf("RateLimit = %v, want 12.5", cfg.RateLimit)
+	}
 }
 
 func TestLoadConfigDefaultsWhenUnset(t *testing.T) {
@@ -34,6 +38,7 @@ func TestLoadConfigDefaultsWhenUnset(t *testing.T) {
 	t.Setenv("WACALLS_CORS_ORIGINS", "")
 	t.Setenv("WACALLS_WEBRTC_UDP_PORT", "")
 	t.Setenv("WACALLS_PUBLIC_IP", "")
+	t.Setenv("WACALLS_RATE_LIMIT", "")
 
 	cfg := LoadConfig(":8080", "wacalls.db", "", false, 8)
 	if cfg.WebRTCUDPPort != 0 {
@@ -41,5 +46,27 @@ func TestLoadConfigDefaultsWhenUnset(t *testing.T) {
 	}
 	if len(cfg.PublicIPs) != 0 {
 		t.Fatalf("PublicIPs = %v, want empty", cfg.PublicIPs)
+	}
+	if cfg.RateLimit != 20 {
+		t.Fatalf("RateLimit = %v, want default 20 when unset", cfg.RateLimit)
+	}
+}
+
+func TestParseRateLimit(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want float64
+	}{
+		{"", 20},
+		{"  ", 20},
+		{"0", 0},
+		{"-3", 0},
+		{"7.5", 7.5},
+		{"garbage", 20},
+	}
+	for _, c := range cases {
+		if got := parseRateLimit(c.raw); got != c.want {
+			t.Fatalf("parseRateLimit(%q) = %v, want %v", c.raw, got, c.want)
+		}
 	}
 }

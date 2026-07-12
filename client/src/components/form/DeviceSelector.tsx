@@ -19,7 +19,11 @@ export const DeviceSelector = () => {
     <div className="flex flex-wrap items-center gap-3">
       <div className="inline-flex items-center gap-2">
         <Mic className="h-4 w-4 text-muted-foreground" />
-        <select value={micId ?? ""} onChange={(e) => setMic(e.target.value)} className={selectClass}>
+        <select
+          value={micId ?? ""}
+          onChange={(e) => setMic(e.target.value)}
+          className={selectClass}
+        >
           <option value="">Default mic</option>
           {mics.map((d) => (
             <option key={d.deviceId} value={d.deviceId}>
@@ -30,7 +34,11 @@ export const DeviceSelector = () => {
       </div>
       <div className="inline-flex items-center gap-2">
         <Volume2 className="h-4 w-4 text-muted-foreground" />
-        <select value={outId ?? ""} onChange={(e) => setOut(e.target.value)} className={selectClass}>
+        <select
+          value={outId ?? ""}
+          onChange={(e) => setOut(e.target.value)}
+          className={selectClass}
+        >
           <option value="">Default speaker</option>
           {outs.map((d) => (
             <option key={d.deviceId} value={d.deviceId}>
