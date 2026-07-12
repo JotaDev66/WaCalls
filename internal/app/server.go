@@ -14,6 +14,22 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 15 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       idleTimeout,
+	}
+}
+
 type Server struct {
 	broker    *Broker
 	sessions  *SessionManager
@@ -46,7 +62,7 @@ func (s *Server) Run(ctx context.Context, addr string) error {
 	if err := s.sessions.Restore(ctx); err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Addr: addr, Handler: s.routes()}
+	httpSrv := newHTTPServer(addr, s.routes())
 	go func() {
 		s.log.Info("HTTP server listening", "addr", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
