@@ -1,11 +1,17 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
+
+	"wacalls/internal/voip/core"
 )
+
+const historyCap = 10000
 
 type CallStatus string
 
@@ -51,15 +57,21 @@ type Broker struct {
 	mu      sync.RWMutex
 	subs    map[*subscriber]struct{}
 	calls   map[string]*CallRecord
-	history []CallRecord
+	records core.CallRecordStore
+	log     *slog.Logger
 
 	SnapshotFn func() []any
 }
 
-func NewBroker() *Broker {
+func NewBroker(records core.CallRecordStore, log *slog.Logger) *Broker {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Broker{
-		subs:  map[*subscriber]struct{}{},
-		calls: map[string]*CallRecord{},
+		subs:    map[*subscriber]struct{}{},
+		calls:   map[string]*CallRecord{},
+		records: records,
+		log:     log,
 	}
 }
 
@@ -172,7 +184,6 @@ func (b *Broker) endCall(id, reason string) {
 	c.EndReason = reason
 	ended := *c
 	delete(b.calls, id)
-	b.history = append(b.history, ended)
 	owner := c.Owner
 	sessionID := c.SessionID
 	b.mu.Unlock()
@@ -181,6 +192,31 @@ func (b *Broker) endCall(id, reason string) {
 		"type": "call-ended", "sessionId": sessionID, "id": id, "owner": owner, "reason": reason, "endedAt": now,
 	})
 	b.broadcastCallList()
+	b.persist(ended)
+}
+
+func (b *Broker) persist(rec CallRecord) {
+	if b.records == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	var endedAt int64
+	if rec.EndedAt != nil {
+		endedAt = *rec.EndedAt
+	}
+	cr := core.CallRecord{
+		CallID: rec.CallID, SessionID: rec.SessionID, Owner: rec.Owner,
+		Direction: rec.Direction, Peer: rec.Peer,
+		StartedAt: rec.StartedAt, EndedAt: endedAt, EndReason: rec.EndReason,
+	}
+	if err := b.records.Insert(ctx, cr); err != nil {
+		b.log.Error("persist call record", "call_id", rec.CallID, "err", err)
+		return
+	}
+	if err := b.records.Prune(ctx, historyCap); err != nil {
+		b.log.Error("prune call records", "err", err)
+	}
 }
 
 func (b *Broker) broadcastCallList() {
@@ -204,16 +240,24 @@ func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
 	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
 }
 
-func (b *Broker) historyRows(sessionID string, limit int) []CallRecord {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	rows := make([]CallRecord, 0, limit)
-	for i := len(b.history) - 1; i >= 0 && len(rows) < limit; i-- {
-		if sessionID == "" || b.history[i].SessionID == sessionID {
-			rows = append(rows, b.history[i])
-		}
+func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int) ([]CallRecord, error) {
+	if b.records == nil {
+		return []CallRecord{}, nil
 	}
-	return rows
+	recs, err := b.records.List(ctx, sessionID, limit)
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]CallRecord, 0, len(recs))
+	for _, r := range recs {
+		endedAt := r.EndedAt
+		rows = append(rows, CallRecord{
+			SessionID: r.SessionID, CallID: r.CallID, Owner: r.Owner, Direction: r.Direction,
+			Peer: r.Peer, StartedAt: r.StartedAt, Status: StatusEnded,
+			EndedAt: &endedAt, EndReason: r.EndReason,
+		})
+	}
+	return rows, nil
 }
 
 func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID string) {
