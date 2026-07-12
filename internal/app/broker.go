@@ -51,6 +51,8 @@ type SessionInfo struct {
 type subscriber struct {
 	clientID string
 	ch       chan []byte
+	kick     chan struct{}
+	kickOnce sync.Once
 }
 
 type Broker struct {
@@ -76,7 +78,7 @@ func NewBroker(records core.CallRecordStore, log *slog.Logger) *Broker {
 }
 
 func (b *Broker) subscribe(clientID string) *subscriber {
-	s := &subscriber{clientID: clientID, ch: make(chan []byte, 32)}
+	s := &subscriber{clientID: clientID, ch: make(chan []byte, 32), kick: make(chan struct{})}
 	b.mu.Lock()
 	b.subs[s] = struct{}{}
 	b.mu.Unlock()
@@ -101,6 +103,10 @@ func (b *Broker) broadcast(ev any) {
 		select {
 		case s.ch <- data:
 		default:
+			s.kickOnce.Do(func() {
+				b.log.Warn("sse subscriber lagging, kicking for resync", "client_id", s.clientID)
+				close(s.kick)
+			})
 		}
 	}
 }
@@ -219,14 +225,18 @@ func (b *Broker) persist(rec CallRecord) {
 	}
 }
 
-func (b *Broker) broadcastCallList() {
+func (b *Broker) callList() []CallRecord {
 	b.mu.RLock()
+	defer b.mu.RUnlock()
 	list := make([]CallRecord, 0, len(b.calls))
 	for _, c := range b.calls {
 		list = append(list, *c)
 	}
-	b.mu.RUnlock()
-	b.broadcast(map[string]any{"type": "call-list", "calls": list})
+	return list
+}
+
+func (b *Broker) broadcastCallList() {
+	b.broadcast(map[string]any{"type": "call-list", "calls": b.callList()})
 }
 
 func (b *Broker) emitIncoming(sessionID, id, peer string) {
@@ -279,7 +289,7 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 			writeSSE(w, flusher, ev)
 		}
 	}
-	b.broadcastCallList()
+	writeSSE(w, flusher, map[string]any{"type": "call-list", "calls": b.callList()})
 
 	keepalive := time.NewTicker(20 * time.Second)
 	defer keepalive.Stop()
@@ -287,6 +297,8 @@ func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID strin
 	for {
 		select {
 		case <-r.Context().Done():
+			return
+		case <-sub.kick:
 			return
 		case data := <-sub.ch:
 			if _, err := w.Write(append(append([]byte("data: "), data...), '\n', '\n')); err != nil {
