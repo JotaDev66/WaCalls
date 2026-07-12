@@ -1,11 +1,18 @@
 package app
 
-import "testing"
+import (
+	"context"
+	"log/slog"
+	"sync"
+	"testing"
+
+	"wacalls/internal/voip/core"
+)
 
 func ownerPtr(s string) *string { return &s }
 
 func TestOwnerActiveCall(t *testing.T) {
-	b := NewBroker()
+	b := NewBroker(nil, slog.Default())
 	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Owner: ownerPtr("op-A"), Status: StatusConnected})
 	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c2", Owner: ownerPtr("op-B"), Status: StatusRinging})
 
@@ -22,5 +29,58 @@ func TestOwnerActiveCall(t *testing.T) {
 	b.endCall("c1", "done")
 	if got := b.ownerActiveCall("op-A"); got != "" {
 		t.Fatalf("op-A's call ended, expected empty, got %q", got)
+	}
+}
+
+type fakeRecordStore struct {
+	mu   sync.Mutex
+	recs []core.CallRecord
+}
+
+func (f *fakeRecordStore) Insert(ctx context.Context, r core.CallRecord) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.recs = append(f.recs, r)
+	return nil
+}
+
+func (f *fakeRecordStore) List(ctx context.Context, sessionID string, limit int) ([]core.CallRecord, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := []core.CallRecord{}
+	for i := len(f.recs) - 1; i >= 0 && len(out) < limit; i-- {
+		if sessionID == "" || f.recs[i].SessionID == sessionID {
+			out = append(out, f.recs[i])
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeRecordStore) Prune(ctx context.Context, keep int) error { return nil }
+
+func TestEndCallPersistsRecord(t *testing.T) {
+	fake := &fakeRecordStore{}
+	b := NewBroker(fake, slog.Default())
+	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Direction: "inbound", Peer: "p", StartedAt: 100, Status: StatusConnected})
+	b.endCall("c1", "user_ended")
+
+	recs, _ := fake.List(context.Background(), "s1", 10)
+	if len(recs) != 1 || recs[0].CallID != "c1" || recs[0].EndReason != "user_ended" || recs[0].EndedAt == 0 {
+		t.Fatalf("ended call must be persisted, got %+v", recs)
+	}
+
+	rows, err := b.historyRows(context.Background(), "s1", 10)
+	if err != nil || len(rows) != 1 || rows[0].Status != StatusEnded || rows[0].CallID != "c1" {
+		t.Fatalf("history must read from the store, got %+v err %v", rows, err)
+	}
+}
+
+func TestNilRecordStoreIsSafe(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+	b.endCall("c1", "declined")
+	rows, err := b.historyRows(context.Background(), "", 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("nil store must yield empty history without error, got %+v err %v", rows, err)
 	}
 }

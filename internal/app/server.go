@@ -69,7 +69,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		waLogger = waLog.Stdout("WA", "INFO", true)
 	}
 
-	broker := NewBroker()
+	broker := NewBroker(bundle.Calls, log)
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 

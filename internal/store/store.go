@@ -15,6 +15,7 @@ import (
 type Bundle struct {
 	Container *sqlstore.Container
 	Sessions  core.SessionStore
+	Calls     core.CallRecordStore
 	closer    io.Closer
 }
 
@@ -31,11 +32,11 @@ func Open(ctx context.Context, cfg Config) (*Bundle, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Bundle{Container: b.Container, Sessions: b.Sessions, closer: b}, nil
+		return &Bundle{Container: b.Container, Sessions: b.Sessions, Calls: b.Calls, closer: b}, nil
 	}
 	b, err := sqlite.Open(ctx, cfg.SQLitePath)
 	if err != nil {
 		return nil, err
 	}
-	return &Bundle{Container: b.Container, Sessions: b.Sessions, closer: b}, nil
+	return &Bundle{Container: b.Container, Sessions: b.Sessions, Calls: b.Calls, closer: b}, nil
 }

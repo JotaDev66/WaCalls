@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"wacalls/internal/store/migrate"
 	"wacalls/internal/voip/core"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -15,7 +16,28 @@ import (
 type Bundle struct {
 	Container *sqlstore.Container
 	Sessions  core.SessionStore
+	Calls     core.CallRecordStore
 	db        *sql.DB
+}
+
+var migrations = [][]string{
+	{`CREATE TABLE IF NOT EXISTS sessions (
+		id   TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		jid  TEXT,
+		seq  BIGSERIAL
+	)`},
+	{`CREATE TABLE call_records (
+		call_id    TEXT PRIMARY KEY,
+		session_id TEXT NOT NULL,
+		owner      TEXT,
+		direction  TEXT NOT NULL,
+		peer       TEXT NOT NULL,
+		started_at BIGINT NOT NULL,
+		ended_at   BIGINT NOT NULL,
+		end_reason TEXT NOT NULL DEFAULT ''
+	)`,
+		`CREATE INDEX idx_call_records_session_ended ON call_records (session_id, ended_at DESC)`},
 }
 
 func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
@@ -35,30 +57,16 @@ func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	sessions, err := newSessionStore(ctx, db)
-	if err != nil {
+	if err := migrate.Apply(ctx, db, migrations); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Bundle{Container: container, Sessions: sessions, db: db}, nil
+	return &Bundle{Container: container, Sessions: &sessionStore{db: db}, Calls: &callRecordStore{db: db}, db: db}, nil
 }
 
 func (b *Bundle) Close() error { return b.db.Close() }
 
 type sessionStore struct{ db *sql.DB }
-
-func newSessionStore(ctx context.Context, db *sql.DB) (*sessionStore, error) {
-	_, err := db.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS sessions (
-		id   TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		jid  TEXT,
-		seq  BIGSERIAL
-	)`)
-	if err != nil {
-		return nil, err
-	}
-	return &sessionStore{db: db}, nil
-}
 
 func (s *sessionStore) List(ctx context.Context) ([]core.Session, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT id, name, COALESCE(jid, '') FROM sessions ORDER BY seq`)
@@ -93,3 +101,49 @@ func (s *sessionStore) Delete(ctx context.Context, id string) error {
 }
 
 var _ core.SessionStore = (*sessionStore)(nil)
+
+type callRecordStore struct{ db *sql.DB }
+
+func (s *callRecordStore) Insert(ctx context.Context, r core.CallRecord) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO call_records
+		(call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (call_id) DO NOTHING`,
+		r.CallID, r.SessionID, r.Owner, r.Direction, r.Peer, r.StartedAt, r.EndedAt, r.EndReason)
+	return err
+}
+
+func (s *callRecordStore) List(ctx context.Context, sessionID string, limit int) ([]core.CallRecord, error) {
+	var (
+		rows *sql.Rows
+		err  error
+	)
+	if sessionID != "" {
+		rows, err = s.db.QueryContext(ctx, `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason
+			FROM call_records WHERE session_id = $1 ORDER BY ended_at DESC LIMIT $2`, sessionID, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx, `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason
+			FROM call_records ORDER BY ended_at DESC LIMIT $1`, limit)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []core.CallRecord
+	for rows.Next() {
+		var r core.CallRecord
+		if err := rows.Scan(&r.CallID, &r.SessionID, &r.Owner, &r.Direction, &r.Peer, &r.StartedAt, &r.EndedAt, &r.EndReason); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (s *callRecordStore) Prune(ctx context.Context, keep int) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM call_records WHERE call_id NOT IN (
+		SELECT call_id FROM call_records ORDER BY ended_at DESC LIMIT $1)`, keep)
+	return err
+}
+
+var _ core.CallRecordStore = (*callRecordStore)(nil)

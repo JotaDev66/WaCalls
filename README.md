@@ -181,6 +181,10 @@ automatically (60s ring/answer, 30s media connect), and active calls are capped 
 4 hours. A timed-out call ends with reason `timeout` and releases its
 `-max-calls-per-session` slot.
 
+Ended calls are persisted to the session database (SQLite or PostgreSQL), so
+`GET /api/sessions/{sid}/history` survives restarts; the table is capped at the
+10,000 most recent records.
+
 Set the `DATABASE_URL` environment variable to store everything on PostgreSQL instead of
 SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unset uses the
 `-db` SQLite file.
