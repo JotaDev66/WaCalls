@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/transport"
 	"wacalls/internal/voip/wanode"
 
@@ -135,6 +136,26 @@ func TestRelayLatencyHarvestsRelayWhenAbsent(t *testing.T) {
 
 	if m.currentCall.RelayData == nil || len(m.currentCall.RelayData.Endpoints) != 1 {
 		t.Fatal("relaylatency must harvest an embedded relay block when RelayData is absent")
+	}
+}
+
+func TestClientRoutesRelayLatencyByCallID(t *testing.T) {
+	sock := &recordSock{}
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0, func(string, *CallManager) {}, nil)
+	peer := types.NewJID("5511999990000", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), offerNode("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
+
+	before := len(sentRelayLatencies(sock))
+	c.HandleRelayLatency(context.Background(), latencyCallNode("CALL1", teProbe("33554477", "gru1", []byte{1, 2, 3, 4, 5, 6})), peer)
+	if got := len(sentRelayLatencies(sock)) - before; got != 1 {
+		t.Fatalf("known call-id must echo 1 probe, got %d", got)
+	}
+
+	before = len(sentRelayLatencies(sock))
+	c.HandleRelayLatency(context.Background(), latencyCallNode("NOPE", teProbe("33554477", "gru1", []byte{1, 2, 3, 4, 5, 6})), peer)
+	if got := len(sentRelayLatencies(sock)) - before; got != 0 {
+		t.Fatalf("unknown call-id must be a no-op, got %d echoes", got)
 	}
 }
 
