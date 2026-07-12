@@ -15,6 +15,7 @@ services:
       WACALLS_WEBRTC_UDP_PORT: ${WEBRTC_UDP_PORT:-7881}
       WACALLS_API_TOKEN: ${WACALLS_API_TOKEN:-}
       WACALLS_CORS_ORIGINS: ${WACALLS_CORS_ORIGINS:-}
+      WACALLS_RATE_LIMIT: ${WACALLS_RATE_LIMIT:-}
     volumes:
       - wacalls-data:/data
 

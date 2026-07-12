@@ -41,6 +41,7 @@ type Server struct {
 	authorize      func(*http.Request) bool
 	allowedOrigins map[string]struct{}
 	webrtcAPI      *webrtc.API
+	rateLimiter    *ipRateLimiter
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -73,6 +74,12 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
+	var limiter *ipRateLimiter
+	if cfg.RateLimit > 0 {
+		limiter = newIPRateLimiter(cfg.RateLimit)
+		go limiter.janitor(ctx)
+	}
+
 	return &Server{
 		broker:         broker,
 		sessions:       mgr,
@@ -82,6 +89,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		authorize:      bearerAuthorizer(cfg.APIToken),
 		allowedOrigins: parseOrigins(cfg.CORSOrigins),
 		webrtcAPI:      api,
+		rateLimiter:    limiter,
 	}, nil
 }
 

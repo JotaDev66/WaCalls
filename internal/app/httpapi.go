@@ -40,7 +40,7 @@ func (s *Server) routes() http.Handler {
 	}
 
 	root := http.NewServeMux()
-	root.Handle("/api/", s.withAuth(maxBytes(api)))
+	root.Handle("/api/", s.withRateLimit(s.withAuth(maxBytes(api))))
 	if s.debug {
 		root.Handle("/debug/", loopbackOnly(s.withAuth(api)))
 	}

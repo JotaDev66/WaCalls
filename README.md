@@ -295,7 +295,11 @@ leave it empty to disable auth (trusted LAN only). Clients send it as
 `Authorization: Bearer <token>`; the SSE stream (`/api/events`) takes it as a
 `?access_token=<token>` query parameter. Set `WACALLS_CORS_ORIGINS` to a comma-separated
 list of browser origins when the web client is served from a different origin than the
-API; empty means same-origin only. `wacalls.db` holds WhatsApp session credentials
+API; empty means same-origin only. Every `/api` route is rate limited per client IP
+(default 20 requests per second, burst 40); tune it with `WACALLS_RATE_LIMIT` (requests
+per second, `0` disables). Behind a reverse proxy all clients share the proxy address,
+so the limit becomes effectively global; lower it or disable it accordingly.
+`wacalls.db` holds WhatsApp session credentials
 (secrets): **do not commit it** and keep it protected.
 
 ---

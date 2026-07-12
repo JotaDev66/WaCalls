@@ -15,6 +15,7 @@ type Config struct {
 	DatabaseURL   string
 	APIToken      string
 	CORSOrigins   string
+	RateLimit     float64
 	WebRTCUDPPort int
 	PublicIPs     []string
 }
@@ -29,9 +30,27 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
 		APIToken:      os.Getenv("WACALLS_API_TOKEN"),
 		CORSOrigins:   os.Getenv("WACALLS_CORS_ORIGINS"),
+		RateLimit:     parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
 		WebRTCUDPPort: parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
 		PublicIPs:     parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
 	}
+}
+
+const defaultRateLimitRPS = 20
+
+func parseRateLimit(raw string) float64 {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultRateLimitRPS
+	}
+	n, err := strconv.ParseFloat(raw, 64)
+	if err != nil {
+		return defaultRateLimitRPS
+	}
+	if n < 0 {
+		return 0
+	}
+	return n
 }
 
 func parseUDPPort(raw string) int {
