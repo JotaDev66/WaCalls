@@ -96,14 +96,22 @@ func (c *Client) HandleOffer(ctx context.Context, node *waBinary.Node, peer type
 		return
 	}
 	if c.maxCalls > 0 && c.Count() >= c.maxCalls {
-		c.reject(ctx, node, peer)
+		c.reject(ctx, node, peer, "session at capacity")
+		return
+	}
+	callKey, err := signaling.DecryptCallKeyInNode(ctx, c.sock, info.InnerNode, peer)
+	if err != nil {
+		c.log.Error("offer call key undecryptable; rejecting call",
+			"call_id", info.CallID, "peer", peer.String(), "err", err,
+			"hint", "signal session desync: exchange a message with the contact or re-pair")
+		c.reject(ctx, node, peer, "undecryptable call key")
 		return
 	}
 	cm := c.createCall(info.CallID)
-	cm.HandleCallOffer(ctx, node, peer)
+	cm.HandleCallOffer(ctx, node, peer, callKey)
 }
 
-func (c *Client) reject(ctx context.Context, node *waBinary.Node, peer types.JID) {
+func (c *Client) reject(ctx context.Context, node *waBinary.Node, peer types.JID, why string) {
 	info := signaling.ExtractNodeInfo(node)
 	if info == nil {
 		return
@@ -114,7 +122,7 @@ func (c *Client) reject(ctx context.Context, node *waBinary.Node, peer types.JID
 	}
 	reject := signaling.BuildRejectStanza(peer, info.CallID, wanode.MustJID(creator))
 	_ = c.sock.SendNode(ctx, reject)
-	c.log.Info("inbound call rejected: session at capacity", "call_id", info.CallID)
+	c.log.Info("inbound call rejected: "+why, "call_id", info.CallID)
 }
 
 func (c *Client) HandleAccept(ctx context.Context, node *waBinary.Node, peer types.JID) {

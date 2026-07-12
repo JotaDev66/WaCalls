@@ -11,7 +11,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
+func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, peerJid types.JID, callKey []byte) {
 	info := signaling.ExtractNodeInfo(node)
 	if info == nil {
 		return
@@ -20,10 +20,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	creator := wanode.AttrString(info.InnerNode.Attrs, "call-creator")
 	if creator == "" {
 		creator = peerJid.String()
-	}
-	callKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
-	if err != nil {
-		m.log.Error("offer decrypt call key", "err", err)
 	}
 	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
 	var structured *signaling.ParsedRelayAck
