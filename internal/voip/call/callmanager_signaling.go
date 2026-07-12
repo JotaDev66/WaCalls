@@ -85,6 +85,7 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.mu.Lock()
 	m.emitState()
 	m.mu.Unlock()
+	m.startWatchdog()
 	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "relays", len(relays))
 }
 

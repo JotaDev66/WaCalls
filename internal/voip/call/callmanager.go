@@ -133,6 +133,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 		go m.HandleCallAck(context.Background(), ackNode)
 	}
 
+	m.startWatchdog()
 	m.log.Info("call offer sent", "call_id", callID, "peer", resolved.String())
 	return nil
 }
