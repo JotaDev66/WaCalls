@@ -8,17 +8,19 @@ import (
 )
 
 type Timeouts struct {
-	Ring         time.Duration
-	Answer       time.Duration
-	MediaConnect time.Duration
-	MaxDuration  time.Duration
+	Ring           time.Duration
+	Answer         time.Duration
+	MediaConnect   time.Duration
+	ReconnectGrace time.Duration
+	MaxDuration    time.Duration
 }
 
 var DefaultTimeouts = Timeouts{
-	Ring:         60 * time.Second,
-	Answer:       60 * time.Second,
-	MediaConnect: 30 * time.Second,
-	MaxDuration:  4 * time.Hour,
+	Ring:           60 * time.Second,
+	Answer:         60 * time.Second,
+	MediaConnect:   30 * time.Second,
+	ReconnectGrace: 30 * time.Second,
+	MaxDuration:    4 * time.Hour,
 }
 
 const defaultWatchdogTick = time.Second
@@ -92,6 +94,11 @@ func phaseDeadline(c *CallInfo, t Timeouts) (time.Time, bool) {
 			return time.Time{}, false
 		}
 		return s.AcceptedAt.Add(t.MediaConnect), true
+	case core.CallStateReconnecting:
+		if t.ReconnectGrace <= 0 || s.MediaLostAt == nil {
+			return time.Time{}, false
+		}
+		return s.MediaLostAt.Add(t.ReconnectGrace), true
 	case core.CallStateActive, core.CallStateOnHold:
 		if t.MaxDuration <= 0 || s.ConnectedAt == nil {
 			return time.Time{}, false
