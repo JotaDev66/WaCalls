@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
@@ -36,6 +38,10 @@ type CallManager struct {
 	acceptedByJid         string
 	debeEnabled           bool
 
+	timeouts     Timeouts
+	watchdogTick time.Duration
+	watchdogStop chan struct{}
+
 	extensions   []engine.Extension
 	extMu        sync.Mutex
 	rtpHandlers  map[uint8]func(*media.RtpPacket)
@@ -57,6 +63,8 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 		log:          log,
 		observer:     core.NopObserver{},
 		debeEnabled:  true,
+		timeouts:     DefaultTimeouts,
+		watchdogTick: defaultWatchdogTick,
 		extensions:   exts,
 		rtpHandlers:  map[uint8]func(*media.RtpPacket){},
 		declaredSelf: map[uint32]bool{},
