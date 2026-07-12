@@ -43,6 +43,7 @@ type CallManager struct {
 	watchdogTick  time.Duration
 	watchdogStop  chan struct{}
 	lastMediaRecv atomic.Int64
+	lastRedialAt  time.Time
 
 	extensions   []engine.Extension
 	extMu        sync.Mutex

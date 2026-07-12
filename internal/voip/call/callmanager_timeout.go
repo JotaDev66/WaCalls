@@ -78,6 +78,10 @@ func (m *CallManager) expireIfOverdue() bool {
 		}
 	}
 
+	if state == core.CallStateReconnecting {
+		m.retryReconnect()
+	}
+
 	if !ok || time.Now().Before(deadline) {
 		return false
 	}

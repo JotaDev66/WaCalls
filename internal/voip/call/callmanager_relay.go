@@ -3,6 +3,7 @@ package call
 import (
 	"context"
 	"runtime/pprof"
+	"time"
 
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
@@ -101,6 +102,7 @@ func (m *CallManager) forceMediaLost() {
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaLost}); err == nil {
 			m.emitState()
 			lost = true
+			m.lastRedialAt = time.Now()
 			if call.RelayData != nil {
 				endpoints = call.RelayData.Endpoints
 			}
@@ -119,6 +121,34 @@ func (m *CallManager) forceMediaLost() {
 			m.connectRelays(endpoints)
 		}()
 	}
+}
+
+const redialRetryInterval = 6 * time.Second
+
+func (m *CallManager) retryReconnect() {
+	m.mu.Lock()
+	call := m.currentCall
+	if call == nil || call.StateData.State != core.CallStateReconnecting || time.Since(m.lastRedialAt) < redialRetryInterval {
+		m.mu.Unlock()
+		return
+	}
+	m.lastRedialAt = time.Now()
+	var endpoints []core.RelayEndpoint
+	if call.RelayData != nil {
+		endpoints = call.RelayData.Endpoints
+	}
+	callID := call.CallID
+	m.mu.Unlock()
+	if len(endpoints) == 0 {
+		return
+	}
+	m.log.Info("reconnect retry; recycling relay connections", "call_id", callID)
+	m.relay.DropConnections()
+	redialDone := m.observer.TrackGoroutine()
+	go func() {
+		defer redialDone()
+		m.connectRelays(endpoints)
+	}()
 }
 
 func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {

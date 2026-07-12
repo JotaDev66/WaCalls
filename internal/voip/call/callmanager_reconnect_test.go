@@ -168,6 +168,45 @@ func TestInboundMediaRestoresActive(t *testing.T) {
 	}
 }
 
+func TestWatchdogRetriesRedialWhileReconnecting(t *testing.T) {
+	dropped := make(chan struct{}, 1)
+	configured := make(chan int, 1)
+	m := watchdogCM(Timeouts{ReconnectGrace: 10 * time.Second})
+	m.relay = &fakeRelay{
+		onDrop: func() {
+			select {
+			case dropped <- struct{}{}:
+			default:
+			}
+		},
+		onConfigure: func(r []transport.RelayConfig) {
+			select {
+			case configured <- len(r):
+			default:
+			}
+		},
+	}
+	m.currentCall = activeCall()
+	m.currentCall.RelayData = &core.RelayData{Endpoints: []core.RelayEndpoint{{
+		IP: "9.9.9.9", Port: 3480, Key: "k", RawToken: []byte{1}, Protocol: 0,
+	}}}
+	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionMediaLost})
+	m.lastRedialAt = time.Now().Add(-time.Minute)
+	m.startWatchdog()
+
+	select {
+	case <-dropped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconnecting must periodically recycle relay connections")
+	}
+	select {
+	case <-configured:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reconnect retry must redial the stored endpoints")
+	}
+	_ = m.EndCall(context.Background(), core.EndCallReasonUserEnded)
+}
+
 func TestWatchdogRecyclesOnMediaInactivity(t *testing.T) {
 	dropped := make(chan struct{}, 1)
 	configured := make(chan int, 1)
