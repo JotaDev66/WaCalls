@@ -9,25 +9,6 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func TestPublicIPs(t *testing.T) {
-	t.Setenv("WACALLS_PUBLIC_IP", "  203.0.113.10 , , 198.51.100.7 ")
-	got := publicIPs()
-	want := []string{"203.0.113.10", "198.51.100.7"}
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-	}
-
-	t.Setenv("WACALLS_PUBLIC_IP", "")
-	if ips := publicIPs(); ips != nil {
-		t.Fatalf("expected nil for empty env, got %v", ips)
-	}
-}
-
 func TestBuildBrowserAPIDefault(t *testing.T) {
 	api, err := buildBrowserAPI(0, nil)
 	if err != nil || api == nil {

@@ -27,11 +27,7 @@ type Bridge struct {
 	OnTerminalICE func()
 }
 
-func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
-	api, err := browserWebRTCAPI()
-	if err != nil {
-		return nil, "", err
-	}
+func NewBridge(api *webrtc.API, offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 	pc, err := api.NewPeerConnection(webrtc.Configuration{})
 	if err != nil {
 		return nil, "", err

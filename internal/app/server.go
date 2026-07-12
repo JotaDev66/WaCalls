@@ -12,6 +12,7 @@ import (
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
+	"github.com/pion/webrtc/v4"
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
@@ -39,6 +40,7 @@ type Server struct {
 	debug          bool
 	authorize      func(*http.Request) bool
 	allowedOrigins map[string]struct{}
+	webrtcAPI      *webrtc.API
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -51,8 +53,13 @@ func parseOrigins(raw string) map[string]struct{} {
 	return set
 }
 
-func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, apiToken string, corsOrigins string, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
-	bundle, err := store.Open(ctx, storeCfg)
+func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
+	if err != nil {
+		return nil, err
+	}
+
+	api, err := buildBrowserAPI(cfg.WebRTCUDPPort, cfg.PublicIPs)
 	if err != nil {
 		return nil, err
 	}
@@ -63,17 +70,18 @@ func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, max
 	}
 
 	broker := NewBroker()
-	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
+	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
 	return &Server{
 		broker:         broker,
 		sessions:       mgr,
 		log:            log,
-		staticDir:      staticDir,
-		debug:          debug,
-		authorize:      bearerAuthorizer(apiToken),
-		allowedOrigins: parseOrigins(corsOrigins),
+		staticDir:      cfg.StaticDir,
+		debug:          cfg.Debug,
+		authorize:      bearerAuthorizer(cfg.APIToken),
+		allowedOrigins: parseOrigins(cfg.CORSOrigins),
+		webrtcAPI:      api,
 	}, nil
 }
 
