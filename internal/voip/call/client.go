@@ -137,6 +137,16 @@ func (c *Client) HandleTransport(ctx context.Context, node *waBinary.Node, peer 
 	}
 }
 
+func (c *Client) HandleRelayLatency(ctx context.Context, node *waBinary.Node, peer types.JID) {
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	if cm, ok := c.get(info.CallID); ok {
+		cm.HandleCallRelayLatency(ctx, node, peer)
+	}
+}
+
 func (c *Client) HandleTerminate(node *waBinary.Node) {
 	info := signaling.ExtractNodeInfo(node)
 	if info == nil {

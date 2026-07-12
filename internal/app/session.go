@@ -140,6 +140,8 @@ func (s *Session) handleEvent(rawEvt any) {
 		s.calls.HandleAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *events.CallTransport:
 		s.calls.HandleTransport(ctx, wrapCall(evt.From, evt.Data), evt.From)
+	case *events.CallRelayLatency:
+		s.calls.HandleRelayLatency(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *events.CallTerminate:
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	case *events.CallReject:

@@ -55,6 +55,7 @@ type fakeRelay struct {
 	onData      func([]byte)
 	onConfigure func([]transport.RelayConfig)
 	onDrop      func()
+	noConn      bool
 }
 
 var _ RelayTransport = (*fakeRelay)(nil)
@@ -64,7 +65,7 @@ func (r *fakeRelay) Broadcast(data []byte) {
 		r.onData(data)
 	}
 }
-func (r *fakeRelay) HasConnection() bool               { return true }
+func (r *fakeRelay) HasConnection() bool               { return !r.noConn }
 func (r *fakeRelay) SetSsrc(uint32)                    {}
 func (r *fakeRelay) SetSubscriptionSsrc(uint32)        {}
 func (r *fakeRelay) SetStreamSsrcs([]uint32, []uint32) {}

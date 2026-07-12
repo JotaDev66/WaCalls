@@ -182,16 +182,103 @@ func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.No
 		return
 	}
 	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
-	m.log.Info("call transport received", "call_id", call.CallID,
-		"relays", len(relays), "already_connected", m.relay.HasConnection())
-	if len(relays) > 0 && !m.relay.HasConnection() {
-		m.mu.Lock()
-		if call.RelayData == nil {
-			call.RelayData = &core.RelayData{}
+	var structured *signaling.ParsedRelayAck
+	if len(relays) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			relays = parsed.Relays
+			structured = &parsed
+			m.log.Info("transport relays parsed via structured (te2) format", "call_id", call.CallID, "relays", len(relays))
 		}
-		call.RelayData.Endpoints = relays
-		m.mu.Unlock()
-		m.connectRelays(relays)
+	}
+	m.log.Info("call transport received", "call_id", call.CallID,
+		"relays", len(relays), "already_connected", m.relay.HasConnection(),
+		"type", wanode.AttrString(info.InnerNode.Attrs, "transport-message-type"),
+		"children", childTagSummary(info.InnerNode))
+	if len(relays) == 0 || m.relay.HasConnection() {
+		return
+	}
+	if len(buildRelayConfigs(relays)) == 0 {
+		m.log.Warn("transport relays not dialable; keeping stored endpoints", "call_id", call.CallID)
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil {
+		call.RelayData = &core.RelayData{}
+	}
+	call.RelayData.Endpoints = relays
+	if structured != nil {
+		if call.RelayData.HbhKey == nil {
+			call.RelayData.HbhKey = structured.HbhKey
+		}
+		if len(call.RelayData.ParticipantJids) == 0 {
+			call.RelayData.ParticipantJids = structured.ParticipantJids
+		}
+		if call.RelayData.UUID == "" {
+			call.RelayData.UUID = structured.UUID
+		}
+		if call.RelayData.SelfPid == nil {
+			call.RelayData.SelfPid = structured.SelfPid
+		}
+		if call.RelayData.PeerPid == nil {
+			call.RelayData.PeerPid = structured.PeerPid
+		}
+	}
+	m.mu.Unlock()
+	m.connectRelays(relays)
+}
+
+func (m *CallManager) HandleCallRelayLatency(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
+	m.mu.Lock()
+	call := m.currentCall
+	m.mu.Unlock()
+	if call == nil {
+		return
+	}
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil || len(call.RelayData.Endpoints) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			call.RelayData = &core.RelayData{
+				Endpoints: parsed.Relays, ParticipantJids: parsed.ParticipantJids,
+				UUID: parsed.UUID, SelfPid: parsed.SelfPid, PeerPid: parsed.PeerPid, HbhKey: parsed.HbhKey,
+			}
+			m.log.Info("relay data harvested from relaylatency", "call_id", call.CallID, "relays", len(parsed.Relays))
+		}
+	}
+	incoming := call.Direction == core.CallDirectionIncoming
+	creator := call.CallCreator
+	callID := call.CallID
+	m.mu.Unlock()
+	if !incoming {
+		return
+	}
+	creatorJid := wanode.MustJID(creator)
+	echoed := 0
+	for _, te := range wanode.NodeChildren(info.InnerNode) {
+		if te.Tag != "te" {
+			continue
+		}
+		relayName := wanode.AttrString(te.Attrs, "relay_name")
+		if relayName == "" {
+			continue
+		}
+		entry := signaling.RelayLatencyEntry{
+			RelayName:    relayName,
+			Latency:      signaling.DecodeLatency(wanode.AttrString(te.Attrs, "latency")),
+			AddressBytes: wanode.NodeBytes(&te),
+		}
+		echo := signaling.BuildRelayLatencyStanza(peerJid, callID, creatorJid, []signaling.RelayLatencyEntry{entry}, nil)
+		if err := m.sock.SendNode(ctx, echo); err != nil {
+			m.log.Debug("relaylatency echo send failed", "call_id", callID, "err", err)
+			return
+		}
+		echoed++
+	}
+	if echoed > 0 {
+		m.log.Info("relaylatency probes echoed", "call_id", callID, "probes", echoed)
 	}
 }
 
