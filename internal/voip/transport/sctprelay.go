@@ -17,6 +17,8 @@ const (
 	relayConnectionTimeout = 20 * time.Second
 	relayKeepaliveInterval = 1100 * time.Millisecond
 
+	registrationRefreshTicks = 5
+
 	peerConnectionBytes = 64 * 1024
 	dataChannelBytes    = 16 * 1024
 
@@ -337,7 +339,7 @@ func extractFirst(re *regexp.Regexp, s string) string {
 	return ""
 }
 
-func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
+func (m *SctpRelayManager) sendRegistration(conn *relayConnection) {
 	info := conn.info
 	remoteUfrag := info.AuthToken
 	if remoteUfrag == "" {
@@ -349,44 +351,44 @@ func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
 	localUfrag := conn.localUfrag
 	hmacKey := []byte(info.Key)
 
-	send := func() {
-		if conn.getState() != relayStateOpen || conn.channel == nil {
-			return
-		}
-		ssrc := m.subscriptionSsrc.Load()
-		if ssrc == 0 {
-			ssrc = m.audioSsrc.Load()
-		}
-		if ssrc == 0 {
-			return
-		}
-		subs := BuildSenderSubscriptions(ssrc)
-
-		if localUfrag != "" {
-			username := []byte(remoteUfrag + ":" + localUfrag)
-			m.sendRaw(conn, BuildBindingRequestWithSubs(username, hmacKey, subs, true, true))
-		}
-		if info.Token != "" && info.Token != remoteUfrag && localUfrag != "" {
-			username := []byte(info.Token + ":" + localUfrag)
-			m.sendRaw(conn, BuildBindingRequestWithSubs(username, hmacKey, subs, true, true))
-		}
-		m.sendRaw(conn, BuildBindingRequestWithSubs(nil, nil, subs, false, false))
-
-		if len(info.RawToken) > 0 {
-			selfSsrcs, peerSsrcs := m.streamSsrcsSnapshot()
-			if len(selfSsrcs) == 0 {
-				selfSsrcs = []uint32{m.audioSsrc.Load()}
-				peerSsrcs = nil
-				if sub := m.subscriptionSsrc.Load(); sub != 0 {
-					peerSsrcs = []uint32{sub}
-				}
-			}
-			ssrcList := BuildSSRCSubscriptionList(selfSsrcs, peerSsrcs, 0, 0)
-			m.sendRaw(conn, BuildAllocateForRelay(info.RawToken, ssrcList, hmacKey, info.IP, info.Port))
-		}
+	if conn.getState() != relayStateOpen || conn.channel == nil {
+		return
 	}
+	ssrc := m.subscriptionSsrc.Load()
+	if ssrc == 0 {
+		ssrc = m.audioSsrc.Load()
+	}
+	if ssrc == 0 {
+		return
+	}
+	subs := BuildSenderSubscriptions(ssrc)
 
-	send()
+	if localUfrag != "" {
+		username := []byte(remoteUfrag + ":" + localUfrag)
+		m.sendRaw(conn, BuildBindingRequestWithSubs(username, hmacKey, subs, true, true))
+	}
+	if info.Token != "" && info.Token != remoteUfrag && localUfrag != "" {
+		username := []byte(info.Token + ":" + localUfrag)
+		m.sendRaw(conn, BuildBindingRequestWithSubs(username, hmacKey, subs, true, true))
+	}
+	m.sendRaw(conn, BuildBindingRequestWithSubs(nil, nil, subs, false, false))
+
+	if len(info.RawToken) > 0 {
+		selfSsrcs, peerSsrcs := m.streamSsrcsSnapshot()
+		if len(selfSsrcs) == 0 {
+			selfSsrcs = []uint32{m.audioSsrc.Load()}
+			peerSsrcs = nil
+			if sub := m.subscriptionSsrc.Load(); sub != 0 {
+				peerSsrcs = []uint32{sub}
+			}
+		}
+		ssrcList := BuildSSRCSubscriptionList(selfSsrcs, peerSsrcs, 0, 0)
+		m.sendRaw(conn, BuildAllocateForRelay(info.RawToken, ssrcList, hmacKey, info.IP, info.Port))
+	}
+}
+
+func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
+	m.sendRegistration(conn)
 	for _, d := range []time.Duration{50, 150, 500, 3000} {
 		delay := d * time.Millisecond
 		retransmitDone := m.obs().TrackGoroutine()
@@ -398,7 +400,7 @@ func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
 				open := conn.getState() == relayStateOpen
 				m.mu.Unlock()
 				if open {
-					send()
+					m.sendRegistration(conn)
 				}
 			case <-conn.stopCh:
 			}
@@ -413,6 +415,7 @@ func (m *SctpRelayManager) startKeepalive(conn *relayConnection) {
 	keepaliveDone := m.obs().TrackGoroutine()
 	go func() {
 		defer keepaliveDone()
+		ticks := 0
 		for {
 			select {
 			case <-ticker.C:
@@ -420,6 +423,10 @@ func (m *SctpRelayManager) startKeepalive(conn *relayConnection) {
 					return
 				}
 				m.sendRaw(conn, BuildWhatsAppPing())
+				ticks++
+				if ticks%registrationRefreshTicks == 0 {
+					m.sendRegistration(conn)
+				}
 			case <-conn.stopCh:
 				ticker.Stop()
 				return
