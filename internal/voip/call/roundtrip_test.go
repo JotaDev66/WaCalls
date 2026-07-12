@@ -63,23 +63,23 @@ func (r *fakeRelay) Broadcast(data []byte) {
 		r.onData(data)
 	}
 }
-func (r *fakeRelay) HasConnection() bool                     { return true }
-func (r *fakeRelay) SetSsrc(uint32)                          {}
-func (r *fakeRelay) SetSubscriptionSsrc(uint32)              {}
-func (r *fakeRelay) SetStreamSsrcs([]uint32, []uint32)       {}
-func (r *fakeRelay) SetOnConnected(func(string, int)) {}
-func (r *fakeRelay) SetOnReceive(func([]byte))        {}
-func (r *fakeRelay) SetOnUsableChange(func(int))      {}
-func (r *fakeRelay) ResendSubscriptions()             {}
+func (r *fakeRelay) HasConnection() bool               { return true }
+func (r *fakeRelay) SetSsrc(uint32)                    {}
+func (r *fakeRelay) SetSubscriptionSsrc(uint32)        {}
+func (r *fakeRelay) SetStreamSsrcs([]uint32, []uint32) {}
+func (r *fakeRelay) SetOnConnected(func(string, int))  {}
+func (r *fakeRelay) SetOnReceive(func([]byte))         {}
+func (r *fakeRelay) SetOnUsableChange(func(int))       {}
+func (r *fakeRelay) ResendSubscriptions()              {}
 func (r *fakeRelay) ConfigureRelays(relays []transport.RelayConfig) {
 	if r.onConfigure != nil {
 		r.onConfigure(relays)
 	}
 }
-func (r *fakeRelay) BufferedAmount() uint64                  { return 0 }
-func (r *fakeRelay) ConnectedCount() int                     { return 1 }
-func (r *fakeRelay) Cleanup()                                {}
-func (r *fakeRelay) SetObserver(core.CallObserver)           {}
+func (r *fakeRelay) BufferedAmount() uint64        { return 0 }
+func (r *fakeRelay) ConnectedCount() int           { return 1 }
+func (r *fakeRelay) Cleanup()                      {}
+func (r *fakeRelay) SetObserver(core.CallObserver) {}
 
 func km(seed byte) core.SrtpKeyingMaterial {
 	mk := make([]byte, 16)
