@@ -44,7 +44,7 @@ func (s *Server) routes() http.Handler {
 		root.Handle("/debug/", s.withAuth(api))
 	}
 	root.Handle("/", s.uiHandler())
-	return withCORS(root)
+	return s.withCORS(root)
 }
 
 func (s *Server) uiHandler() http.Handler {
@@ -59,16 +59,20 @@ func (s *Server) uiHandler() http.Handler {
 	return http.NotFoundHandler()
 }
 
-func withCORS(h http.Handler) http.Handler {
+func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		origin := r.Header.Get("Origin")
+		if _, ok := s.allowedOrigins[origin]; ok && origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id, Authorization")
+			w.Header().Set("Vary", "Origin")
+		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		h.ServeHTTP(w, r)
+		next.ServeHTTP(w, r)
 	})
 }
 

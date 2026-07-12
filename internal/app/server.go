@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"wacalls/internal/store"
@@ -31,15 +32,26 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 }
 
 type Server struct {
-	broker    *Broker
-	sessions  *SessionManager
-	log       *slog.Logger
-	staticDir string
-	debug     bool
-	authorize func(*http.Request) bool
+	broker         *Broker
+	sessions       *SessionManager
+	log            *slog.Logger
+	staticDir      string
+	debug          bool
+	authorize      func(*http.Request) bool
+	allowedOrigins map[string]struct{}
 }
 
-func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, apiToken string, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+func parseOrigins(raw string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for _, o := range strings.Split(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			set[o] = struct{}{}
+		}
+	}
+	return set
+}
+
+func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, apiToken string, corsOrigins string, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
 	bundle, err := store.Open(ctx, storeCfg)
 	if err != nil {
 		return nil, err
@@ -54,7 +66,15 @@ func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, max
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, debug: debug, authorize: bearerAuthorizer(apiToken)}, nil
+	return &Server{
+		broker:         broker,
+		sessions:       mgr,
+		log:            log,
+		staticDir:      staticDir,
+		debug:          debug,
+		authorize:      bearerAuthorizer(apiToken),
+		allowedOrigins: parseOrigins(corsOrigins),
+	}, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
