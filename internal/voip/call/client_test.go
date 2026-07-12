@@ -1,7 +1,9 @@
 package call
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"testing"
@@ -47,6 +49,133 @@ func offerNode(callID string, from types.JID) *waBinary.Node {
 			Tag:   "offer",
 			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": from.String()},
 		}},
+	}
+}
+
+type keyedSock struct {
+	recordSock
+	key      []byte
+	err      error
+	decrypts int
+}
+
+func (k *keyedSock) DecryptCallKey(ctx context.Context, from types.JID, encChild *waBinary.Node) ([]byte, error) {
+	k.mu.Lock()
+	k.decrypts++
+	k.mu.Unlock()
+	return k.key, k.err
+}
+
+func (k *keyedSock) decryptCount() int {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.decrypts
+}
+
+func offerNodeWithEnc(callID string, from types.JID) *waBinary.Node {
+	return &waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"from": from},
+		Content: []waBinary.Node{{
+			Tag:   "offer",
+			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": from.String()},
+			Content: []waBinary.Node{{
+				Tag:   "enc",
+				Attrs: waBinary.Attrs{"v": "2", "type": "pkmsg"},
+			}},
+		}},
+	}
+}
+
+func sentRejectCount(sock *keyedSock) int {
+	n := 0
+	for _, tag := range sock.sentInnerTags() {
+		if tag == "reject" {
+			n++
+		}
+	}
+	return n
+}
+
+func TestHandleOfferRejectsUndecryptableKey(t *testing.T) {
+	sock := &keyedSock{err: errors.New("no valid sessions")}
+	onCallCount := 0
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0,
+		func(string, *CallManager) { onCallCount++ }, nil)
+
+	peer := types.NewJID("5511999990000", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), offerNodeWithEnc("CALL1", peer), peer)
+
+	if _, ok := c.Get("CALL1"); ok {
+		t.Fatal("undecryptable offer must not register a call manager")
+	}
+	if onCallCount != 0 {
+		t.Fatalf("onCall must not fire for undecryptable offer, got %d", onCallCount)
+	}
+	if n := c.Count(); n != 0 {
+		t.Fatalf("undecryptable offer must not occupy a slot, got %d", n)
+	}
+	if sentRejectCount(sock) != 1 {
+		t.Fatalf("expected exactly one reject stanza, sent tags: %v", sock.sentInnerTags())
+	}
+}
+
+func TestHandleOfferKeyReachesCall(t *testing.T) {
+	key := bytes.Repeat([]byte{0x42}, 32)
+	sock := &keyedSock{key: key}
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0,
+		func(string, *CallManager) {}, nil)
+
+	peer := types.NewJID("5511999990000", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), offerNodeWithEnc("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
+
+	cm, ok := c.Get("CALL1")
+	if !ok {
+		t.Fatal("decryptable offer must register a call manager")
+	}
+	if got := cm.CurrentCall().EncryptionKey; !bytes.Equal(got, key) {
+		t.Fatalf("EncryptionKey = %x, want %x", got, key)
+	}
+}
+
+func TestHandleOfferNoEncNodeStillRings(t *testing.T) {
+	sock := &keyedSock{err: errors.New("must not be called")}
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0,
+		func(string, *CallManager) {}, nil)
+
+	peer := types.NewJID("5511999990000", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), offerNode("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
+
+	cm, ok := c.Get("CALL1")
+	if !ok {
+		t.Fatal("offer without enc node must still register")
+	}
+	if cm.CurrentCall().EncryptionKey != nil {
+		t.Fatal("EncryptionKey must stay nil without enc node")
+	}
+	if n := sock.decryptCount(); n != 0 {
+		t.Fatalf("DecryptCallKey must not run without enc node, got %d", n)
+	}
+}
+
+func TestCapacityRejectDoesNotDecrypt(t *testing.T) {
+	sock := &keyedSock{key: bytes.Repeat([]byte{0x01}, 32)}
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 1,
+		func(string, *CallManager) {}, nil)
+
+	peer := types.NewJID("5511999990000", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), offerNodeWithEnc("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
+	before := sock.decryptCount()
+	c.HandleOffer(context.Background(), offerNodeWithEnc("CALL2", peer), peer)
+
+	if got := sock.decryptCount(); got != before {
+		t.Fatalf("capacity reject must not decrypt, count %d -> %d", before, got)
+	}
+	if sentRejectCount(sock) != 1 {
+		t.Fatalf("expected capacity reject stanza, tags: %v", sock.sentInnerTags())
 	}
 }
 
