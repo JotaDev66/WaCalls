@@ -1,6 +1,8 @@
 package app
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -71,5 +73,51 @@ func TestWithCORSPreflightShortCircuitsBeforeAuth(t *testing.T) {
 	s.withCORS(sentinel).ServeHTTP(rec, r)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("preflight status = %d, want 204", rec.Code)
+	}
+}
+
+func TestLoopbackOnlyRejectsRemote(t *testing.T) {
+	reached := false
+	h := loopbackOnly(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached = true }))
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/debug/pprof/", nil)
+	r.RemoteAddr = "203.0.113.7:5555"
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("remote caller status = %d, want 404", rec.Code)
+	}
+	if reached {
+		t.Fatal("remote caller must not reach the handler")
+	}
+
+	rec = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "/debug/pprof/", nil)
+	r.RemoteAddr = "127.0.0.1:5555"
+	h.ServeHTTP(rec, r)
+	if !reached {
+		t.Fatal("loopback caller must reach the handler")
+	}
+}
+
+func TestMaxBytesRejectsOversizedBody(t *testing.T) {
+	var readErr error
+	h := maxBytes(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, readErr = io.ReadAll(r.Body)
+	}))
+
+	big := bytes.NewReader(make([]byte, maxBodyBytes+1))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/sessions", big))
+	if readErr == nil {
+		t.Fatal("oversized body must produce a read error")
+	}
+
+	readErr = nil
+	small := bytes.NewReader(make([]byte, 1024))
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/api/sessions", small))
+	if readErr != nil {
+		t.Fatalf("small body must read cleanly, got %v", readErr)
 	}
 }

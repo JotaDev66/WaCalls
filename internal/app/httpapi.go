@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -39,12 +40,40 @@ func (s *Server) routes() http.Handler {
 	}
 
 	root := http.NewServeMux()
-	root.Handle("/api/", s.withAuth(api))
+	root.Handle("/api/", s.withAuth(maxBytes(api)))
 	if s.debug {
-		root.Handle("/debug/", s.withAuth(api))
+		root.Handle("/debug/", loopbackOnly(s.withAuth(api)))
 	}
 	root.Handle("/", s.uiHandler())
 	return s.withCORS(root)
+}
+
+const maxBodyBytes = 1 << 20
+
+func isLoopback(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		host = remoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+func loopbackOnly(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopback(r.RemoteAddr) {
+			http.NotFound(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func maxBytes(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) uiHandler() http.Handler {
