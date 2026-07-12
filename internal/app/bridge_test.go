@@ -40,7 +40,7 @@ func TestNewBridgeNegotiatesDataChannelOffer(t *testing.T) {
 	pc, _, offer := makeBrowserOffer(t)
 	defer func() { _ = pc.Close() }()
 
-	br, answer, err := NewBridge(offer, slog.Default())
+	br, answer, err := NewBridge(webrtc.NewAPI(), offer, slog.Default())
 	if err != nil {
 		t.Fatalf("NewBridge failed: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestBridgePCMRoundtrip(t *testing.T) {
 	defer func() { _ = pc.Close() }()
 
 	got := make(chan []float32, 1)
-	br, answer, err := NewBridge(offer, slog.Default())
+	br, answer, err := NewBridge(webrtc.NewAPI(), offer, slog.Default())
 	if err != nil {
 		t.Fatalf("NewBridge: %v", err)
 	}

@@ -263,7 +263,7 @@ func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sdp_offer required"})
 		return
 	}
-	bridge, answer, err := NewBridge(body.SDPOffer, s.log)
+	bridge, answer, err := NewBridge(s.webrtcAPI, body.SDPOffer, s.log)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
