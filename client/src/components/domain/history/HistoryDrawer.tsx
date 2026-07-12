@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { History } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -26,7 +32,10 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
         <Separator />
         <ScrollArea className="h-[calc(100vh-5.5rem)] px-6 py-4">
           {rows.length === 0 ? (
-            <EmptyState title="No past calls" description="Calls you make or receive will appear here." />
+            <EmptyState
+              title="No past calls"
+              description="Calls you make or receive will appear here."
+            />
           ) : (
             <ul className="space-y-2">
               {rows.map((r) => (

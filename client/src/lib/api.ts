@@ -33,7 +33,11 @@ export const apiGet = async <T>(path: string): Promise<T> => {
 };
 
 export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
-  const r = await fetch(path, { method: "POST", headers: baseHeaders(), body: JSON.stringify(body) });
+  const r = await fetch(path, {
+    method: "POST",
+    headers: baseHeaders(),
+    body: JSON.stringify(body),
+  });
   if (!r.ok) {
     guard(r.status);
     const text = await r.text().catch(() => "");

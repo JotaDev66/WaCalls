@@ -3,7 +3,11 @@ import { PhoneOff, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { attachMeter } from "@/lib/audio-meter";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
@@ -11,7 +15,10 @@ import { useEndCall } from "@/hooks/useEndCall";
 import { formatCallDuration } from "@/utils/format";
 import type { CallStatus, CallSummary } from "@/types/call";
 
-const statusVariant: Record<CallStatus, "success" | "secondary" | "muted" | "warning"> = {
+const statusVariant: Record<
+  CallStatus,
+  "success" | "secondary" | "muted" | "warning"
+> = {
   connected: "success",
   ringing: "secondary",
   starting: "secondary",
@@ -25,7 +32,10 @@ const Meter = ({ label, db }: { label: string; db: number }) => {
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground">{label}</p>
       <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full bg-primary transition-all"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );
@@ -65,7 +75,8 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
   }, [conn]);
 
   useEffect(() => {
-    const el = audioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    const el = audioRef.current as
+      (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
     if (!el || !outDeviceId || typeof el.setSinkId !== "function") return;
     el.setSinkId(outDeviceId).catch(() => {});
   }, [outDeviceId, conn]);
@@ -85,7 +96,9 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
               <Button
                 variant="destructive"
                 size="icon"
-                onClick={() => endCall.mutate({ sid: call.sessionId, callId: call.callId })}
+                onClick={() =>
+                  endCall.mutate({ sid: call.sessionId, callId: call.callId })
+                }
                 aria-label="End call"
               >
                 <PhoneOff className="h-4 w-4" />

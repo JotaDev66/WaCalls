@@ -1,6 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSessions } from "@/stores/sessions";
@@ -24,7 +30,9 @@ export const SessionPairing = ({ session }: { session: SessionInfo }) => {
               <QRCodeSVG value={qr} size={232} marginSize={1} />
             </div>
           ) : session.state === "logged_out" ? (
-            <Badge variant="destructive">Disconnected — use Reactivate above to get a QR</Badge>
+            <Badge variant="destructive">
+              Disconnected — use Reactivate above to get a QR
+            </Badge>
           ) : (
             <>
               <Skeleton className="h-[258px] w-[258px] rounded-lg" />

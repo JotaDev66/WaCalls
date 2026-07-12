@@ -16,7 +16,9 @@ export const EmptyState = ({ icon, title, description }: Props) => (
         </div>
       )}
       <p className="font-medium">{title}</p>
-      {description && <p className="max-w-xs text-sm text-muted-foreground">{description}</p>}
+      {description && (
+        <p className="max-w-xs text-sm text-muted-foreground">{description}</p>
+      )}
     </CardContent>
   </Card>
 );

@@ -15,7 +15,10 @@ export const Dialer = ({ sid }: { sid: string }) => {
 
   const submit = () => {
     if (!phone.trim() || startCall.isPending) return;
-    startCall.mutate({ phone: phone.trim(), record }, { onSuccess: () => setPhone("") });
+    startCall.mutate(
+      { phone: phone.trim(), record },
+      { onSuccess: () => setPhone("") },
+    );
   };
 
   return (
@@ -46,7 +49,10 @@ export const Dialer = ({ sid }: { sid: string }) => {
             <Disc3 className="h-4 w-4" />
             Record
           </Button>
-          <Button onClick={submit} disabled={startCall.isPending || !phone.trim()}>
+          <Button
+            onClick={submit}
+            disabled={startCall.isPending || !phone.trim()}
+          >
             <Phone className="h-4 w-4" />
             {startCall.isPending ? "Calling…" : "Call"}
           </Button>

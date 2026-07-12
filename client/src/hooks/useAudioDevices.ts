@@ -9,18 +9,26 @@ export const useAudioDevices = () => {
   useEffect(() => {
     (async () => {
       try {
-        (await navigator.mediaDevices.getUserMedia({ audio: true })).getTracks().forEach((t) => t.stop());
+        (await navigator.mediaDevices.getUserMedia({ audio: true }))
+          .getTracks()
+          .forEach((t) => t.stop());
       } catch {}
       const list = await navigator.mediaDevices.enumerateDevices();
       setMics(
         list
           .filter((d) => d.kind === "audioinput")
-          .map((d) => ({ deviceId: d.deviceId, label: d.label || "Default mic" })),
+          .map((d) => ({
+            deviceId: d.deviceId,
+            label: d.label || "Default mic",
+          })),
       );
       setOuts(
         list
           .filter((d) => d.kind === "audiooutput")
-          .map((d) => ({ deviceId: d.deviceId, label: d.label || "Default speaker" })),
+          .map((d) => ({
+            deviceId: d.deviceId,
+            label: d.label || "Default speaker",
+          })),
       );
     })();
   }, []);

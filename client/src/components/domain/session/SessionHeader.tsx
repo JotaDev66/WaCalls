@@ -13,7 +13,10 @@ const statusLabel: Record<SessionState, string> = {
   logged_out: "Disconnected",
 };
 
-const statusVariant: Record<SessionState, "success" | "secondary" | "muted" | "destructive"> = {
+const statusVariant: Record<
+  SessionState,
+  "success" | "secondary" | "muted" | "destructive"
+> = {
   open: "success",
   qr: "secondary",
   connecting: "muted",
@@ -37,17 +40,38 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
   return (
     <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <h1 className="truncate text-xl font-semibold tracking-tight">{session.name}</h1>
-        <Badge variant={statusVariant[session.state]}>{statusLabel[session.state]}</Badge>
+        <h1 className="truncate text-xl font-semibold tracking-tight">
+          {session.name}
+        </h1>
+        <Badge variant={statusVariant[session.state]}>
+          {statusLabel[session.state]}
+        </Badge>
       </div>
       {session.paired ? (
-        <Button variant="outline" size="sm" disabled={busy} onClick={() => run(() => logoutSession(session.id))}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => run(() => logoutSession(session.id))}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Power className="h-4 w-4" />
+          )}
           Disconnect
         </Button>
       ) : (
-        <Button size="sm" disabled={busy} onClick={() => run(() => pairSession(session.id))}>
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <QrCode className="h-4 w-4" />}
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => run(() => pairSession(session.id))}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <QrCode className="h-4 w-4" />
+          )}
           Reactivate
         </Button>
       )}
