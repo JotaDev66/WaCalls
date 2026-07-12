@@ -97,6 +97,11 @@ func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsStunPacket(data) {
 		return
 	}
+	if transport.IsRtcpPacket(data) {
+		ssrc, _ := media.ParseRTCPSenderSSRC(data)
+		m.log.Debug("inbound rtcp dropped", "pt", data[1], "ssrc", ssrc)
+		return
+	}
 	if !transport.IsRtpPacket(data) {
 		return
 	}
