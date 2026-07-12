@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/wanode"
 
@@ -57,6 +58,7 @@ func TestHandleOfferIdempotent(t *testing.T) {
 
 	peer := types.NewJID("5511999990000", types.DefaultUserServer)
 	c.HandleOffer(context.Background(), offerNode("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
 
 	first, ok := c.Get("CALL1")
 	if !ok {
@@ -84,6 +86,7 @@ func TestHandleOfferDuplicateNotRejectedAtCapacity(t *testing.T) {
 
 	peer := types.NewJID("5511999990000", types.DefaultUserServer)
 	c.HandleOffer(context.Background(), offerNode("CALL1", peer), peer)
+	defer func() { _ = c.EndCall(context.Background(), "CALL1", core.EndCallReasonUserEnded) }()
 	c.HandleOffer(context.Background(), offerNode("CALL1", peer), peer)
 
 	for _, tag := range sock.sentInnerTags() {

@@ -176,6 +176,11 @@ go run ./cmd/server -static client/dist -addr :8080
 | `-debug` | `false` | Verbose logging (includes whatsmeow's internal log) |
 | `-max-calls-per-session` | `8` | Max concurrent calls per session (`0` = unlimited) |
 
+Calls that stay unanswered, unaccepted, or fail to establish media time out
+automatically (60s ring/answer, 30s media connect), and active calls are capped at
+4 hours. A timed-out call ends with reason `timeout` and releases its
+`-max-calls-per-session` slot.
+
 Set the `DATABASE_URL` environment variable to store everything on PostgreSQL instead of
 SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unset uses the
 `-db` SQLite file.

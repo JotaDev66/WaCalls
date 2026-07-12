@@ -100,6 +100,10 @@ func (m *CallManager) cleanupMedia() {
 	m.outgoingPreacceptSent = false
 	m.actualPeerSet = false
 	m.extAttached = false
+	if m.watchdogStop != nil {
+		close(m.watchdogStop)
+		m.watchdogStop = nil
+	}
 	m.mu.Unlock()
 
 	m.extMu.Lock()
