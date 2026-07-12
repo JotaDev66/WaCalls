@@ -226,6 +226,11 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "phone required"})
 		return
 	}
+	phone := normalizePhone(body.Phone)
+	if phone == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid phone"})
+		return
+	}
 	owner := clientID(r)
 	if other := s.broker.ownerActiveCall(owner); other != "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
@@ -235,7 +240,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}
-	peer := types.NewJID(normalizePhone(body.Phone), types.DefaultUserServer)
+	peer := types.NewJID(phone, types.DefaultUserServer)
 
 	callID, err := sess.startOutgoing(r.Context(), peer)
 	if err != nil {

@@ -91,6 +91,10 @@ func (c *Client) HandleOffer(ctx context.Context, node *waBinary.Node, peer type
 	if info == nil || info.CallID == "" {
 		return
 	}
+	if _, ok := c.get(info.CallID); ok {
+		c.log.Info("duplicate offer ignored", "call_id", info.CallID)
+		return
+	}
 	if c.maxCalls > 0 && c.Count() >= c.maxCalls {
 		c.reject(ctx, node, peer)
 		return

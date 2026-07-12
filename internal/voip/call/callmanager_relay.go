@@ -59,7 +59,7 @@ func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {
 			name = ep.IP
 		}
 		relays = append(relays, transport.RelayConfig{
-			IP: ep.IP, Port: 3478, Token: ep.Token, AuthToken: ep.AuthToken,
+			IP: ep.IP, Port: ep.Port, Token: ep.Token, AuthToken: ep.AuthToken,
 			RawAuthToken: ep.RawAuthToken, RawToken: ep.RawToken, Key: ep.Key,
 			RelayID: ep.RelayID, Name: name, AuthTokenID: ep.AuthTokenID,
 		})
