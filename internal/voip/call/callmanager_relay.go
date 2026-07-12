@@ -7,6 +7,9 @@ import (
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/transport"
+	"wacalls/internal/voip/wanode"
+
+	"go.mau.fi/whatsmeow/types"
 )
 
 type RelayTransport interface {
@@ -44,13 +47,28 @@ func (m *CallManager) onRelayUsableChange(usable int) {
 	if usable > 0 {
 		m.mu.Lock()
 		call := m.currentCall
+		restored := false
+		var peer, creator types.JID
+		callID := ""
 		if call != nil && call.StateData.State == core.CallStateReconnecting {
 			if err := call.ApplyTransition(Transition{Type: TransitionMediaRestored}); err == nil {
 				m.emitState()
 				m.log.Info("media path restored", "call_id", call.CallID)
+				restored = true
+				peer = wanode.MustJID(call.PeerJid)
+				creator = wanode.MustJID(call.CallCreator)
+				callID = call.CallID
 			}
 		}
 		m.mu.Unlock()
+		if restored {
+			m.relay.ResendSubscriptions()
+			notifyDone := m.observer.TrackGoroutine()
+			go func() {
+				defer notifyDone()
+				m.sendTransportUpdate(context.Background(), peer, creator, callID)
+			}()
+		}
 		return
 	}
 

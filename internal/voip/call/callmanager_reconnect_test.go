@@ -149,6 +149,25 @@ func TestUsablePositiveRestoresActive(t *testing.T) {
 	}
 }
 
+func TestMediaRestoredNotifiesPeerTransport(t *testing.T) {
+	sock := &recordSock{}
+	m := NewCallManager(sock, slog.Default())
+	m.relay = &fakeRelay{}
+	m.currentCall = activeCall()
+	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionMediaLost})
+
+	m.onRelayUsableChange(1)
+
+	waitFor(t, 2*time.Second, func() bool {
+		for _, tag := range sock.sentInnerTags() {
+			if tag == "transport" {
+				return true
+			}
+		}
+		return false
+	})
+}
+
 func TestUsableChangeNoopOutsideActiveOrReconnecting(t *testing.T) {
 	m := NewCallManager(fakeSock{}, slog.Default())
 	m.relay = &fakeRelay{}
