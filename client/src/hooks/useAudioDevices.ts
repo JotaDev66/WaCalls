@@ -13,7 +13,13 @@ export const useAudioDevices = () => {
           .getTracks()
           .forEach((t) => t.stop());
       } catch {}
-      const list = await navigator.mediaDevices.enumerateDevices();
+      let list: MediaDeviceInfo[];
+      try {
+        list = await navigator.mediaDevices.enumerateDevices();
+      } catch (err) {
+        console.warn("enumerateDevices failed", err);
+        return;
+      }
       setMics(
         list
           .filter((d) => d.kind === "audioinput")

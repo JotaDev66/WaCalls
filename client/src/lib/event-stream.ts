@@ -89,11 +89,20 @@ class EventStream {
     };
     es.onmessage = (ev) => {
       this.#lastActivity = Date.now();
+      let parsed: BrokerEvent | { type: "ping" };
       try {
-        const parsed: BrokerEvent | { type: "ping" } = JSON.parse(ev.data);
-        if (parsed.type === "ping") return;
-        for (const l of this.#listeners) l(parsed);
-      } catch {}
+        parsed = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      if (parsed.type === "ping") return;
+      for (const l of this.#listeners) {
+        try {
+          l(parsed);
+        } catch (err) {
+          console.error("event listener failed", err);
+        }
+      }
     };
     es.onerror = () => {
       this.#emitStatus(false);
