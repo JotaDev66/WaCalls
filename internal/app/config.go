@@ -8,36 +8,38 @@ import (
 )
 
 type Config struct {
-	Addr          string
-	DBPath        string
-	StaticDir     string
-	Debug         bool
-	MaxCalls      int
-	DatabaseURL   string
-	APIToken      string
-	CORSOrigins   string
-	RateLimit     float64
-	WebRTCUDPPort int
-	PublicIPs     []string
-	WebhookURL    string
-	WebhookSecret string
+	Addr           string
+	DBPath         string
+	StaticDir      string
+	Debug          bool
+	MaxCalls       int
+	DatabaseURL    string
+	APIToken       string
+	CORSOrigins    string
+	RateLimit      float64
+	WebRTCUDPPort  int
+	PublicIPs      []string
+	WebhookURL     string
+	WebhookSecret  string
+	TrustedProxies string
 }
 
 func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config {
 	return Config{
-		Addr:          addr,
-		DBPath:        dbPath,
-		StaticDir:     staticDir,
-		Debug:         debug,
-		MaxCalls:      maxCalls,
-		DatabaseURL:   os.Getenv("DATABASE_URL"),
-		APIToken:      os.Getenv("WACALLS_API_TOKEN"),
-		CORSOrigins:   os.Getenv("WACALLS_CORS_ORIGINS"),
-		RateLimit:     parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
-		WebRTCUDPPort: parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
-		PublicIPs:     parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
-		WebhookURL:    strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
-		WebhookSecret: os.Getenv("WACALLS_WEBHOOK_SECRET"),
+		Addr:           addr,
+		DBPath:         dbPath,
+		StaticDir:      staticDir,
+		Debug:          debug,
+		MaxCalls:       maxCalls,
+		DatabaseURL:    os.Getenv("DATABASE_URL"),
+		APIToken:       os.Getenv("WACALLS_API_TOKEN"),
+		CORSOrigins:    os.Getenv("WACALLS_CORS_ORIGINS"),
+		RateLimit:      parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
+		WebRTCUDPPort:  parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
+		PublicIPs:      parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
+		WebhookURL:     strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
+		WebhookSecret:  os.Getenv("WACALLS_WEBHOOK_SECRET"),
+		TrustedProxies: os.Getenv("WACALLS_TRUSTED_PROXIES"),
 	}
 }
 

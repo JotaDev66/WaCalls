@@ -8,6 +8,25 @@ import (
 	"time"
 )
 
+func TestParseTrustedProxies(t *testing.T) {
+	got, err := parseTrustedProxies(" 127.0.0.1, 10.0.0.0/8 , ::1 ")
+	if err != nil || len(got) != 3 {
+		t.Fatalf("got %v err %v", got, err)
+	}
+	if got[0].String() != "127.0.0.1/32" || got[1].String() != "10.0.0.0/8" || got[2].String() != "::1/128" {
+		t.Fatalf("prefixes: %v", got)
+	}
+	if out, err := parseTrustedProxies(""); err != nil || out != nil {
+		t.Fatalf("empty must be nil, got %v err %v", out, err)
+	}
+	if _, err := parseTrustedProxies("banana"); err == nil {
+		t.Fatal("invalid entry must error")
+	}
+	if _, err := parseTrustedProxies("10.0.0.0/99"); err == nil {
+		t.Fatal("invalid cidr must error")
+	}
+}
+
 func TestIPRateLimiterBurstAndDeny(t *testing.T) {
 	l := newIPRateLimiter(1)
 	for i := range 2 {
