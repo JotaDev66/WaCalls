@@ -3,22 +3,42 @@ package app
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"strings"
 	"testing"
 	"time"
 )
 
+func TestParseTrustedProxies(t *testing.T) {
+	got, err := parseTrustedProxies(" 127.0.0.1, 10.0.0.0/8 , ::1 ")
+	if err != nil || len(got) != 3 {
+		t.Fatalf("got %v err %v", got, err)
+	}
+	if got[0].String() != "127.0.0.1/32" || got[1].String() != "10.0.0.0/8" || got[2].String() != "::1/128" {
+		t.Fatalf("prefixes: %v", got)
+	}
+	if out, err := parseTrustedProxies(""); err != nil || out != nil {
+		t.Fatalf("empty must be nil, got %v err %v", out, err)
+	}
+	if _, err := parseTrustedProxies("banana"); err == nil {
+		t.Fatal("invalid entry must error")
+	}
+	if _, err := parseTrustedProxies("10.0.0.0/99"); err == nil {
+		t.Fatal("invalid cidr must error")
+	}
+}
+
 func TestIPRateLimiterBurstAndDeny(t *testing.T) {
 	l := newIPRateLimiter(1)
 	for i := range 2 {
-		if !l.allow("10.0.0.1:1234") {
+		if !l.allow("10.0.0.1") {
 			t.Fatalf("burst request %d should be allowed", i)
 		}
 	}
-	if l.allow("10.0.0.1:1234") {
+	if l.allow("10.0.0.1") {
 		t.Fatal("request beyond burst should be denied")
 	}
-	if !l.allow("10.0.0.2:9999") {
+	if !l.allow("10.0.0.2") {
 		t.Fatal("distinct IP must have its own bucket")
 	}
 }
@@ -26,21 +46,21 @@ func TestIPRateLimiterBurstAndDeny(t *testing.T) {
 func TestIPRateLimiterRefill(t *testing.T) {
 	l := newIPRateLimiter(100)
 	for range 200 {
-		l.allow("10.0.0.3:1")
+		l.allow("10.0.0.3")
 	}
-	if l.allow("10.0.0.3:1") {
+	if l.allow("10.0.0.3") {
 		t.Fatal("bucket should be empty")
 	}
 	time.Sleep(50 * time.Millisecond)
-	if !l.allow("10.0.0.3:1") {
+	if !l.allow("10.0.0.3") {
 		t.Fatal("bucket should refill over time")
 	}
 }
 
 func TestIPRateLimiterPurge(t *testing.T) {
 	l := newIPRateLimiter(1)
-	l.allow("10.0.0.4:1")
-	l.allow("10.0.0.5:1")
+	l.allow("10.0.0.4")
+	l.allow("10.0.0.5")
 	l.mu.Lock()
 	l.perIP["10.0.0.4"].lastSeen = time.Now().Add(-10 * time.Minute)
 	l.mu.Unlock()
@@ -52,6 +72,58 @@ func TestIPRateLimiterPurge(t *testing.T) {
 	}
 	if _, ok := l.perIP["10.0.0.5"]; !ok {
 		t.Fatal("active entry should survive purge")
+	}
+}
+
+func trustedReq(remote, xff string) *http.Request {
+	r := httptest.NewRequest(http.MethodGet, "/api/sessions", nil)
+	r.RemoteAddr = remote
+	if xff != "" {
+		r.Header.Set("X-Forwarded-For", xff)
+	}
+	return r
+}
+
+func TestClientIPKeying(t *testing.T) {
+	trusted, _ := parseTrustedProxies("127.0.0.1, 10.0.0.0/8")
+	cases := []struct {
+		name, remote, xff, want string
+		trusted                 []netip.Prefix
+	}{
+		{"no trusted list", "203.0.113.9:1", "6.6.6.6", "203.0.113.9", nil},
+		{"trusted no xff", "127.0.0.1:1", "", "127.0.0.1", trusted},
+		{"trusted simple xff", "127.0.0.1:1", "203.0.113.7", "203.0.113.7", trusted},
+		{"spoofed left entries ignored", "127.0.0.1:1", "6.6.6.6, 1.2.3.4", "1.2.3.4", trusted},
+		{"chained trusted proxies", "127.0.0.1:1", "1.2.3.4, 10.0.0.5", "1.2.3.4", trusted},
+		{"all entries trusted falls back", "127.0.0.1:1", "10.0.0.5, 10.0.0.6", "127.0.0.1", trusted},
+		{"untrusted source xff ignored", "203.0.113.9:1", "1.2.3.4", "203.0.113.9", trusted},
+		{"malformed xff falls back", "127.0.0.1:1", "not-an-ip", "127.0.0.1", trusted},
+	}
+	for _, tc := range cases {
+		if got := clientIP(trustedReq(tc.remote, tc.xff), tc.trusted); got != tc.want {
+			t.Fatalf("%s: want %s, got %s", tc.name, tc.want, got)
+		}
+	}
+}
+
+func TestWithRateLimitTrustedProxyBuckets(t *testing.T) {
+	trusted, _ := parseTrustedProxies("127.0.0.1")
+	s := &Server{rateLimiter: newIPRateLimiter(1), trustedProxies: trusted}
+	h := s.withRateLimit(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	hit := func(xff string) int {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, trustedReq("127.0.0.1:9", xff))
+		return rec.Code
+	}
+	hit("203.0.113.7")
+	hit("203.0.113.7")
+	if code := hit("203.0.113.7"); code != http.StatusTooManyRequests {
+		t.Fatalf("third hit same client: want 429, got %d", code)
+	}
+	if code := hit("203.0.113.8"); code != http.StatusOK {
+		t.Fatalf("distinct forwarded client must have its own bucket, got %d", code)
 	}
 }
 

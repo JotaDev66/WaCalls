@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type Server struct {
 	allowedOrigins map[string]struct{}
 	webrtcAPI      *webrtc.API
 	rateLimiter    *ipRateLimiter
+	trustedProxies []netip.Prefix
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -89,6 +91,11 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		go limiter.janitor(ctx)
 	}
 
+	trustedProxies, err := parseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Server{
 		broker:         broker,
 		sessions:       mgr,
@@ -99,6 +106,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		allowedOrigins: parseOrigins(cfg.CORSOrigins),
 		webrtcAPI:      api,
 		rateLimiter:    limiter,
+		trustedProxies: trustedProxies,
 	}, nil
 }
 

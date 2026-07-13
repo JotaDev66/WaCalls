@@ -367,8 +367,14 @@ leave it empty to disable auth (trusted LAN only). Clients send it as
 list of browser origins when the web client is served from a different origin than the
 API; empty means same-origin only. Every `/api` route is rate limited per client IP
 (default 20 requests per second, burst 40); tune it with `WACALLS_RATE_LIMIT` (requests
-per second, `0` disables). Behind a reverse proxy all clients share the proxy address,
-so the limit becomes effectively global; lower it or disable it accordingly.
+per second, `0` disables). Behind a reverse proxy all clients would share the proxy
+address, turning the limit effectively global: set `WACALLS_TRUSTED_PROXIES` to a
+comma-separated list of proxy IPs/CIDRs (for example the Traefik container network) and
+requests arriving from those addresses are keyed by the real client taken from
+`X-Forwarded-For` (rightmost hop not in the trusted list, so client-supplied entries
+cannot spoof it). Requests from untrusted sources ignore the header entirely, and the
+`/debug` loopback gate never trusts headers. List every address the proxy actually
+connects from: on dual-stack hosts `127.0.0.1` and `::1` are different sources.
 `wacalls.db` holds WhatsApp session credentials
 (secrets): **do not commit it** and keep it protected.
 

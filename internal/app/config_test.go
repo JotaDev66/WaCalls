@@ -14,6 +14,14 @@ func TestLoadConfigWebhookEnvs(t *testing.T) {
 	}
 }
 
+func TestLoadConfigTrustedProxies(t *testing.T) {
+	t.Setenv("WACALLS_TRUSTED_PROXIES", "127.0.0.1, 10.0.0.0/8")
+	cfg := LoadConfig(":0", "db", "", false, 0)
+	if cfg.TrustedProxies != "127.0.0.1, 10.0.0.0/8" {
+		t.Fatalf("raw env not threaded: %q", cfg.TrustedProxies)
+	}
+}
+
 func TestValidateConfigWebhook(t *testing.T) {
 	if err := validateConfig(Config{WebhookURL: "https://x", WebhookSecret: ""}); err == nil {
 		t.Fatal("url without secret must fail the boot")
