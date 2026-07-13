@@ -6,8 +6,8 @@ import { registerOwnConnection } from "@/stores/calls";
 
 export const useStartCall = (sid: string, micId: string | null) =>
   useMutation({
-    mutationFn: async (vars: { phone: string; record: boolean }) => {
-      const { call } = await startCall(sid, vars.phone, vars.record);
+    mutationFn: async (vars: { phone: string }) => {
+      const { call } = await startCall(sid, vars.phone);
       const conn = await openCall(sid, call.callId, micId);
       registerOwnConnection(call.callId, conn);
       return call.callId;

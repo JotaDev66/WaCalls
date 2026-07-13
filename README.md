@@ -273,7 +273,7 @@ tagged with the originating `sessionId`.
 | `DELETE` | `/api/sessions/{sid}` | Log out and remove an account |
 | `POST` | `/api/sessions/{sid}/logout` | Disconnect an account (keep it for re-pairing) |
 | `POST` | `/api/sessions/{sid}/pair` | Re-pair an account (emit a fresh QR) |
-| `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone, duration_ms?, record? }`) |
+| `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone }`) |
 | `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP |
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |

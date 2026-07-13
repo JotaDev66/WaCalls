@@ -31,6 +31,24 @@ func TestStartCallRejectsPhoneWithoutDigits(t *testing.T) {
 	}
 }
 
+func TestStartCallToleratesLegacyFields(t *testing.T) {
+	jid := types.NewJID("5511888880000", types.DefaultUserServer)
+	sess := &Session{
+		log:    slog.Default(),
+		client: &whatsmeow.Client{Store: &store.Device{ID: &jid}},
+	}
+	s := &Server{}
+
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/api/sessions/s1/calls",
+		strings.NewReader(`{"phone":"abc","duration_ms":300000,"record":true}`))
+	s.doStartCall(sess, rec, r)
+
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "invalid phone") {
+		t.Fatalf("legacy fields must decode fine and reach phone validation, got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
 func TestNormalizePhone(t *testing.T) {
 	cases := map[string]string{
 		"+55 (11) 99999-0000": "5511999990000",
