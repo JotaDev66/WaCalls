@@ -227,6 +227,13 @@ func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func ownerRef(owner string) *string {
+	if owner == "" {
+		return nil
+	}
+	return &owner
+}
+
 func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	if sess.client.Store.ID == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
@@ -261,7 +268,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.broker.upsertCall(CallRecord{
-		SessionID: sess.id, CallID: callID, Owner: &owner, Direction: "outbound", Peer: peer.String(),
+		SessionID: sess.id, CallID: callID, Owner: ownerRef(owner), Direction: "outbound", Peer: peer.String(),
 		StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
