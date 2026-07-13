@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,13 +14,21 @@ import (
 	"wacalls/internal/telemetry"
 )
 
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	dbPath := flag.String("db", "wacalls.db", "SQLite session database path")
 	staticDir := flag.String("static", "client/dist", "static client directory (optional)")
 	debug := flag.Bool("debug", false, "verbose logging")
 	maxCalls := flag.Int("max-calls-per-session", 8, "max concurrent calls per session (0 = unlimited)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("wacalls " + version)
+		return
+	}
 
 	level := slog.LevelInfo
 	if *debug {
@@ -27,11 +36,14 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
+	log.Info("wacalls starting", "version", version)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	shutdown, obsFactory, tracer, err := telemetry.Init(ctx, telemetry.ConfigFromEnv())
+	tcfg := telemetry.ConfigFromEnv()
+	tcfg.ServiceVersion = version
+	shutdown, obsFactory, tracer, err := telemetry.Init(ctx, tcfg)
 	if err != nil {
 		log.Error("telemetry init failed", "err", err)
 		os.Exit(1)

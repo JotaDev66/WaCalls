@@ -18,8 +18,9 @@ import (
 )
 
 type Config struct {
-	Endpoint    string
-	ServiceName string
+	Endpoint       string
+	ServiceName    string
+	ServiceVersion string
 }
 
 func ConfigFromEnv() Config {
@@ -35,12 +36,20 @@ func ConfigFromEnv() Config {
 
 func nopFactory(string) core.CallObserver { return core.NopObserver{} }
 
+func newResource(ctx context.Context, cfg Config) (*resource.Resource, error) {
+	attrs := []attribute.KeyValue{attribute.String("service.name", cfg.ServiceName)}
+	if cfg.ServiceVersion != "" {
+		attrs = append(attrs, attribute.String("service.version", cfg.ServiceVersion))
+	}
+	return resource.New(ctx, resource.WithAttributes(attrs...))
+}
+
 func Init(ctx context.Context, cfg Config) (func(context.Context) error, func(string) core.CallObserver, CallTracer, error) {
 	if cfg.Endpoint == "" {
 		return func(context.Context) error { return nil }, nopFactory, nopTracer{}, nil
 	}
 
-	res, err := resource.New(ctx, resource.WithAttributes(attribute.String("service.name", cfg.ServiceName)))
+	res, err := newResource(ctx, cfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}

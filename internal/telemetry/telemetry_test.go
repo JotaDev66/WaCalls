@@ -7,6 +7,7 @@ import (
 
 	"wacalls/internal/voip/core"
 
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -47,6 +48,33 @@ func TestMultiTracerDegenerate(t *testing.T) {
 	a := &recTracer{}
 	if got := MultiTracer(a); got != CallTracer(a) {
 		t.Fatal("single tracer must be returned as-is")
+	}
+}
+
+func resourceAttrs(t *testing.T, cfg Config) map[attribute.Key]string {
+	t.Helper()
+	res, err := newResource(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("resource: %v", err)
+	}
+	attrs := map[attribute.Key]string{}
+	for _, kv := range res.Attributes() {
+		attrs[kv.Key] = kv.Value.AsString()
+	}
+	return attrs
+}
+
+func TestResourceCarriesServiceVersion(t *testing.T) {
+	attrs := resourceAttrs(t, Config{ServiceName: "wacalls", ServiceVersion: "v0.1.0"})
+	if attrs["service.name"] != "wacalls" || attrs["service.version"] != "v0.1.0" {
+		t.Fatalf("unexpected resource attrs: %v", attrs)
+	}
+}
+
+func TestResourceOmitsEmptyServiceVersion(t *testing.T) {
+	attrs := resourceAttrs(t, Config{ServiceName: "wacalls"})
+	if _, ok := attrs["service.version"]; ok {
+		t.Fatalf("service.version must be absent when unset: %v", attrs)
 	}
 }
 

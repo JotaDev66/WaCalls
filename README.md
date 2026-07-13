@@ -178,6 +178,7 @@ go run ./cmd/server -static client/dist -addr :8080
 | `-static` | `client/dist` | Static client directory (optional) |
 | `-debug` | `false` | Verbose logging (includes whatsmeow's internal log) |
 | `-max-calls-per-session` | `8` | Max concurrent calls per session (`0` = unlimited) |
+| `-version` | `false` | Print the build version and exit |
 
 Calls that stay unanswered, unaccepted, or fail to establish media time out
 automatically (60s ring/answer, 30s media connect), and active calls are capped at
@@ -302,6 +303,8 @@ composition root (`cmd/server/main.go`):
   duration (`StartCall`, `MarkActive`, `EndCall`).
 
 The built-in OpenTelemetry implementations are enabled by `OTEL_EXPORTER_OTLP_ENDPOINT`.
+Exported traces and metrics carry `service.name` (`OTEL_SERVICE_NAME`, default `wacalls`)
+and `service.version` (the build version injected by releases; `dev` on local builds).
 To stack a custom implementation (usage quotas, billing counters) next to them, combine
 with `core.MultiObserver` and `telemetry.MultiTracer`:
 
