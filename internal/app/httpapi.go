@@ -17,24 +17,35 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
+var apiRoutes = []struct {
+	method, path string
+	handler      func(*Server, http.ResponseWriter, *http.Request)
+}{
+	{"GET", "/sessions", (*Server).handleSessionList},
+	{"POST", "/sessions", (*Server).handleSessionCreate},
+	{"DELETE", "/sessions/{sid}", (*Server).handleSessionDelete},
+	{"POST", "/sessions/{sid}/logout", (*Server).handleSessionLogout},
+	{"POST", "/sessions/{sid}/pair", (*Server).handleSessionPair},
+	{"POST", "/sessions/{sid}/calls", (*Server).handleStartCall},
+	{"GET", "/sessions/{sid}/calls", (*Server).handleCallList},
+	{"GET", "/sessions/{sid}/calls/{id}", (*Server).handleCallGet},
+	{"POST", "/sessions/{sid}/calls/{id}/webrtc", (*Server).handleWebRTC},
+	{"POST", "/sessions/{sid}/calls/{id}/accept", (*Server).handleAccept},
+	{"POST", "/sessions/{sid}/calls/{id}/reject", (*Server).handleReject},
+	{"DELETE", "/sessions/{sid}/calls/{id}", (*Server).handleEndCall},
+	{"GET", "/sessions/{sid}/history", (*Server).handleHistory},
+	{"GET", "/sessions/{sid}/history/export", (*Server).handleHistoryExport},
+	{"GET", "/events", (*Server).handleEvents},
+}
+
 func (s *Server) routes() http.Handler {
 	api := http.NewServeMux()
 
-	api.HandleFunc("GET /api/sessions", s.handleSessionList)
-	api.HandleFunc("POST /api/sessions", s.handleSessionCreate)
-	api.HandleFunc("DELETE /api/sessions/{sid}", s.handleSessionDelete)
-	api.HandleFunc("POST /api/sessions/{sid}/logout", s.handleSessionLogout)
-	api.HandleFunc("POST /api/sessions/{sid}/pair", s.handleSessionPair)
-	api.HandleFunc("POST /api/sessions/{sid}/calls", s.handleStartCall)
-	api.HandleFunc("GET /api/sessions/{sid}/calls", s.handleCallList)
-	api.HandleFunc("GET /api/sessions/{sid}/calls/{id}", s.handleCallGet)
-	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/webrtc", s.handleWebRTC)
-	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/accept", s.handleAccept)
-	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
-	api.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
-	api.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
-	api.HandleFunc("GET /api/sessions/{sid}/history/export", s.handleHistoryExport)
-	api.HandleFunc("GET /api/events", s.handleEvents)
+	for _, rt := range apiRoutes {
+		api.HandleFunc(rt.method+" /api"+rt.path, func(w http.ResponseWriter, r *http.Request) {
+			rt.handler(s, w, r)
+		})
+	}
 
 	if s.debug {
 		api.HandleFunc("GET /debug/pprof/", pprof.Index)
