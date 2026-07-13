@@ -25,7 +25,7 @@ export const attachMeter = (
     try {
       src.disconnect();
       analyser.disconnect();
-      ctx.close();
     } catch {}
+    void ctx.close().catch(() => {});
   };
 };
