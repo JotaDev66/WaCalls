@@ -2,6 +2,7 @@ package core
 
 type CallObserver interface {
 	Mark(event string)
+	SrtpRecvDrop(reason string)
 	AddMem(bytes int64)
 	ReleaseMem(bytes int64)
 	TrackGoroutine() (done func())
@@ -11,6 +12,7 @@ type CallObserver interface {
 type NopObserver struct{}
 
 func (NopObserver) Mark(string)            {}
+func (NopObserver) SrtpRecvDrop(string)    {}
 func (NopObserver) AddMem(int64)           {}
 func (NopObserver) ReleaseMem(int64)       {}
 func (NopObserver) TrackGoroutine() func() { return func() {} }
@@ -41,6 +43,12 @@ type multiObserver []CallObserver
 func (m multiObserver) Mark(event string) {
 	for _, o := range m {
 		o.Mark(event)
+	}
+}
+
+func (m multiObserver) SrtpRecvDrop(reason string) {
+	for _, o := range m {
+		o.SrtpRecvDrop(reason)
 	}
 }
 

@@ -13,6 +13,7 @@ type memObserver struct {
 }
 
 func (o *memObserver) Mark(string)            {}
+func (o *memObserver) SrtpRecvDrop(string)    {}
 func (o *memObserver) AddMem(int64)           {}
 func (o *memObserver) ReleaseMem(b int64)     { o.mu.Lock(); o.released += b; o.mu.Unlock() }
 func (o *memObserver) TrackGoroutine() func() { return func() {} }

@@ -98,7 +98,10 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 
 	if signaling.NeedsDecryption(info.Tag) {
-		if peerKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid); err == nil && peerKey != nil {
+		peerKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
+		if err != nil {
+			m.log.Warn("accept call key undecryptable; skipping rekey", "call_id", call.CallID, "err", err)
+		} else if peerKey != nil {
 			m.mu.Lock()
 			if call.EncryptionKey != nil && !equalBytes(call.EncryptionKey, peerKey) {
 				m.reinitSrtpLocked(peerKey, peerJid)

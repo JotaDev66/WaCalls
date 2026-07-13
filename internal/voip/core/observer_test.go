@@ -5,6 +5,7 @@ import "testing"
 func TestNopObserverSatisfiesPortAndDoesNotPanic(t *testing.T) {
 	var obs CallObserver = NopObserver{}
 	obs.Mark("x")
+	obs.SrtpRecvDrop("replay")
 	obs.AddMem(10)
 	obs.ReleaseMem(10)
 	done := obs.TrackGoroutine()
@@ -20,6 +21,7 @@ type recObserver struct {
 	mem   []int64
 	gor   int
 	ends  []string
+	drops []string
 }
 
 func (r *recObserver) Mark(e string)      { r.marks = append(r.marks, e) }
@@ -29,12 +31,14 @@ func (r *recObserver) TrackGoroutine() func() {
 	r.gor++
 	return func() { r.gor-- }
 }
-func (r *recObserver) End(result, reason string) { r.ends = append(r.ends, result+"/"+reason) }
+func (r *recObserver) End(result, reason string)  { r.ends = append(r.ends, result+"/"+reason) }
+func (r *recObserver) SrtpRecvDrop(reason string) { r.drops = append(r.drops, reason) }
 
 func TestMultiObserverFansOut(t *testing.T) {
 	a, b := &recObserver{}, &recObserver{}
 	m := MultiObserver(a, b)
 	m.Mark(MarkTransportICE)
+	m.SrtpRecvDrop("auth_failed")
 	m.AddMem(64)
 	m.ReleaseMem(64)
 	done := m.TrackGoroutine()
@@ -55,6 +59,9 @@ func TestMultiObserverFansOut(t *testing.T) {
 		}
 		if len(r.ends) != 1 || r.ends[0] != "completed/user_ended" {
 			t.Fatalf("ends = %v", r.ends)
+		}
+		if len(r.drops) != 1 || r.drops[0] != "auth_failed" {
+			t.Fatalf("drops = %v", r.drops)
 		}
 	}
 }

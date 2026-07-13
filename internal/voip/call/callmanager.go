@@ -48,6 +48,7 @@ type CallManager struct {
 	watchdogStop  chan struct{}
 	lastMediaRecv atomic.Int64
 	lastRedialAt  time.Time
+	srtpDrops     srtpDropTally
 
 	extensions   []engine.Extension
 	extMu        sync.Mutex
