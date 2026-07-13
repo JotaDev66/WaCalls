@@ -14,8 +14,11 @@ import (
 	"wacalls/internal/voip/transport"
 	"wacalls/internal/voip/wanode"
 
+	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/types"
 )
+
+const signalingSendTimeout = 10 * time.Second
 
 type CallManager struct {
 	sock     core.VoipSocket
@@ -207,14 +210,25 @@ func (m *CallManager) RejectCall(ctx context.Context, callID string, reason core
 		m.mu.Unlock()
 		return &CallError{"no call with id " + callID}
 	}
-	_ = call.ApplyTransition(Transition{Type: TransitionLocalRejected, Reason: reason})
+	if err := call.ApplyTransition(Transition{Type: TransitionLocalRejected, Reason: reason}); err != nil {
+		m.mu.Unlock()
+		return err
+	}
 	node := signaling.BuildRejectStanza(wanode.MustJID(call.PeerJid), call.CallID, wanode.MustJID(call.CallCreator))
 	m.emitState()
 	m.mu.Unlock()
 
-	go func() { _, _ = m.sock.Query(ctx, node) }()
+	m.sendSignaling(ctx, node)
 	m.cleanupMedia()
 	return nil
+}
+
+func (m *CallManager) sendSignaling(ctx context.Context, node waBinary.Node) {
+	go func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), signalingSendTimeout)
+		defer cancel()
+		_, _ = m.sock.Query(sctx, node)
+	}()
 }
 
 func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) error {
@@ -230,7 +244,7 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 	m.emitState()
 	m.mu.Unlock()
 
-	go func() { _, _ = m.sock.Query(ctx, node) }()
+	m.sendSignaling(ctx, node)
 	if m.OnEnded != nil {
 		m.OnEnded(ended)
 	}
