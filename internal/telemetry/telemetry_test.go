@@ -113,6 +113,7 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 	obs.AddMem(1000)
 	done := obs.TrackGoroutine()
 	obs.Mark(core.MarkTransportICE)
+	obs.SrtpRecvDrop("replay")
 	tracer.MarkActive("c1", 250*time.Millisecond)
 	done()
 	obs.ReleaseMem(1000)
@@ -137,7 +138,7 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 			names[m.Name] = true
 		}
 	}
-	for _, want := range []string{"call.tracked_alloc.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration"} {
+	for _, want := range []string{"call.tracked_alloc.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration", "call.srtp.recv_drops"} {
 		if !names[want] {
 			t.Errorf("missing instrument %q in collected metrics", want)
 		}

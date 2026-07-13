@@ -12,6 +12,7 @@ import (
 
 type instruments struct {
 	phaseDur     metric.Float64Histogram
+	srtpDrops    metric.Int64Counter
 	timeToActive metric.Float64Histogram
 	callMem      metric.Int64UpDownCounter
 	callGor      metric.Int64UpDownCounter
@@ -25,6 +26,11 @@ func newInstruments(m metric.Meter) (*instruments, error) {
 	in := &instruments{}
 	var err error
 	if in.phaseDur, err = m.Float64Histogram("call.phase.duration", metric.WithUnit("ms")); err != nil {
+		return nil, err
+	}
+	if in.srtpDrops, err = m.Int64Counter("call.srtp.recv_drops",
+		metric.WithUnit("{packet}"),
+		metric.WithDescription("Inbound SRTP packets dropped before decode, by reason (replay, auth_failed, decryption, packet_too_short, other).")); err != nil {
 		return nil, err
 	}
 	if in.timeToActive, err = m.Float64Histogram("call.time_to_active", metric.WithUnit("ms")); err != nil {
@@ -71,6 +77,10 @@ func newObserver(inst *instruments, callID string) *otelObserver {
 func (o *otelObserver) Mark(event string) {
 	o.inst.phaseDur.Record(context.Background(), float64(time.Since(o.start).Milliseconds()),
 		metric.WithAttributes(attribute.String("phase", event)))
+}
+func (o *otelObserver) SrtpRecvDrop(reason string) {
+	o.inst.srtpDrops.Add(context.Background(), 1, o.attrs,
+		metric.WithAttributes(attribute.String("reason", reason)))
 }
 func (o *otelObserver) AddMem(b int64)     { o.inst.callMem.Add(context.Background(), b, o.attrs) }
 func (o *otelObserver) ReleaseMem(b int64) { o.inst.callMem.Add(context.Background(), -b, o.attrs) }
