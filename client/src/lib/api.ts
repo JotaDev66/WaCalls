@@ -32,6 +32,15 @@ export const apiGet = async <T>(path: string): Promise<T> => {
   return r.json() as Promise<T>;
 };
 
+export const apiGetBlob = async (path: string): Promise<Blob> => {
+  const r = await fetch(path, { headers: baseHeaders() });
+  if (!r.ok) {
+    guard(r.status);
+    throw new Error(`${path} ${r.status}`);
+  }
+  return r.blob();
+};
+
 export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
   const r = await fetch(path, {
     method: "POST",
