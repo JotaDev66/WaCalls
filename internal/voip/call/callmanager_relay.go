@@ -2,7 +2,9 @@ package call
 
 import (
 	"context"
+	"maps"
 	"runtime/pprof"
+	"slices"
 	"time"
 
 	"wacalls/internal/voip/core"
@@ -213,6 +215,10 @@ func (m *CallManager) cleanupMedia() {
 			endReason = string(c.StateData.EndReason)
 		}
 	}
+	callID := ""
+	if c := m.currentCall; c != nil {
+		callID = c.CallID
+	}
 	if m.srtp != nil {
 		m.srtp.Close()
 	}
@@ -229,6 +235,14 @@ func (m *CallManager) cleanupMedia() {
 		m.watchdogStop = nil
 	}
 	m.mu.Unlock()
+
+	if drops := m.srtpDrops.snapshotAndReset(); len(drops) > 0 {
+		args := []any{"call_id", callID}
+		for _, r := range slices.Sorted(maps.Keys(drops)) {
+			args = append(args, r, drops[r])
+		}
+		m.log.Warn("srtp recv drops summary", args...)
+	}
 
 	if endResult != "" {
 		m.observer.End(endResult, endReason)

@@ -1,6 +1,8 @@
 package call
 
 import (
+	"errors"
+	"sync"
 	"time"
 
 	"wacalls/internal/voip/core"
@@ -148,6 +150,7 @@ func (m *CallManager) onRelayData(data []byte) {
 		}
 	}
 	srtp := m.srtp
+	obs := m.observer
 	m.mu.Unlock()
 
 	m.extMu.Lock()
@@ -160,11 +163,44 @@ func (m *CallManager) onRelayData(data []byte) {
 
 	pkt, err := srtp.Unprotect(data)
 	if err != nil {
-		m.log.Debug("srtp unprotect error", "err", err)
+		reason := "other"
+		var se *media.SrtpError
+		if errors.As(err, &se) {
+			reason = string(se.Type)
+		}
+		obs.SrtpRecvDrop(reason)
+		if m.srtpDrops.add(reason) {
+			m.log.Warn("srtp recv packet dropped", "reason", reason, "err", err)
+		} else {
+			m.log.Debug("srtp recv packet dropped", "reason", reason, "err", err)
+		}
 		return
 	}
 	if len(pkt.Payload) == 0 {
 		return
 	}
 	handler(pkt)
+}
+
+type srtpDropTally struct {
+	mu     sync.Mutex
+	counts map[string]int64
+}
+
+func (t *srtpDropTally) add(reason string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.counts == nil {
+		t.counts = map[string]int64{}
+	}
+	t.counts[reason]++
+	return t.counts[reason] == 1
+}
+
+func (t *srtpDropTally) snapshotAndReset() map[string]int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := t.counts
+	t.counts = nil
+	return out
 }
