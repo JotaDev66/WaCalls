@@ -50,7 +50,6 @@ jobs:
   race:
     name: race
     runs-on: ubuntu-latest
-    continue-on-error: true
     env:
       CGO_ENABLED: "1"
     steps:
