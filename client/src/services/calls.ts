@@ -1,11 +1,9 @@
 import { apiPost, apiDelete } from "@/lib/api";
 import { getClientId } from "@/lib/client-id";
 
-export const startCall = (sid: string, phone: string, record: boolean) =>
+export const startCall = (sid: string, phone: string) =>
   apiPost<{ call: { callId: string } }>(`/api/sessions/${sid}/calls`, {
     phone,
-    duration_ms: 300_000,
-    record,
   });
 
 export const acceptCall = (sid: string, callId: string) =>
