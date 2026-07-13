@@ -202,6 +202,17 @@ func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
 
 func (m *CallManager) cleanupMedia() {
 	m.mu.Lock()
+	endResult, endReason := "", ""
+	if !m.observerEnded {
+		m.observerEnded = true
+		if c := m.currentCall; c != nil {
+			endResult = "failed"
+			if c.StateData.ConnectedAt != nil {
+				endResult = "completed"
+			}
+			endReason = string(c.StateData.EndReason)
+		}
+	}
 	if m.srtp != nil {
 		m.srtp.Close()
 	}
@@ -218,6 +229,10 @@ func (m *CallManager) cleanupMedia() {
 		m.watchdogStop = nil
 	}
 	m.mu.Unlock()
+
+	if endResult != "" {
+		m.observer.End(endResult, endReason)
+	}
 
 	m.extMu.Lock()
 	m.rtpHandlers = map[uint8]func(*media.RtpPacket){}
