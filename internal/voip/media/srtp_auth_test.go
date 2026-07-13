@@ -162,7 +162,7 @@ func TestUnprotectForgedPacketDoesNotDesyncRoc(t *testing.T) {
 
 func TestUnprotectRoundtripAcrossSeqWrap(t *testing.T) {
 	sender, receiver := authTestPair(t)
-	seqs := []uint16{0xFFFE, 0xFFFF, 0x0000, 0x0001}
+	seqs := []uint16{0xFFFD, 0xFFFE, 0xFFFF, 0x0000, 0x0001}
 	payloads := make([][]byte, len(seqs))
 	wires := make([][]byte, len(seqs))
 	for i, seq := range seqs {
@@ -178,7 +178,7 @@ func TestUnprotectRoundtripAcrossSeqWrap(t *testing.T) {
 		wires[i] = wire
 	}
 
-	for _, i := range []int{0, 1, 3, 2} {
+	for _, i := range []int{1, 2, 4, 3} {
 		got, err := receiver.Unprotect(wires[i])
 		if err != nil {
 			t.Fatalf("seq %#04x: %v", seqs[i], err)
@@ -188,13 +188,16 @@ func TestUnprotectRoundtripAcrossSeqWrap(t *testing.T) {
 		}
 	}
 
-	got, err := receiver.Unprotect(wires[1])
+	got, err := receiver.Unprotect(wires[0])
 	if err != nil {
-		t.Fatalf("late pre-wrap packet: %v", err)
+		t.Fatalf("late never-delivered pre-wrap packet: %v", err)
 	}
-	if !bytes.Equal(got.Payload, payloads[1]) {
+	if !bytes.Equal(got.Payload, payloads[0]) {
 		t.Fatal("late pre-wrap packet must decrypt under roc-1")
 	}
+
+	_, err = receiver.Unprotect(wires[1])
+	assertSrtpErr(t, err, SrtpErrReplay)
 }
 
 func TestEstimateRocDoesNotAdvanceWithoutCommit(t *testing.T) {
