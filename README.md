@@ -274,6 +274,8 @@ tagged with the originating `sessionId`.
 | `POST` | `/api/sessions/{sid}/logout` | Disconnect an account (keep it for re-pairing) |
 | `POST` | `/api/sessions/{sid}/pair` | Re-pair an account (emit a fresh QR) |
 | `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone }`) |
+| `GET` | `/api/sessions/{sid}/calls` | Live calls of the session (same shape as the SSE `call-list`) |
+| `GET` | `/api/sessions/{sid}/calls/{id}` | One live call (404 once it ends or if it belongs to another session) |
 | `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP |
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |

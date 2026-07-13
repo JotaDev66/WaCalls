@@ -26,6 +26,8 @@ func (s *Server) routes() http.Handler {
 	api.HandleFunc("POST /api/sessions/{sid}/logout", s.handleSessionLogout)
 	api.HandleFunc("POST /api/sessions/{sid}/pair", s.handleSessionPair)
 	api.HandleFunc("POST /api/sessions/{sid}/calls", s.handleStartCall)
+	api.HandleFunc("GET /api/sessions/{sid}/calls", s.handleCallList)
+	api.HandleFunc("GET /api/sessions/{sid}/calls/{id}", s.handleCallGet)
 	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/webrtc", s.handleWebRTC)
 	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/accept", s.handleAccept)
 	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
@@ -316,6 +318,27 @@ func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": id}})
+}
+
+func (s *Server) handleCallList(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"calls": s.broker.sessionCalls(sess.id)})
+}
+
+func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	rec, ok := s.broker.getCall(r.PathValue("id"))
+	if !ok || rec.SessionID != sess.id {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"call": rec})
 }
 
 func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
