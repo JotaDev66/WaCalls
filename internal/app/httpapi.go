@@ -40,6 +40,7 @@ func (s *Server) routes() http.Handler {
 	}
 
 	root := http.NewServeMux()
+	root.HandleFunc("GET /healthz", handleHealthz)
 	root.Handle("/api/", s.withRateLimit(s.withAuth(maxBytes(api))))
 	if s.debug {
 		root.Handle("/debug/", loopbackOnly(s.withAuth(api)))
@@ -49,6 +50,10 @@ func (s *Server) routes() http.Handler {
 }
 
 const maxBodyBytes = 1 << 20
+
+func handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
 
 func isLoopback(remoteAddr string) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)

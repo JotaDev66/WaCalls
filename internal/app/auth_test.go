@@ -95,6 +95,15 @@ func TestRoutesUIOpenWithToken(t *testing.T) {
 	}
 }
 
+func TestRoutesHealthzOpenWithToken(t *testing.T) {
+	s := &Server{authorize: bearerAuthorizer("secret")}
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/healthz", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("healthz without token: want 200, got %d", rec.Code)
+	}
+}
+
 func TestRoutesEventsRequireToken(t *testing.T) {
 	s := &Server{authorize: bearerAuthorizer("secret")}
 	rec := httptest.NewRecorder()
