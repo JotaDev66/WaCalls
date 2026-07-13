@@ -337,8 +337,11 @@ composition root (`cmd/server/main.go`):
 - `core.CallObserver`: one instance per call, created by the factory passed to
   `app.NewServer`. It receives phase marks (`core.MarkTransportSTUN`, `core.MarkTransportICE`,
   `core.MarkTransportDTLS`, `core.MarkTransportSCTPOpen`, `core.MarkMediaFirstPacket`),
-  tracked allocations and goroutines, and exactly one `End(result, reason)` when the call
-  finishes: `result` is `completed` when media connected, `failed` otherwise.
+  tracked allocations and goroutines, one `SrtpRecvDrop(reason)` per inbound SRTP packet
+  dropped before decode (reasons: `replay`, `auth_failed`, `decryption`, `packet_too_short`;
+  exported by the OTEL implementation as the `call.srtp.recv_drops` counter), and exactly
+  one `End(result, reason)` when the call finishes: `result` is `completed` when media
+  connected, `failed` otherwise.
 - `telemetry.CallTracer`: app-level call lifecycle with session, peer, direction and
   duration (`StartCall`, `MarkActive`, `EndCall`).
 
