@@ -280,8 +280,10 @@ tagged with the originating `sessionId`.
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | End an active call |
-| `GET` | `/api/sessions/{sid}/history` | Recent call history (up to 50 records) |
+| `GET` | `/api/sessions/{sid}/history` | Ended calls, keyset-paginated (`limit` + opaque `cursor`, envelope `calls` + `nextCursor`) |
+| `GET` | `/api/sessions/{sid}/history/export` | Full history as CSV (RFC 3339 timestamps) |
 | `GET` | `/api/events` | Server-sent events (sessions, auth, call lifecycle) |
+| `GET` | `/api/openapi.yaml` | OpenAPI 3.1 contract (public; a test gate fails when routes drift) |
 
 ---
 
