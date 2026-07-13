@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 
@@ -233,6 +234,24 @@ func (b *Broker) callList() []CallRecord {
 	for _, c := range b.calls {
 		list = append(list, *c)
 	}
+	return list
+}
+
+func (b *Broker) sessionCalls(sid string) []CallRecord {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	list := []CallRecord{}
+	for _, c := range b.calls {
+		if c.SessionID == sid {
+			list = append(list, *c)
+		}
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if list[i].StartedAt != list[j].StartedAt {
+			return list[i].StartedAt < list[j].StartedAt
+		}
+		return list[i].CallID < list[j].CallID
+	})
 	return list
 }
 
