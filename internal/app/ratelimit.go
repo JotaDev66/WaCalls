@@ -63,20 +63,47 @@ func newIPRateLimiter(rps float64) *ipRateLimiter {
 	}
 }
 
-func (l *ipRateLimiter) allow(remoteAddr string) bool {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		host = remoteAddr
-	}
+func (l *ipRateLimiter) allow(key string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	e, ok := l.perIP[host]
+	e, ok := l.perIP[key]
 	if !ok {
 		e = &ipLimiterEntry{lim: rate.NewLimiter(l.rps, l.burst)}
-		l.perIP[host] = e
+		l.perIP[key] = e
 	}
 	e.lastSeen = time.Now()
 	return e.lim.Allow()
+}
+
+func clientIP(r *http.Request, trusted []netip.Prefix) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil || !inPrefixes(addr, trusted) {
+		return host
+	}
+	parts := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+	for i := len(parts) - 1; i >= 0; i-- {
+		hop, err := netip.ParseAddr(strings.TrimSpace(parts[i]))
+		if err != nil {
+			break
+		}
+		if !inPrefixes(hop, trusted) {
+			return hop.String()
+		}
+	}
+	return host
+}
+
+func inPrefixes(a netip.Addr, prefixes []netip.Prefix) bool {
+	for _, p := range prefixes {
+		if p.Contains(a.Unmap()) {
+			return true
+		}
+	}
+	return false
 }
 
 func (l *ipRateLimiter) purge(idle time.Duration) {
@@ -108,7 +135,7 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.rateLimiter.allow(r.RemoteAddr) {
+		if !s.rateLimiter.allow(clientIP(r, s.trustedProxies)) {
 			w.Header().Set("Retry-After", "1")
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
 			return
