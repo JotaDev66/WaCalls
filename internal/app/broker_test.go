@@ -47,14 +47,19 @@ func (f *fakeRecordStore) Insert(ctx context.Context, r core.CallRecord) error {
 	return nil
 }
 
-func (f *fakeRecordStore) List(ctx context.Context, sessionID string, limit int) ([]core.CallRecord, error) {
+func (f *fakeRecordStore) List(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]core.CallRecord, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []core.CallRecord{}
 	for i := len(f.recs) - 1; i >= 0 && len(out) < limit; i-- {
-		if sessionID == "" || f.recs[i].SessionID == sessionID {
-			out = append(out, f.recs[i])
+		r := f.recs[i]
+		if sessionID != "" && r.SessionID != sessionID {
+			continue
 		}
+		if before != (core.HistoryCursor{}) && r.EndedAt >= before.EndedAt && (r.EndedAt != before.EndedAt || r.CallID >= before.CallID) {
+			continue
+		}
+		out = append(out, r)
 	}
 	return out, nil
 }
@@ -67,7 +72,7 @@ func TestEndCallPersistsRecord(t *testing.T) {
 	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Direction: "inbound", Peer: "p", StartedAt: 100, Status: StatusConnected})
 	b.endCall("c1", "user_ended")
 
-	recs, _ := fake.List(context.Background(), "s1", 10)
+	recs, _ := fake.List(context.Background(), "s1", 10, core.HistoryCursor{})
 	if len(recs) != 1 || recs[0].CallID != "c1" || recs[0].EndReason != "user_ended" || recs[0].EndedAt == 0 {
 		t.Fatalf("ended call must be persisted, got %+v", recs)
 	}

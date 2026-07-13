@@ -274,7 +274,7 @@ func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int) (
 	if b.records == nil {
 		return []CallRecord{}, nil
 	}
-	recs, err := b.records.List(ctx, sessionID, limit)
+	recs, err := b.records.List(ctx, sessionID, limit, core.HistoryCursor{})
 	if err != nil {
 		return nil, err
 	}
