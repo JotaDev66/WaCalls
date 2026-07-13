@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"wacalls/internal/voip/core"
+
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -45,7 +47,7 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 	tracer.StartCall("c1", CallAttrs{Session: "s1", Peer: "p", Direction: "outbound"})
 	obs.AddMem(1000)
 	done := obs.TrackGoroutine()
-	obs.Mark("transport.ice")
+	obs.Mark(core.MarkTransportICE)
 	tracer.MarkActive("c1", 250*time.Millisecond)
 	done()
 	obs.ReleaseMem(1000)
