@@ -29,6 +29,36 @@ func (nopTracer) EndCall(string, string, string, time.Duration) {}
 
 func NopTracer() CallTracer { return nopTracer{} }
 
+func MultiTracer(tracers ...CallTracer) CallTracer {
+	switch len(tracers) {
+	case 0:
+		return nopTracer{}
+	case 1:
+		return tracers[0]
+	}
+	return multiTracer(tracers)
+}
+
+type multiTracer []CallTracer
+
+func (m multiTracer) StartCall(callID string, attrs CallAttrs) {
+	for _, t := range m {
+		t.StartCall(callID, attrs)
+	}
+}
+
+func (m multiTracer) MarkActive(callID string, tta time.Duration) {
+	for _, t := range m {
+		t.MarkActive(callID, tta)
+	}
+}
+
+func (m multiTracer) EndCall(callID, result, reason string, dur time.Duration) {
+	for _, t := range m {
+		t.EndCall(callID, result, reason, dur)
+	}
+}
+
 type otelTracer struct {
 	tracer trace.Tracer
 	inst   *instruments
