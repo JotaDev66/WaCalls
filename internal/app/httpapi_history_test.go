@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"log/slog"
 	"net/http/httptest"
@@ -140,6 +141,83 @@ func TestHistoryLimitParsing(t *testing.T) {
 		if _, err := historyLimit(raw); err == nil {
 			t.Fatalf("%q must be rejected", raw)
 		}
+	}
+}
+
+func TestHistoryExportCSV(t *testing.T) {
+	s, st := historyServer(t)
+	owner := "op-A"
+	recs := []core.CallRecord{
+		{CallID: "c1", SessionID: "s1", Owner: &owner, Direction: "outbound", Peer: `1 "quoted", comma@x`, StartedAt: 1700000000000, EndedAt: 1700000060000, EndReason: "user_ended"},
+		{CallID: "c2", SessionID: "s1", Direction: "inbound", Peer: "222@s.whatsapp.net", StartedAt: 1700000100000, EndedAt: 1700000160000, EndReason: "timeout"},
+	}
+	for _, r := range recs {
+		if err := st.Insert(context.Background(), r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/history/export", nil))
+	if rec.Code != 200 {
+		t.Fatalf("want 200, got %d %s", rec.Code, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "text/csv; charset=utf-8" {
+		t.Fatalf("content-type: %q", ct)
+	}
+	if cd := rec.Header().Get("Content-Disposition"); cd != `attachment; filename="history-s1.csv"` {
+		t.Fatalf("content-disposition: %q", cd)
+	}
+	rows, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := [][]string{
+		{"callId", "direction", "peer", "owner", "startedAt", "endedAt", "endReason"},
+		{"c2", "inbound", "222@s.whatsapp.net", "", "2023-11-14T22:15:00Z", "2023-11-14T22:16:00Z", "timeout"},
+		{"c1", "outbound", `1 "quoted", comma@x`, "op-A", "2023-11-14T22:13:20Z", "2023-11-14T22:14:20Z", "user_ended"},
+	}
+	if len(rows) != len(want) {
+		t.Fatalf("want %d rows, got %d: %+v", len(want), len(rows), rows)
+	}
+	for i := range want {
+		for j := range want[i] {
+			if rows[i][j] != want[i][j] {
+				t.Fatalf("row %d col %d: want %q, got %q", i, j, want[i][j], rows[i][j])
+			}
+		}
+	}
+}
+
+func TestHistoryExportStreamsAllPages(t *testing.T) {
+	s, st := historyServer(t)
+	seedHistory(t, st, 510)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/history/export", nil))
+	rows, err := csv.NewReader(rec.Body).ReadAll()
+	if err != nil || len(rows) != 511 {
+		t.Fatalf("want 511 csv rows, got %d err %v", len(rows), err)
+	}
+	seen := map[string]bool{}
+	for _, r := range rows[1:] {
+		if seen[r[0]] {
+			t.Fatalf("duplicate %q across pages", r[0])
+		}
+		seen[r[0]] = true
+	}
+}
+
+func TestHistoryExportEmptyAndUnknownSession(t *testing.T) {
+	s, _ := historyServer(t)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/history/export", nil))
+	if rec.Code != 200 || rec.Body.String() != "callId,direction,peer,owner,startedAt,endedAt,endReason\n" {
+		t.Fatalf("empty export must be header only, got %d %q", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/ghost/history/export", nil))
+	if rec.Code != 404 {
+		t.Fatalf("want 404, got %d", rec.Code)
 	}
 }
 

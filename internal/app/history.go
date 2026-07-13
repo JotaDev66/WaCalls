@@ -2,17 +2,20 @@ package app
 
 import (
 	"encoding/base64"
+	"encoding/csv"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"wacalls/internal/voip/core"
 )
 
 const (
-	historyDefaultLimit = 50
-	historyMaxLimit     = 200
+	historyDefaultLimit   = 50
+	historyMaxLimit       = 200
+	historyExportPageSize = 500
 )
 
 func historyLimit(raw string) (int, error) {
@@ -77,4 +80,50 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		resp["nextCursor"] = encodeHistoryCursor(next)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	rows, next, err := s.broker.historyRows(r.Context(), sess.id, historyExportPageSize, core.HistoryCursor{})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+	w.Header().Set("Content-Disposition", `attachment; filename="history-`+sess.id+`.csv"`)
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"callId", "direction", "peer", "owner", "startedAt", "endedAt", "endReason"})
+	for {
+		for i := range rows {
+			_ = cw.Write(historyCSVRow(&rows[i]))
+		}
+		if next == (core.HistoryCursor{}) {
+			break
+		}
+		rows, next, err = s.broker.historyRows(r.Context(), sess.id, historyExportPageSize, next)
+		if err != nil {
+			s.log.Error("history export aborted", "session_id", sess.id, "err", err)
+			break
+		}
+	}
+	cw.Flush()
+}
+
+func historyCSVRow(r *CallRecord) []string {
+	owner := ""
+	if r.Owner != nil {
+		owner = *r.Owner
+	}
+	endedAt := ""
+	if r.EndedAt != nil {
+		endedAt = time.UnixMilli(*r.EndedAt).UTC().Format(time.RFC3339)
+	}
+	return []string{
+		r.CallID, r.Direction, r.Peer, owner,
+		time.UnixMilli(r.StartedAt).UTC().Format(time.RFC3339),
+		endedAt, r.EndReason,
+	}
 }

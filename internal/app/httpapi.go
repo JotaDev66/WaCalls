@@ -33,6 +33,7 @@ func (s *Server) routes() http.Handler {
 	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
 	api.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
 	api.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
+	api.HandleFunc("GET /api/sessions/{sid}/history/export", s.handleHistoryExport)
 	api.HandleFunc("GET /api/events", s.handleEvents)
 
 	if s.debug {
