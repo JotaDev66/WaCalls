@@ -215,17 +215,6 @@ func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
-		rows, err := s.broker.historyRows(r.Context(), sess.id, 50)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
-	}
-}
-
 func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	if sess.client.Store.ID == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})

@@ -77,7 +77,7 @@ func TestEndCallPersistsRecord(t *testing.T) {
 		t.Fatalf("ended call must be persisted, got %+v", recs)
 	}
 
-	rows, err := b.historyRows(context.Background(), "s1", 10)
+	rows, _, err := b.historyRows(context.Background(), "s1", 10, core.HistoryCursor{})
 	if err != nil || len(rows) != 1 || rows[0].Status != StatusEnded || rows[0].CallID != "c1" {
 		t.Fatalf("history must read from the store, got %+v err %v", rows, err)
 	}
@@ -125,7 +125,7 @@ func TestNilRecordStoreIsSafe(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
 	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
 	b.endCall("c1", "declined")
-	rows, err := b.historyRows(context.Background(), "", 10)
+	rows, _, err := b.historyRows(context.Background(), "", 10, core.HistoryCursor{})
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("nil store must yield empty history without error, got %+v err %v", rows, err)
 	}

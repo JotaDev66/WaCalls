@@ -270,13 +270,19 @@ func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
 	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
 }
 
-func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int) ([]CallRecord, error) {
+func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]CallRecord, core.HistoryCursor, error) {
 	if b.records == nil {
-		return []CallRecord{}, nil
+		return []CallRecord{}, core.HistoryCursor{}, nil
 	}
-	recs, err := b.records.List(ctx, sessionID, limit, core.HistoryCursor{})
+	recs, err := b.records.List(ctx, sessionID, limit+1, before)
 	if err != nil {
-		return nil, err
+		return nil, core.HistoryCursor{}, err
+	}
+	var next core.HistoryCursor
+	if len(recs) > limit {
+		recs = recs[:limit]
+		last := recs[limit-1]
+		next = core.HistoryCursor{EndedAt: last.EndedAt, CallID: last.CallID}
 	}
 	rows := make([]CallRecord, 0, len(recs))
 	for _, r := range recs {
@@ -287,7 +293,7 @@ func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int) (
 			EndedAt: &endedAt, EndReason: r.EndReason,
 		})
 	}
-	return rows, nil
+	return rows, next, nil
 }
 
 func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID string) {
