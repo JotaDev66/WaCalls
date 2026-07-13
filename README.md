@@ -373,7 +373,8 @@ comma-separated list of proxy IPs/CIDRs (for example the Traefik container netwo
 requests arriving from those addresses are keyed by the real client taken from
 `X-Forwarded-For` (rightmost hop not in the trusted list, so client-supplied entries
 cannot spoof it). Requests from untrusted sources ignore the header entirely, and the
-`/debug` loopback gate never trusts headers.
+`/debug` loopback gate never trusts headers. List every address the proxy actually
+connects from: on dual-stack hosts `127.0.0.1` and `::1` are different sources.
 `wacalls.db` holds WhatsApp session credentials
 (secrets): **do not commit it** and keep it protected.
 
