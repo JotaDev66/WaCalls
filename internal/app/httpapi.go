@@ -57,6 +57,7 @@ func (s *Server) routes() http.Handler {
 
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", handleHealthz)
+	root.HandleFunc("GET /api/openapi.yaml", handleOpenAPI)
 	root.Handle("/api/", s.withRateLimit(s.withAuth(maxBytes(api))))
 	if s.debug {
 		root.Handle("/debug/", loopbackOnly(s.withAuth(api)))
