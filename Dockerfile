@@ -36,6 +36,6 @@ USER app
 EXPOSE 8080
 VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:8080/api/sessions >/dev/null 2>&1 || exit 1
+    CMD wget -qO- http://127.0.0.1:8080/healthz >/dev/null 2>&1 || exit 1
 ENTRYPOINT ["wacalls"]
 CMD ["-addr=:8080", "-db=/data/wacalls.db"]

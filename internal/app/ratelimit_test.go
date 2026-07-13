@@ -116,6 +116,23 @@ func TestRateLimitAppliesBeforeAuth(t *testing.T) {
 	}
 }
 
+func TestHealthzBypassesRateLimit(t *testing.T) {
+	s := &Server{
+		authorize:   bearerAuthorizer(""),
+		rateLimiter: newIPRateLimiter(1),
+	}
+	h := s.routes()
+	for i := range 5 {
+		req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+		req.RemoteAddr = "192.0.2.8:3333"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("healthz %d = %d, want 200 (must not consume budget)", i, rec.Code)
+		}
+	}
+}
+
 func TestPreflightBypassesRateLimit(t *testing.T) {
 	s := &Server{
 		authorize:      bearerAuthorizer(""),

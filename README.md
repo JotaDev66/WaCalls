@@ -260,11 +260,14 @@ since `wacalls.db` holds the WhatsApp session credentials.
 
 ## API
 
-All routes are session-scoped. Events stream over a single SSE channel, tagged with the
-originating `sessionId`.
+All `/api` routes are session-scoped and gated by the bearer token when
+`WACALLS_API_TOKEN` is set. `/healthz` is the exception: an open liveness probe (no auth,
+no rate limit) for container orchestrators. Events stream over a single SSE channel,
+tagged with the originating `sessionId`.
 
 | Method | Route | Purpose |
 |---|---|---|
+| `GET` | `/healthz` | Liveness probe (always open; used by the Docker `HEALTHCHECK`) |
 | `GET` | `/api/sessions` | List accounts (id, name, jid, status, paired) |
 | `POST` | `/api/sessions` | Create an account and begin QR pairing |
 | `DELETE` | `/api/sessions/{sid}` | Log out and remove an account |
