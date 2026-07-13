@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -33,9 +32,7 @@ func TestWebhookDeliverySignedAndVerified(t *testing.T) {
 	defer srv.Close()
 
 	d := newWebhookDispatcher(srv.URL, "topsecret", slog.Default())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go d.run(ctx)
+	go d.run(t.Context())
 
 	d.enqueue("call.ringing", CallRecord{SessionID: "s1", CallID: "c1", Direction: "inbound", Peer: "p", StartedAt: 1, Status: StatusRinging})
 
@@ -83,9 +80,7 @@ func TestWebhookRetriesUntilSuccess(t *testing.T) {
 
 	d := newWebhookDispatcher(srv.URL, "s", slog.Default())
 	d.backoff = []time.Duration{time.Millisecond, time.Millisecond}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go d.run(ctx)
+	go d.run(t.Context())
 	d.enqueue("call.ended", CallRecord{CallID: "c1", Status: StatusEnded})
 
 	deadline := time.Now().Add(2 * time.Second)
@@ -144,9 +139,7 @@ func TestBrokerWebhookTransitions(t *testing.T) {
 
 	b := NewBroker(nil, slog.Default())
 	b.webhooks = newWebhookDispatcher(srv.URL, "s", slog.Default())
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go b.webhooks.run(ctx)
+	go b.webhooks.run(t.Context())
 
 	rec := CallRecord{SessionID: "s1", CallID: "c1", Direction: "outbound", Peer: "p", StartedAt: 1, Status: StatusRinging}
 	b.upsertCall(rec)

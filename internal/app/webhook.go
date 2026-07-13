@@ -82,7 +82,7 @@ func (d *webhookDispatcher) deliver(ctx context.Context, ev webhookEvent) {
 	if err != nil {
 		return
 	}
-	for attempt := 0; attempt < webhookMaxAttempts; attempt++ {
+	for attempt := range webhookMaxAttempts {
 		if attempt > 0 && !sleepCtx(ctx, d.backoff[attempt-1]) {
 			return
 		}
