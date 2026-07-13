@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http/httptest"
 	"strings"
@@ -32,6 +33,38 @@ func TestOwnerActiveCall(t *testing.T) {
 	b.endCall("c1", "done")
 	if got := b.ownerActiveCall("op-A"); got != "" {
 		t.Fatalf("op-A's call ended, expected empty, got %q", got)
+	}
+}
+
+func TestSetOwnerEmptyIsNoClaim(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+	if !b.setOwner("c1", "") {
+		t.Fatal("empty owner accept must proceed")
+	}
+	c, _ := b.getCall("c1")
+	if c.Owner != nil {
+		t.Fatalf("empty owner must not claim, got %q", *c.Owner)
+	}
+	if !b.setOwner("c1", "op-A") {
+		t.Fatal("real claim after anonymous accept must succeed")
+	}
+	if got := b.ownerActiveCall("op-A"); got != "c1" {
+		t.Fatalf("op-A should own c1, got %q", got)
+	}
+}
+
+func TestOwnerRefEmptyIsNil(t *testing.T) {
+	if ownerRef("") != nil {
+		t.Fatal(`ownerRef("") must be nil`)
+	}
+	p := ownerRef("op-A")
+	if p == nil || *p != "op-A" {
+		t.Fatalf("got %v", p)
+	}
+	data, err := json.Marshal(CallRecord{Owner: ownerRef("")})
+	if err != nil || strings.Contains(string(data), `"owner":""`) {
+		t.Fatalf("owner must never serialize as empty string: %s err %v", data, err)
 	}
 }
 

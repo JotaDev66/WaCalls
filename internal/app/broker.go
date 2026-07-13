@@ -152,6 +152,9 @@ func (b *Broker) getCall(id string) (*CallRecord, bool) {
 }
 
 func (b *Broker) setOwner(id, owner string) bool {
+	if owner == "" {
+		return true
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	c, ok := b.calls[id]
