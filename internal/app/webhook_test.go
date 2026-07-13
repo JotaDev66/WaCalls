@@ -131,3 +131,47 @@ func TestWebhookNilDispatcherIsSafe(t *testing.T) {
 	var d *webhookDispatcher
 	d.enqueue("call.ringing", CallRecord{CallID: "c1"})
 }
+
+func TestBrokerWebhookTransitions(t *testing.T) {
+	events := make(chan webhookEvent, 16)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		var ev webhookEvent
+		_ = json.Unmarshal(b, &ev)
+		events <- ev
+	}))
+	defer srv.Close()
+
+	b := NewBroker(nil, slog.Default())
+	b.webhooks = newWebhookDispatcher(srv.URL, "s", slog.Default())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go b.webhooks.run(ctx)
+
+	rec := CallRecord{SessionID: "s1", CallID: "c1", Direction: "outbound", Peer: "p", StartedAt: 1, Status: StatusRinging}
+	b.upsertCall(rec)
+	b.upsertCall(rec)
+	rec.Status = StatusConnected
+	b.upsertCall(rec)
+	b.endCall("c1", "user_ended")
+
+	want := []string{"call.ringing", "call.active", "call.ended"}
+	for i, w := range want {
+		select {
+		case ev := <-events:
+			if ev.Event != w {
+				t.Fatalf("event %d: want %s, got %s", i, w, ev.Event)
+			}
+			if w == "call.ended" && (ev.Call.EndReason != "user_ended" || ev.Call.Status != StatusEnded) {
+				t.Fatalf("ended payload: %+v", ev.Call)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("missing event %s", w)
+		}
+	}
+	select {
+	case ev := <-events:
+		t.Fatalf("unexpected extra event %s (repeated status must not emit)", ev.Event)
+	case <-time.After(150 * time.Millisecond):
+	}
+}

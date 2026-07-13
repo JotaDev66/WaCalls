@@ -58,11 +58,12 @@ type subscriber struct {
 }
 
 type Broker struct {
-	mu      sync.RWMutex
-	subs    map[*subscriber]struct{}
-	calls   map[string]*CallRecord
-	records core.CallRecordStore
-	log     *slog.Logger
+	mu       sync.RWMutex
+	subs     map[*subscriber]struct{}
+	calls    map[string]*CallRecord
+	records  core.CallRecordStore
+	webhooks *webhookDispatcher
+	log      *slog.Logger
 
 	SnapshotFn func() []any
 }
@@ -130,9 +131,21 @@ func (b *Broker) emitSessionQR(sessionID, qr string) {
 
 func (b *Broker) upsertCall(r CallRecord) {
 	b.mu.Lock()
+	var prev CallStatus
+	if old, ok := b.calls[r.CallID]; ok {
+		prev = old.Status
+	}
 	cp := r
 	b.calls[r.CallID] = &cp
 	b.mu.Unlock()
+	if r.Status != prev {
+		switch r.Status {
+		case StatusRinging:
+			b.webhooks.enqueue("call.ringing", r)
+		case StatusConnected:
+			b.webhooks.enqueue("call.active", r)
+		}
+	}
 	b.broadcastCallList()
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
@@ -199,6 +212,7 @@ func (b *Broker) endCall(id, reason string) {
 	sessionID := c.SessionID
 	b.mu.Unlock()
 
+	b.webhooks.enqueue("call.ended", ended)
 	b.broadcast(map[string]any{
 		"type": "call-ended", "sessionId": sessionID, "id": id, "owner": owner, "reason": reason, "endedAt": now,
 	})

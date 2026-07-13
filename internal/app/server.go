@@ -77,6 +77,12 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
 
+	if cfg.WebhookURL != "" {
+		broker.webhooks = newWebhookDispatcher(cfg.WebhookURL, cfg.WebhookSecret, log)
+		go broker.webhooks.run(ctx)
+		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
+	}
+
 	var limiter *ipRateLimiter
 	if cfg.RateLimit > 0 {
 		limiter = newIPRateLimiter(cfg.RateLimit)
