@@ -225,7 +225,7 @@ func (m *SctpRelayManager) connectToRelay(info RelayConfig) {
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) { m.handleICEState(conn, s) })
 	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
 		if s == webrtc.PeerConnectionStateConnected {
-			m.obs().Mark("transport.dtls")
+			m.obs().Mark(core.MarkTransportDTLS)
 		}
 	})
 
@@ -252,9 +252,9 @@ func (m *SctpRelayManager) connectToRelay(info RelayConfig) {
 		m.mu.Unlock()
 		m.recomputeHealth()
 		m.log.Info("relay datachannel open", "id", id)
-		m.obs().Mark("transport.sctp_open")
+		m.obs().Mark(core.MarkTransportSCTPOpen)
 		m.sendStunRegistration(conn)
-		m.obs().Mark("transport.stun")
+		m.obs().Mark(core.MarkTransportSTUN)
 		m.startKeepalive(conn)
 		if m.onConnected != nil {
 			m.onConnected(info.IP, info.Port)
@@ -478,7 +478,7 @@ func (m *SctpRelayManager) handleICEState(conn *relayConnection, s webrtc.ICECon
 	m.log.Info("relay ice state", "id", conn.id, "state", s.String())
 	switch s {
 	case webrtc.ICEConnectionStateConnected:
-		m.obs().Mark("transport.ice")
+		m.obs().Mark(core.MarkTransportICE)
 		if conn.degraded.Swap(false) {
 			m.log.Info("relay ice recovered", "id", conn.id)
 			m.sendStunRegistration(conn)

@@ -36,6 +36,7 @@ type CallManager struct {
 	firstPacketSent       bool
 	initialTransportSent  bool
 	outgoingPreacceptSent bool
+	observerEnded         bool
 	acceptedByJid         string
 	debeEnabled           bool
 

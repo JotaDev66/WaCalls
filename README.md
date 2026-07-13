@@ -288,6 +288,33 @@ cd client && npm run build    # client type-check + production build
 
 ---
 
+## Extending: telemetry and metering
+
+WaCalls exposes two ports for observability and usage metering, both injected at the
+composition root (`cmd/server/main.go`):
+
+- `core.CallObserver`: one instance per call, created by the factory passed to
+  `app.NewServer`. It receives phase marks (`core.MarkTransportSTUN`, `core.MarkTransportICE`,
+  `core.MarkTransportDTLS`, `core.MarkTransportSCTPOpen`, `core.MarkMediaFirstPacket`),
+  tracked allocations and goroutines, and exactly one `End(result, reason)` when the call
+  finishes: `result` is `completed` when media connected, `failed` otherwise.
+- `telemetry.CallTracer`: app-level call lifecycle with session, peer, direction and
+  duration (`StartCall`, `MarkActive`, `EndCall`).
+
+The built-in OpenTelemetry implementations are enabled by `OTEL_EXPORTER_OTLP_ENDPOINT`.
+To stack a custom implementation (usage quotas, billing counters) next to them, combine
+with `core.MultiObserver` and `telemetry.MultiTracer`:
+
+```go
+obsFactory := func(callID string) core.CallObserver {
+	return core.MultiObserver(otelFactory(callID), meteringObserver(callID))
+}
+tracer := telemetry.MultiTracer(otelTracer, meteringTracer)
+srv, err := app.NewServer(ctx, cfg, obsFactory, tracer, log)
+```
+
+---
+
 ## Security
 
 Set `WACALLS_API_TOKEN` to require a bearer token on every `/api` and `/debug` route;

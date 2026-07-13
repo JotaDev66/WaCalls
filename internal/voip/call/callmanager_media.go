@@ -77,7 +77,7 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	}
 	marker := !m.firstPacketSent
 	if marker {
-		m.observer.Mark("media.first_packet")
+		m.observer.Mark(core.MarkMediaFirstPacket)
 	}
 	pkt := m.rtpSession.CreatePacketWithDuration(encoded, frameSamples, marker)
 	if m.debeEnabled {
