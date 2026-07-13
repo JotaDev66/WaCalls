@@ -39,8 +39,13 @@ type CallRecord struct {
 	EndReason string
 }
 
+type HistoryCursor struct {
+	EndedAt int64
+	CallID  string
+}
+
 type CallRecordStore interface {
 	Insert(ctx context.Context, r CallRecord) error
-	List(ctx context.Context, sessionID string, limit int) ([]CallRecord, error)
+	List(ctx context.Context, sessionID string, limit int, before HistoryCursor) ([]CallRecord, error)
 	Prune(ctx context.Context, keep int) error
 }

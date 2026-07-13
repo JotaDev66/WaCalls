@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"strconv"
+	"strings"
 	"time"
 
 	"wacalls/internal/store/migrate"
@@ -113,18 +115,27 @@ func (s *callRecordStore) Insert(ctx context.Context, r core.CallRecord) error {
 	return err
 }
 
-func (s *callRecordStore) List(ctx context.Context, sessionID string, limit int) ([]core.CallRecord, error) {
-	var (
-		rows *sql.Rows
-		err  error
-	)
-	if sessionID != "" {
-		rows, err = s.db.QueryContext(ctx, `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason
-			FROM call_records WHERE session_id = $1 ORDER BY ended_at DESC LIMIT $2`, sessionID, limit)
-	} else {
-		rows, err = s.db.QueryContext(ctx, `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason
-			FROM call_records ORDER BY ended_at DESC LIMIT $1`, limit)
+func (s *callRecordStore) List(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]core.CallRecord, error) {
+	q := `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason FROM call_records`
+	var conds []string
+	var args []any
+	arg := func(v any) string {
+		args = append(args, v)
+		return "$" + strconv.Itoa(len(args))
 	}
+	if sessionID != "" {
+		conds = append(conds, `session_id = `+arg(sessionID))
+	}
+	if before != (core.HistoryCursor{}) {
+		e := arg(before.EndedAt)
+		c := arg(before.CallID)
+		conds = append(conds, `(ended_at < `+e+` OR (ended_at = `+e+` AND call_id < `+c+`))`)
+	}
+	if len(conds) > 0 {
+		q += ` WHERE ` + strings.Join(conds, ` AND `)
+	}
+	q += ` ORDER BY ended_at DESC, call_id DESC LIMIT ` + arg(limit)
+	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

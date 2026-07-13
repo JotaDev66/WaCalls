@@ -33,6 +33,7 @@ func (s *Server) routes() http.Handler {
 	api.HandleFunc("POST /api/sessions/{sid}/calls/{id}/reject", s.handleReject)
 	api.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
 	api.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
+	api.HandleFunc("GET /api/sessions/{sid}/history/export", s.handleHistoryExport)
 	api.HandleFunc("GET /api/events", s.handleEvents)
 
 	if s.debug {
@@ -212,17 +213,6 @@ func (s *Server) handleReject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doEndCall(sess, w, r)
-	}
-}
-
-func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
-	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
-		rows, err := s.broker.historyRows(r.Context(), sess.id, 50)
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{"rows": rows})
 	}
 }
 
