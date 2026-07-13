@@ -55,6 +55,9 @@ func parseOrigins(raw string) map[string]struct{} {
 }
 
 func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
 	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
 	if err != nil {
 		return nil, err

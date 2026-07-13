@@ -5,6 +5,27 @@ import (
 	"testing"
 )
 
+func TestLoadConfigWebhookEnvs(t *testing.T) {
+	t.Setenv("WACALLS_WEBHOOK_URL", " https://hooks.example/wacalls ")
+	t.Setenv("WACALLS_WEBHOOK_SECRET", "s3cr3t")
+	cfg := LoadConfig(":0", "db", "", false, 0)
+	if cfg.WebhookURL != "https://hooks.example/wacalls" || cfg.WebhookSecret != "s3cr3t" {
+		t.Fatalf("webhook envs not loaded: %+v", cfg)
+	}
+}
+
+func TestValidateConfigWebhook(t *testing.T) {
+	if err := validateConfig(Config{WebhookURL: "https://x", WebhookSecret: ""}); err == nil {
+		t.Fatal("url without secret must fail the boot")
+	}
+	if err := validateConfig(Config{WebhookURL: "https://x", WebhookSecret: "s"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateConfig(Config{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLoadConfigReadsEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("WACALLS_API_TOKEN", "tok")
