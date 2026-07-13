@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"wacalls/internal/app/webui"
+	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow/types"
@@ -319,7 +321,11 @@ func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if cm, ok := sess.callFor(id); ok {
-		_ = cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined)
+		var invalid *call.InvalidTransition
+		if err := cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined); errors.As(err, &invalid) {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
 	}
 	sess.removeCall(id)
 	s.broker.endCall(id, string(core.EndCallReasonDeclined))
