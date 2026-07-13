@@ -285,6 +285,39 @@ tagged with the originating `sessionId`.
 | `GET` | `/api/events` | Server-sent events (sessions, auth, call lifecycle) |
 | `GET` | `/api/openapi.yaml` | OpenAPI 3.1 contract (public; a test gate fails when routes drift) |
 
+### Webhooks
+
+Set `WACALLS_WEBHOOK_URL` and `WACALLS_WEBHOOK_SECRET` (both required together) to
+receive a signed `POST` on call lifecycle transitions: `call.ringing`, `call.active`
+(reconnections may re-emit it) and `call.ended`. The payload is
+`{ "id", "event", "sentAt", "call" }` where `call` is the same `CallRecord` the API
+serves; the full schema lives in the `webhooks` section of `/api/openapi.yaml`.
+
+Deliveries time out after 10s and are retried twice (waits of 1s and 5s); `id` is
+stable across retries, so consumers can deduplicate. The queue is in-memory and
+non-blocking: under sustained failure, events are dropped and logged, never buffered
+to disk.
+
+Every request carries `X-Wacalls-Timestamp` (unix seconds) and
+`X-Wacalls-Signature: v1=<hex>`. Verify by recomputing HMAC-SHA256 over
+`timestamp + "." + raw body`:
+
+```js
+const crypto = require("node:crypto");
+const expected =
+  "v1=" +
+  crypto
+    .createHmac("sha256", process.env.WACALLS_WEBHOOK_SECRET)
+    .update(`${req.headers["x-wacalls-timestamp"]}.${rawBody}`)
+    .digest("hex");
+const ok = crypto.timingSafeEqual(
+  Buffer.from(expected),
+  Buffer.from(req.headers["x-wacalls-signature"]),
+);
+```
+
+Reject requests whose timestamp is older than a few minutes to prevent replays.
+
 ---
 
 ## Tests

@@ -385,6 +385,51 @@ paths:
                   - $ref: "#/components/schemas/PingEvent"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+webhooks:
+  call.ringing:
+    post:
+      operationId: webhookCallRinging
+      summary: Sent when a call transitions to ringing
+      description: >-
+        Delivered to WACALLS_WEBHOOK_URL. Signed with X-Wacalls-Timestamp (unix
+        seconds) and X-Wacalls-Signature "v1=<hex>" where hex is
+        hmac-sha256(secret, timestamp + "." + raw body). Failures are retried
+        twice (waits of 1s and 5s); the id is stable across retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
+  call.active:
+    post:
+      operationId: webhookCallActive
+      summary: Sent when a call transitions to connected (reconnections may re-emit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
+  call.ended:
+    post:
+      operationId: webhookCallEnded
+      summary: Sent when a call ends, with endReason and endedAt populated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
 components:
   securitySchemes:
     bearerAuth:
@@ -529,6 +574,22 @@ components:
         nextCursor:
           type: string
           description: Opaque cursor for the next page; absent on the last page
+    WebhookEnvelope:
+      type: object
+      required: [id, event, sentAt, call]
+      properties:
+        id:
+          type: string
+          description: Delivery id, stable across retries
+        event:
+          type: string
+          enum: [call.ringing, call.active, call.ended]
+        sentAt:
+          type: integer
+          format: int64
+          description: Unix milliseconds
+        call:
+          $ref: "#/components/schemas/CallRecord"
     SessionListEvent:
       type: object
       required: [type, sessions]

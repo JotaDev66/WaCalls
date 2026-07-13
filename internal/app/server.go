@@ -55,6 +55,9 @@ func parseOrigins(raw string) map[string]struct{} {
 }
 
 func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	if err := validateConfig(cfg); err != nil {
+		return nil, err
+	}
 	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
 	if err != nil {
 		return nil, err
@@ -73,6 +76,12 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 	broker := NewBroker(bundle.Calls, log)
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
 	broker.SnapshotFn = mgr.snapshotEvents
+
+	if cfg.WebhookURL != "" {
+		broker.webhooks = newWebhookDispatcher(cfg.WebhookURL, cfg.WebhookSecret, log)
+		go broker.webhooks.run(ctx)
+		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
+	}
 
 	var limiter *ipRateLimiter
 	if cfg.RateLimit > 0 {

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -18,6 +19,8 @@ type Config struct {
 	RateLimit     float64
 	WebRTCUDPPort int
 	PublicIPs     []string
+	WebhookURL    string
+	WebhookSecret string
 }
 
 func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config {
@@ -33,7 +36,16 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 		RateLimit:     parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
 		WebRTCUDPPort: parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
 		PublicIPs:     parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
+		WebhookURL:    strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
+		WebhookSecret: os.Getenv("WACALLS_WEBHOOK_SECRET"),
 	}
+}
+
+func validateConfig(cfg Config) error {
+	if cfg.WebhookURL != "" && cfg.WebhookSecret == "" {
+		return errors.New("WACALLS_WEBHOOK_URL requires WACALLS_WEBHOOK_SECRET")
+	}
+	return nil
 }
 
 const defaultRateLimitRPS = 20
