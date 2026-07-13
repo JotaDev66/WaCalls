@@ -50,6 +50,18 @@ type CallManager struct {
 	lastRedialAt  time.Time
 	srtpDrops     srtpDropTally
 
+	sendSrtcp      *media.SrtcpContext
+	recvStats      *media.RTCPReceiverStats
+	rtcpTxStop     chan struct{}
+	rtcpCName      string
+	srtcpTxIndex   uint32
+	rtpPacketsSent uint32
+	rtpOctetsSent  uint32
+	lastRtpTs      uint32
+	rtcp208Tick    time.Duration
+	rtcpSRTick     time.Duration
+	rtcp209Tick    time.Duration
+
 	extensions   []engine.Extension
 	extMu        sync.Mutex
 	rtpHandlers  map[uint8]func(*media.RtpPacket)
@@ -73,6 +85,9 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 		debeEnabled:  true,
 		timeouts:     DefaultTimeouts,
 		watchdogTick: defaultWatchdogTick,
+		rtcp208Tick:  rtcp208Interval,
+		rtcpSRTick:   rtcpSRInterval,
+		rtcp209Tick:  rtcp209Interval,
 		extensions:   exts,
 		rtpHandlers:  map[uint8]func(*media.RtpPacket){},
 		declaredSelf: map[uint32]bool{},

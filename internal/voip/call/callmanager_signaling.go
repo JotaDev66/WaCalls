@@ -103,7 +103,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 			m.log.Warn("accept call key undecryptable; skipping rekey", "call_id", call.CallID, "err", err)
 		} else if peerKey != nil {
 			m.mu.Lock()
-			if call.EncryptionKey != nil && !equalBytes(call.EncryptionKey, peerKey) {
+			if !call.IsEnded() && call.EncryptionKey != nil && !equalBytes(call.EncryptionKey, peerKey) {
 				m.reinitSrtpLocked(peerKey, peerJid)
 			}
 			m.mu.Unlock()
@@ -111,6 +111,13 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 
 	m.mu.Lock()
+	// The call can be torn down (EndCall/terminate) during the unlocked decrypt window above;
+	// re-arming SRTP/SRTCP and relays on an ended call would leak contexts and connections and
+	// let stale keying bleed into the next call.
+	if call.IsEnded() {
+		m.mu.Unlock()
+		return
+	}
 	_ = call.ApplyTransition(Transition{Type: TransitionRemoteAccepted})
 	m.emitState()
 	m.acceptedByJid = peerJid.String()
@@ -145,6 +152,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 		m.mu.Lock()
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaConnected}); err == nil {
 			m.emitState()
+			m.maybeStartRtcpTxLocked()
 			m.log.Info("call ACTIVE (media path established)", "call_id", call.CallID)
 		}
 		m.mu.Unlock()

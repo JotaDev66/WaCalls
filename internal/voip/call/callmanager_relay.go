@@ -41,6 +41,7 @@ func (m *CallManager) onRelayConnected() {
 	if call != nil && call.StateData.State == core.CallStateConnecting {
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaConnected}); err == nil {
 			m.emitState()
+			m.maybeStartRtcpTxLocked()
 			m.log.Info("relay connected → active", "call_id", call.CallID)
 		}
 	}
@@ -234,6 +235,17 @@ func (m *CallManager) cleanupMedia() {
 		close(m.watchdogStop)
 		m.watchdogStop = nil
 	}
+	if m.rtcpTxStop != nil {
+		close(m.rtcpTxStop)
+		m.rtcpTxStop = nil
+	}
+	m.sendSrtcp = nil
+	m.recvStats = nil
+	m.rtcpCName = ""
+	m.srtcpTxIndex = 0
+	m.rtpPacketsSent = 0
+	m.rtpOctetsSent = 0
+	m.lastRtpTs = 0
 	m.mu.Unlock()
 
 	if drops := m.srtpDrops.snapshotAndReset(); len(drops) > 0 {

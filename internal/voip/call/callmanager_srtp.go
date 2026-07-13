@@ -38,6 +38,7 @@ func (m *CallManager) initSrtpKeysLocked() {
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	m.srtp.SetObserver(m.observer)
+	m.setupSrtcpLocked(sendKM)
 	m.log.Debug("srtp per-jid keys set", "send", ourDeviceJid, "recv", peerDeviceJid)
 
 	m.ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid)
@@ -61,5 +62,24 @@ func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	m.srtp.SetObserver(m.observer)
+	m.setupSrtcpLocked(sendKM)
 	m.log.Debug("srtp re-initialized with peer call key")
+}
+
+// setupSrtcpLocked derives the outbound SRTCP protect context from the same per-jid master keying
+// as the audio SRTP (labels differ inside media.NewSrtcpContext) and readies the receiver stats
+// that feed our RTCP report blocks. Caller holds m.mu.
+func (m *CallManager) setupSrtcpLocked(sendKM core.SrtpKeyingMaterial) {
+	sendSrtcp, err := media.NewSrtcpContext(sendKM)
+	if err != nil {
+		m.log.Error("srtcp context derivation failed", "err", err)
+		return
+	}
+	m.sendSrtcp = sendSrtcp
+	if m.recvStats == nil {
+		m.recvStats = media.NewRTCPReceiverStats()
+	}
+	if m.rtcpCName == "" {
+		m.rtcpCName = rtcpCName(m.selfSsrc)
+	}
 }
