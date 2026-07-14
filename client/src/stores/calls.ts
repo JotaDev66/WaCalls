@@ -25,7 +25,13 @@ export const ensureCallsWired = (): void => {
   wired = true;
   eventStream.on((ev: BrokerEvent) => {
     if (ev.type === "call-list") {
-      useCalls.setState({ calls: ev.calls });
+      useCalls.setState((s) => {
+        // call-list is the authoritative set of live calls; prune quality samples for calls no
+        // longer present (e.g. a call ended while we were disconnected and missed its call-ended).
+        const ids = new Set(ev.calls.map((c) => c.callId));
+        const quality = new Map([...s.quality].filter(([id]) => ids.has(id)));
+        return { calls: ev.calls, quality };
+      });
     } else if (ev.type === "call-status") {
       useCalls.setState((s) => ({
         calls: s.calls.map((c) =>
@@ -42,6 +48,9 @@ export const ensureCallsWired = (): void => {
       }));
     } else if (ev.type === "call-quality") {
       useCalls.setState((s) => {
+        // Ignore a straggler sample that raced past call-ended: only track quality for a live call,
+        // otherwise the entry would never be pruned.
+        if (!s.calls.some((c) => c.callId === ev.id)) return s;
         const next = new Map(s.quality);
         next.set(ev.id, {
           rttMs: ev.rttMs,
