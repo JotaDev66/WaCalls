@@ -17,3 +17,10 @@ export type IncomingPayload = {
   peer: string;
   offeredAt: number;
 };
+
+export type QualitySample = {
+  rttMs: number;
+  jitterMs: number;
+  lossFraction: number;
+  hasRtt: boolean;
+};

@@ -13,7 +13,7 @@ import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
 import { formatCallDuration } from "@/utils/format";
-import type { CallStatus, CallSummary } from "@/types/call";
+import type { CallStatus, CallSummary, QualitySample } from "@/types/call";
 
 const statusVariant: Record<
   CallStatus,
@@ -41,8 +41,97 @@ const Meter = ({ label, db }: { label: string; db: number }) => {
   );
 };
 
+type QualityTone = "ok" | "warn" | "bad" | "idle";
+
+const toneFill: Record<QualityTone, string> = {
+  ok: "bg-primary",
+  warn: "bg-amber-500",
+  bad: "bg-destructive",
+  idle: "bg-muted-foreground/40",
+};
+
+const toneText: Record<QualityTone, string> = {
+  ok: "text-primary",
+  warn: "text-amber-600 dark:text-amber-400",
+  bad: "text-destructive",
+  idle: "text-muted-foreground",
+};
+
+const clampPct = (value: number, full: number) =>
+  Math.max(0, Math.min(100, (value / full) * 100));
+
+const rttTone = (ms: number): QualityTone =>
+  ms <= 150 ? "ok" : ms <= 300 ? "warn" : "bad";
+const jitterTone = (ms: number): QualityTone =>
+  ms <= 30 ? "ok" : ms <= 50 ? "warn" : "bad";
+const lossTone = (frac: number): QualityTone =>
+  frac <= 0.01 ? "ok" : frac <= 0.05 ? "warn" : "bad";
+
+const QualityBar = ({
+  label,
+  value,
+  pct,
+  tone,
+}: {
+  label: string;
+  value: string;
+  pct: number;
+  tone: QualityTone;
+}) => (
+  <div className="space-y-1">
+    <div className="flex items-baseline justify-between">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground">
+        {label}
+      </span>
+      <span className={`text-xs font-semibold tabular-nums ${toneText[tone]}`}>
+        {value}
+      </span>
+    </div>
+    <div className="h-2 overflow-hidden rounded-full bg-muted">
+      <div
+        className={`h-full transition-all ${toneFill[tone]}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  </div>
+);
+
+const QualityPanel = ({ q }: { q: QualitySample | undefined }) => {
+  if (!q) {
+    return <p className="text-xs text-muted-foreground">Measuring quality…</p>;
+  }
+  const lossPct = q.lossFraction * 100;
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 p-2">
+      {q.hasRtt ? (
+        <QualityBar
+          label="RTT"
+          value={`${Math.round(q.rttMs)} ms`}
+          pct={clampPct(q.rttMs, 400)}
+          tone={rttTone(q.rttMs)}
+        />
+      ) : (
+        <QualityBar label="RTT" value="—" pct={0} tone="idle" />
+      )}
+      <QualityBar
+        label="Jitter"
+        value={`${Math.round(q.jitterMs)} ms`}
+        pct={clampPct(q.jitterMs, 80)}
+        tone={jitterTone(q.jitterMs)}
+      />
+      <QualityBar
+        label="Loss"
+        value={`${lossPct.toFixed(1)}%`}
+        pct={clampPct(lossPct, 10)}
+        tone={lossTone(q.lossFraction)}
+      />
+    </div>
+  );
+};
+
 export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
+  const quality = useCalls((s) => s.quality.get(call.callId));
   const outDeviceId = useDevices((s) => s.outId);
   const endCall = useEndCall();
   const [, force] = useState(0);
@@ -115,6 +204,7 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
         )}
         <Meter label="Mic" db={micDb} />
         <Meter label="Peer" db={peerDb} />
+        {call.status === "connected" && <QualityPanel q={quality} />}
         <audio ref={audioRef} autoPlay />
       </CardContent>
     </Card>
