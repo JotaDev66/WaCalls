@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { PhoneOff, WifiOff } from "lucide-react";
+import { Check, PhoneOff, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,12 @@ import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
 import { formatCallDuration } from "@/utils/format";
-import type { CallStatus, CallSummary, QualitySample } from "@/types/call";
+import type {
+  CallStatus,
+  CallSummary,
+  QualitySample,
+  SetupMark,
+} from "@/types/call";
 
 const statusVariant: Record<
   CallStatus,
@@ -129,9 +134,83 @@ const QualityPanel = ({ q }: { q: QualitySample | undefined }) => {
   );
 };
 
+const markSteps = [
+  { key: "transport.ice", label: "ICE" },
+  { key: "transport.dtls", label: "DTLS" },
+  { key: "transport.sctp_open", label: "SCTP" },
+  { key: "transport.stun", label: "STUN" },
+  { key: "media.first_packet", label: "Media" },
+];
+
+const ConnectionTimeline = ({
+  marks,
+  status,
+}: {
+  marks: SetupMark[];
+  status: CallStatus;
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const byMark = new Map(marks.map((m) => [m.mark, m.elapsedMs]));
+  const mediaMs = byMark.get("media.first_packet");
+
+  if (status === "connected" && mediaMs !== undefined && !expanded) {
+    return (
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="flex w-full items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-xs text-muted-foreground"
+      >
+        <Check className="h-3.5 w-3.5 text-primary" />
+        Connected in {mediaMs} ms
+      </button>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs uppercase tracking-wide text-muted-foreground">
+          Connection
+        </span>
+        {mediaMs !== undefined && (
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="text-xs text-muted-foreground"
+          >
+            {mediaMs} ms
+          </button>
+        )}
+      </div>
+      <div className="grid grid-cols-5 gap-1">
+        {markSteps.map((step) => {
+          const ms = byMark.get(step.key);
+          const reached = ms !== undefined;
+          return (
+            <div key={step.key} className="flex flex-col items-center gap-1">
+              <div
+                className={`h-2.5 w-2.5 rounded-full ${reached ? "bg-primary" : "bg-muted-foreground/40"}`}
+              />
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {step.label}
+              </span>
+              <span
+                className={`text-[10px] tabular-nums ${reached ? "text-foreground" : "text-muted-foreground"}`}
+              >
+                {reached ? `${ms}` : "—"}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
   const quality = useCalls((s) => s.quality.get(call.callId));
+  const marks = useCalls((s) => s.marks.get(call.callId));
   const outDeviceId = useDevices((s) => s.outId);
   const endCall = useEndCall();
   const [, force] = useState(0);
@@ -201,6 +280,9 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
             <WifiOff className="h-3.5 w-3.5" />
             Reconnecting media…
           </div>
+        )}
+        {marks && marks.length > 0 && (
+          <ConnectionTimeline marks={marks} status={call.status} />
         )}
         <Meter label="Mic" db={micDb} />
         <Meter label="Peer" db={peerDb} />
