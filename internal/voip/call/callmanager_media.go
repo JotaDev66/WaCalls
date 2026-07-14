@@ -124,14 +124,42 @@ func (m *CallManager) onRelayData(data []byte) {
 		return
 	}
 	if transport.IsRtcpPacket(data) {
-		ssrc, _ := media.ParseRTCPSenderSSRC(data)
-		// Inbound RTCP is SRTCP QoS telemetry we do not consume yet (decode is out of scope); the
-		// sender SSRC stays in the clear, so we note peer liveness and drop. Log only the first per
-		// call to avoid a per-packet stream at the peer's report cadence.
-		if !m.inboundRtcpSeen.Swap(true) {
-			m.log.Debug("inbound rtcp dropped (decode out of scope)", "pt", data[1], "ssrc", ssrc)
+		senderSsrc, _ := media.ParseRTCPSenderSSRC(data)
+		m.notePeerMedia(senderSsrc)
+
+		m.mu.Lock()
+		recvSrtcp := m.recvSrtcp
+		recvStats := m.recvStats
+		selfSsrc := m.selfSsrc
+		obs := m.observer
+		m.mu.Unlock()
+		if recvSrtcp == nil || recvStats == nil {
+			return
 		}
-		m.notePeerMedia(ssrc)
+		plain, err := recvSrtcp.Unprotect(data)
+		if err != nil {
+			reason := "other"
+			var se *media.SrtpError
+			if errors.As(err, &se) {
+				reason = string(se.Type)
+			}
+			obs.SrtpRecvDrop(reason)
+			if m.srtpDrops.add(reason) {
+				m.log.Warn("srtcp recv packet dropped", "reason", reason, "err", err)
+			}
+			return
+		}
+		now := uint64(time.Now().UnixMilli())
+		in := media.ParseRTCPCompound(plain)
+		if in.HasSR {
+			recvStats.NoteSenderReport(in.SRNtpMid, now)
+		}
+		for _, b := range in.Blocks {
+			if b.SSRC == selfSsrc && b.LSR != 0 {
+				recvStats.NotePeerReportBlock(b.LSR, b.DLSR, b.FractionLost, now)
+			}
+		}
+		obs.NoteQuality(recvStats.QualitySnapshot(now))
 		return
 	}
 	if !transport.IsRtpPacket(data) {

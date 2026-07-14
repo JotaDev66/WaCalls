@@ -38,7 +38,7 @@ func (m *CallManager) initSrtpKeysLocked() {
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	m.srtp.SetObserver(m.observer)
-	m.setupSrtcpLocked(sendKM)
+	m.setupSrtcpLocked(sendKM, recvKM)
 	m.log.Debug("srtp per-jid keys set", "send", ourDeviceJid, "recv", peerDeviceJid)
 
 	m.ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid)
@@ -62,20 +62,27 @@ func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
 	}
 	m.srtp = engine.NewSrtpManager(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	m.srtp.SetObserver(m.observer)
-	m.setupSrtcpLocked(sendKM)
+	m.setupSrtcpLocked(sendKM, recvKM)
 	m.log.Debug("srtp re-initialized with peer call key")
 }
 
-// setupSrtcpLocked derives the outbound SRTCP protect context from the same per-jid master keying
-// as the audio SRTP (labels differ inside media.NewSrtcpContext) and readies the receiver stats
-// that feed our RTCP report blocks. Caller holds m.mu.
-func (m *CallManager) setupSrtcpLocked(sendKM core.SrtpKeyingMaterial) {
+// setupSrtcpLocked derives the SRTCP contexts from the same per-jid master keying as the audio SRTP
+// (labels differ inside media.NewSrtcpContext): sendKM protects our outbound RTCP, recvKM decodes
+// the peer's inbound RTCP. It also readies the receiver stats that feed our RTCP report blocks and
+// the quality telemetry. Caller holds m.mu.
+func (m *CallManager) setupSrtcpLocked(sendKM, recvKM core.SrtpKeyingMaterial) {
 	sendSrtcp, err := media.NewSrtcpContext(sendKM)
 	if err != nil {
 		m.log.Error("srtcp context derivation failed", "err", err)
 		return
 	}
 	m.sendSrtcp = sendSrtcp
+	recvSrtcp, err := media.NewSrtcpContext(recvKM)
+	if err != nil {
+		m.log.Error("srtcp recv context derivation failed", "err", err)
+		return
+	}
+	m.recvSrtcp = recvSrtcp
 	if m.recvStats == nil {
 		m.recvStats = media.NewRTCPReceiverStats()
 	}

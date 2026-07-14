@@ -231,7 +231,6 @@ func (m *CallManager) cleanupMedia() {
 	m.actualPeerSet = false
 	m.extAttached = false
 	m.lastMediaRecv.Store(0)
-	m.inboundRtcpSeen.Store(false)
 	if m.watchdogStop != nil {
 		close(m.watchdogStop)
 		m.watchdogStop = nil
@@ -240,7 +239,16 @@ func (m *CallManager) cleanupMedia() {
 		close(m.rtcpTxStop)
 		m.rtcpTxStop = nil
 	}
+	var qArgs []any
+	if m.recvStats != nil {
+		q := m.recvStats.QualitySnapshot(uint64(time.Now().UnixMilli()))
+		qArgs = []any{"call_id", callID, "jitter_ms", q.JitterMs, "loss", q.LossFraction, "rtt_samples", m.recvStats.RttSamples()}
+		if q.HasRtt {
+			qArgs = append(qArgs, "rtt_ms", q.RttMs)
+		}
+	}
 	m.sendSrtcp = nil
+	m.recvSrtcp = nil
 	m.recvStats = nil
 	m.rtcpCName = ""
 	m.srtcpTxIndex = 0
@@ -255,6 +263,10 @@ func (m *CallManager) cleanupMedia() {
 			args = append(args, r, drops[r])
 		}
 		m.log.Warn("srtp recv drops summary", args...)
+	}
+
+	if qArgs != nil {
+		m.log.Info("call quality summary", qArgs...)
 	}
 
 	if endResult != "" {
