@@ -52,6 +52,7 @@ type CallManager struct {
 
 	sendSrtcp      *media.SrtcpContext
 	recvSrtcp      *media.SrtcpContext
+	srtcpDrops     srtpDropTally
 	recvStats      *media.RTCPReceiverStats
 	rtcpTxStop     chan struct{}
 	rtcpCName      string

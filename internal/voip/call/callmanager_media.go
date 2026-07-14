@@ -138,13 +138,15 @@ func (m *CallManager) onRelayData(data []byte) {
 		}
 		plain, err := recvSrtcp.Unprotect(data)
 		if err != nil {
+			// SRTCP decode failures are control-plane telemetry drops, kept apart from the
+			// media-plane SrtpRecvDrop counter/tally so an RTCP fault cannot mask or conflate a
+			// genuine audio-decode fault under the same reason label.
 			reason := "other"
 			var se *media.SrtpError
 			if errors.As(err, &se) {
 				reason = string(se.Type)
 			}
-			obs.SrtpRecvDrop(reason)
-			if m.srtpDrops.add(reason) {
+			if m.srtcpDrops.add(reason) {
 				m.log.Warn("srtcp recv packet dropped", "reason", reason, "err", err)
 			}
 			return

@@ -265,6 +265,14 @@ func (m *CallManager) cleanupMedia() {
 		m.log.Warn("srtp recv drops summary", args...)
 	}
 
+	if drops := m.srtcpDrops.snapshotAndReset(); len(drops) > 0 {
+		args := []any{"call_id", callID}
+		for _, r := range slices.Sorted(maps.Keys(drops)) {
+			args = append(args, r, drops[r])
+		}
+		m.log.Warn("srtcp recv drops summary", args...)
+	}
+
 	if qArgs != nil {
 		m.log.Info("call quality summary", qArgs...)
 	}

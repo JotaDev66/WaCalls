@@ -136,7 +136,9 @@ func TestOnRelayDataDecodesInboundRtcp(t *testing.T) {
 	}
 	m.recvSrtcp = recv
 
-	now := uint64(2_000_000)
+	// Anchor LSR to the wall clock onRelayData reads internally (time.Now); "1 s ago" leaves ample
+	// margin over the few-ms gap so the RTT underflow guard does not reject a legitimate sample.
+	now := uint64(time.Now().UnixMilli())
 	rb := &media.RTCPReportBlock{SSRC: m.selfSsrc, LSR: mid32For(now) - (1 << 16), DLSR: 0}
 	sr := media.BuildRTCPCompound(m.peerSsrcs[0], media.RTCPSenderStats{}, rb, "peer@wacalls", now)
 	protected, err := recv.Protect(sr, 0)
@@ -174,8 +176,13 @@ func TestOnRelayDataDropsUnauthenticatedRtcp(t *testing.T) {
 
 	m.onRelayData(protected)
 
-	if got := obs.recorded(); len(got) != 1 || got[0] != string(media.SrtpErrAuthFailed) {
-		t.Fatalf("expected one auth_failed drop, got %v", got)
+	drops := m.srtcpDrops.snapshotAndReset()
+	if len(drops) != 1 || drops[string(media.SrtpErrAuthFailed)] != 1 {
+		t.Fatalf("expected one auth_failed srtcp drop, got %v", drops)
+	}
+	// An SRTCP decode failure must not reach the media-plane SrtpRecvDrop counter.
+	if got := obs.recorded(); len(got) != 0 {
+		t.Fatalf("srtcp drop leaked into media SrtpRecvDrop: %v", got)
 	}
 }
 
