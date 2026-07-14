@@ -130,6 +130,13 @@ func TestOnRelayDataDecodesInboundRtcp(t *testing.T) {
 	m := activeRtcpManager(t, nil)
 	m.observer = obs
 
+	var hookID string
+	var hookQ core.CallQuality
+	var hookFired bool
+	m.OnQuality = func(id string, q core.CallQuality) {
+		hookID, hookQ, hookFired = id, q, true
+	}
+
 	recv, err := media.NewSrtcpContext(km(3))
 	if err != nil {
 		t.Fatalf("srtcp recv context: %v", err)
@@ -153,6 +160,9 @@ func TestOnRelayDataDecodesInboundRtcp(t *testing.T) {
 	}
 	if !m.recvStats.QualitySnapshot(now).HasRtt {
 		t.Fatal("peer report block echoing our ssrc did not yield rtt")
+	}
+	if !hookFired || hookID != m.currentCall.CallID || !hookQ.HasRtt {
+		t.Fatalf("OnQuality hook: fired=%v id=%q hasRtt=%v", hookFired, hookID, hookQ.HasRtt)
 	}
 }
 

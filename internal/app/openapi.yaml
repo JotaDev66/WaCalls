@@ -382,6 +382,7 @@ paths:
                   - $ref: "#/components/schemas/CallEndedEvent"
                   - $ref: "#/components/schemas/IncomingEvent"
                   - $ref: "#/components/schemas/IncomingClaimedEvent"
+                  - $ref: "#/components/schemas/CallQualityEvent"
                   - $ref: "#/components/schemas/PingEvent"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -706,6 +707,32 @@ components:
         owner:
           type: string
           description: Empty when the accept carried no client id
+    CallQualityEvent:
+      type: object
+      description: >-
+        Live per-call reception quality derived from inbound RTCP, emitted at the peer's
+        report cadence (~1.5s). Transient and live-only: not persisted, never in history.
+      required: [type, sessionId, id, rttMs, jitterMs, lossFraction, hasRtt]
+      properties:
+        type:
+          type: string
+          const: call-quality
+        sessionId:
+          type: string
+        id:
+          type: string
+        rttMs:
+          type: number
+          description: Round-trip time in ms; meaningful only when hasRtt is true.
+        jitterMs:
+          type: number
+          description: Interarrival jitter of the inbound peer stream, in ms.
+        lossFraction:
+          type: number
+          description: Cumulative fraction (0..1) of inbound peer packets lost.
+        hasRtt:
+          type: boolean
+          description: False until the peer echoes our SR (no RTT yet).
     PingEvent:
       type: object
       required: [type]

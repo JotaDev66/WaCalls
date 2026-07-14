@@ -3,18 +3,20 @@ import { eventStream, type BrokerEvent } from "@/lib/event-stream";
 import { getClientId } from "@/lib/client-id";
 import { queryClient, queryKeys } from "@/lib/query";
 import type { OpenCall } from "@/lib/webrtc";
-import type { CallSummary, IncomingPayload } from "@/types/call";
+import type { CallSummary, IncomingPayload, QualitySample } from "@/types/call";
 
 type State = {
   calls: CallSummary[];
   ownConnections: Map<string, OpenCall>;
   incoming: IncomingPayload | null;
+  quality: Map<string, QualitySample>;
 };
 
 export const useCalls = create<State>(() => ({
   calls: [],
   ownConnections: new Map(),
   incoming: null,
+  quality: new Map(),
 }));
 
 let wired = false;
@@ -23,7 +25,13 @@ export const ensureCallsWired = (): void => {
   wired = true;
   eventStream.on((ev: BrokerEvent) => {
     if (ev.type === "call-list") {
-      useCalls.setState({ calls: ev.calls });
+      useCalls.setState((s) => {
+        // call-list is the authoritative set of live calls; prune quality samples for calls no
+        // longer present (e.g. a call ended while we were disconnected and missed its call-ended).
+        const ids = new Set(ev.calls.map((c) => c.callId));
+        const quality = new Map([...s.quality].filter(([id]) => ids.has(id)));
+        return { calls: ev.calls, quality };
+      });
     } else if (ev.type === "call-status") {
       useCalls.setState((s) => ({
         calls: s.calls.map((c) =>
@@ -38,15 +46,32 @@ export const ensureCallsWired = (): void => {
             : c,
         ),
       }));
+    } else if (ev.type === "call-quality") {
+      useCalls.setState((s) => {
+        // Ignore a straggler sample that raced past call-ended: only track quality for a live call,
+        // otherwise the entry would never be pruned.
+        if (!s.calls.some((c) => c.callId === ev.id)) return s;
+        const next = new Map(s.quality);
+        next.set(ev.id, {
+          rttMs: ev.rttMs,
+          jitterMs: ev.jitterMs,
+          lossFraction: ev.lossFraction,
+          hasRtt: ev.hasRtt,
+        });
+        return { quality: next };
+      });
     } else if (ev.type === "call-ended") {
       useCalls.setState((s) => {
         const conn = s.ownConnections.get(ev.id);
         if (conn) conn.close();
         const next = new Map(s.ownConnections);
         next.delete(ev.id);
+        const nextQuality = new Map(s.quality);
+        nextQuality.delete(ev.id);
         return {
           calls: s.calls.filter((c) => c.callId !== ev.id),
           ownConnections: next,
+          quality: nextQuality,
           incoming: s.incoming?.callId === ev.id ? null : s.incoming,
         };
       });

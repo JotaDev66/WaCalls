@@ -49,7 +49,16 @@ export type BrokerEvent =
       peer: string;
       offeredAt: number;
     }
-  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };
+  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string }
+  | {
+      type: "call-quality";
+      sessionId: string;
+      id: string;
+      rttMs: number;
+      jitterMs: number;
+      lossFraction: number;
+      hasRtt: boolean;
+    };
 
 type Listener = (ev: BrokerEvent) => void;
 type StatusListener = (connected: boolean) => void;

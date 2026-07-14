@@ -132,6 +132,30 @@ func TestBroadcastKicksLaggingSubscriber(t *testing.T) {
 	}
 }
 
+func TestEmitCallQuality(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	sub := b.subscribe("q")
+	defer b.unsubscribe(sub)
+
+	b.emitCallQuality("s1", "c1", core.CallQuality{RttMs: 97, JitterMs: 12, LossFraction: 0.02, HasRtt: true})
+
+	select {
+	case data := <-sub.ch:
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev["type"] != "call-quality" || ev["sessionId"] != "s1" || ev["id"] != "c1" {
+			t.Fatalf("bad envelope: %v", ev)
+		}
+		if ev["rttMs"].(float64) != 97 || ev["hasRtt"] != true {
+			t.Fatalf("bad quality fields: %v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no call-quality event received")
+	}
+}
+
 func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
 	b.SnapshotFn = func() []any {

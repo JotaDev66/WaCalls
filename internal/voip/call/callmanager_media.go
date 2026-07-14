@@ -132,6 +132,10 @@ func (m *CallManager) onRelayData(data []byte) {
 		recvStats := m.recvStats
 		selfSsrc := m.selfSsrc
 		obs := m.observer
+		callID := ""
+		if m.currentCall != nil {
+			callID = m.currentCall.CallID
+		}
 		m.mu.Unlock()
 		if recvSrtcp == nil || recvStats == nil {
 			return
@@ -161,7 +165,11 @@ func (m *CallManager) onRelayData(data []byte) {
 				recvStats.NotePeerReportBlock(b.LSR, b.DLSR, b.FractionLost, now)
 			}
 		}
-		obs.NoteQuality(recvStats.QualitySnapshot(now))
+		q := recvStats.QualitySnapshot(now)
+		obs.NoteQuality(q)
+		if m.OnQuality != nil && callID != "" {
+			m.OnQuality(callID, q)
+		}
 		return
 	}
 	if !transport.IsRtpPacket(data) {
