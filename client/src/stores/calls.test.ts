@@ -44,6 +44,14 @@ const sample = (id: string) => ({
   hasRtt: true,
 });
 
+const markEv = (id: string, mark: string, elapsedMs: number) => ({
+  type: "call-mark" as const,
+  sessionId: "s1",
+  id,
+  mark,
+  elapsedMs,
+});
+
 ensureCallsWired();
 
 describe("calls store event handlers", () => {
@@ -53,6 +61,7 @@ describe("calls store event handlers", () => {
       ownConnections: new Map(),
       incoming: null,
       quality: new Map(),
+      marks: new Map(),
     });
   });
 
@@ -113,5 +122,51 @@ describe("calls store event handlers", () => {
     emit(sample("c1")); // straggler arriving after the call already ended
 
     expect(useCalls.getState().quality.has("c1")).toBe(false);
+  });
+
+  it("call-mark accumulates setup marks for a live call in arrival order", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(markEv("c1", "transport.ice", 12));
+    emit(markEv("c1", "transport.dtls", 45));
+    const marks = useCalls.getState().marks.get("c1");
+    expect(marks?.map((m) => m.mark)).toEqual([
+      "transport.ice",
+      "transport.dtls",
+    ]);
+    expect(marks?.[0].elapsedMs).toBe(12);
+  });
+
+  it("keeps the first occurrence of a repeated phase mark", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(markEv("c1", "transport.ice", 12));
+    emit(markEv("c1", "transport.ice", 99)); // reconnect re-fires the phase
+    const marks = useCalls.getState().marks.get("c1");
+    expect(marks).toHaveLength(1);
+    expect(marks?.[0].elapsedMs).toBe(12);
+  });
+
+  it("ignores a call-mark for a call not in the live list", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(markEv("ghost", "transport.ice", 12));
+    expect(useCalls.getState().marks.has("ghost")).toBe(false);
+  });
+
+  it("call-list prunes orphaned marks and call-ended clears them", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(markEv("c1", "transport.ice", 12));
+    emit({ type: "call-list", calls: [row("c2")] }); // c1 gone from the live set
+    expect(useCalls.getState().marks.has("c1")).toBe(false);
+
+    emit({ type: "call-list", calls: [row("c2")] });
+    emit(markEv("c2", "transport.ice", 20));
+    emit({
+      type: "call-ended",
+      sessionId: "s1",
+      id: "c2",
+      owner: "op-A",
+      reason: "user_ended",
+      endedAt: 3,
+    });
+    expect(useCalls.getState().marks.has("c2")).toBe(false);
   });
 });

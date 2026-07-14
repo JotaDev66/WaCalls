@@ -297,6 +297,16 @@ func (b *Broker) emitCallQuality(sessionID, callID string, q core.CallQuality) {
 	})
 }
 
+// emitCallMark broadcasts a connection-setup phase mark (STUN/ICE/DTLS/SCTP/first-packet) with its
+// elapsed time since call start. Like call-quality it is a transient live-only signal, never
+// persisted, feeding the client's connection timeline.
+func (b *Broker) emitCallMark(sessionID, callID, mark string, elapsedMs int64) {
+	b.broadcast(map[string]any{
+		"type": "call-mark", "sessionId": sessionID, "id": callID,
+		"mark": mark, "elapsedMs": elapsedMs,
+	})
+}
+
 func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]CallRecord, core.HistoryCursor, error) {
 	if b.records == nil {
 		return []CallRecord{}, core.HistoryCursor{}, nil

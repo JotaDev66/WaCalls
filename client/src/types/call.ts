@@ -24,3 +24,8 @@ export type QualitySample = {
   lossFraction: number;
   hasRtt: boolean;
 };
+
+export type SetupMark = {
+  mark: string;
+  elapsedMs: number;
+};

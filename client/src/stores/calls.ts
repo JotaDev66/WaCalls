@@ -3,13 +3,19 @@ import { eventStream, type BrokerEvent } from "@/lib/event-stream";
 import { getClientId } from "@/lib/client-id";
 import { queryClient, queryKeys } from "@/lib/query";
 import type { OpenCall } from "@/lib/webrtc";
-import type { CallSummary, IncomingPayload, QualitySample } from "@/types/call";
+import type {
+  CallSummary,
+  IncomingPayload,
+  QualitySample,
+  SetupMark,
+} from "@/types/call";
 
 type State = {
   calls: CallSummary[];
   ownConnections: Map<string, OpenCall>;
   incoming: IncomingPayload | null;
   quality: Map<string, QualitySample>;
+  marks: Map<string, SetupMark[]>;
 };
 
 export const useCalls = create<State>(() => ({
@@ -17,6 +23,7 @@ export const useCalls = create<State>(() => ({
   ownConnections: new Map(),
   incoming: null,
   quality: new Map(),
+  marks: new Map(),
 }));
 
 let wired = false;
@@ -30,7 +37,8 @@ export const ensureCallsWired = (): void => {
         // longer present (e.g. a call ended while we were disconnected and missed its call-ended).
         const ids = new Set(ev.calls.map((c) => c.callId));
         const quality = new Map([...s.quality].filter(([id]) => ids.has(id)));
-        return { calls: ev.calls, quality };
+        const marks = new Map([...s.marks].filter(([id]) => ids.has(id)));
+        return { calls: ev.calls, quality, marks };
       });
     } else if (ev.type === "call-status") {
       useCalls.setState((s) => ({
@@ -60,6 +68,18 @@ export const ensureCallsWired = (): void => {
         });
         return { quality: next };
       });
+    } else if (ev.type === "call-mark") {
+      useCalls.setState((s) => {
+        if (!s.calls.some((c) => c.callId === ev.id)) return s;
+        const existing = s.marks.get(ev.id) ?? [];
+        if (existing.some((m) => m.mark === ev.mark)) return s; // keep the first of each phase
+        const next = new Map(s.marks);
+        next.set(ev.id, [
+          ...existing,
+          { mark: ev.mark, elapsedMs: ev.elapsedMs },
+        ]);
+        return { marks: next };
+      });
     } else if (ev.type === "call-ended") {
       useCalls.setState((s) => {
         const conn = s.ownConnections.get(ev.id);
@@ -68,10 +88,13 @@ export const ensureCallsWired = (): void => {
         next.delete(ev.id);
         const nextQuality = new Map(s.quality);
         nextQuality.delete(ev.id);
+        const nextMarks = new Map(s.marks);
+        nextMarks.delete(ev.id);
         return {
           calls: s.calls.filter((c) => c.callId !== ev.id),
           ownConnections: next,
           quality: nextQuality,
+          marks: nextMarks,
           incoming: s.incoming?.callId === ev.id ? null : s.incoming,
         };
       });

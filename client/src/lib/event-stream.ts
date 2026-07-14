@@ -58,6 +58,13 @@ export type BrokerEvent =
       jitterMs: number;
       lossFraction: number;
       hasRtt: boolean;
+    }
+  | {
+      type: "call-mark";
+      sessionId: string;
+      id: string;
+      mark: string;
+      elapsedMs: number;
     };
 
 type Listener = (ev: BrokerEvent) => void;

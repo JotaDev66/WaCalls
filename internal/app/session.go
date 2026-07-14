@@ -113,6 +113,9 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnQuality = func(callID string, q core.CallQuality) {
 		s.mgr.broker.emitCallQuality(s.id, callID, q)
 	}
+	cm.OnMark = func(callID string, mark string, elapsedMs int64) {
+		s.mgr.broker.emitCallMark(s.id, callID, mark, elapsedMs)
+	}
 }
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID) (string, error) {
