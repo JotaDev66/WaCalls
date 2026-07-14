@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
@@ -34,7 +35,7 @@ func NewClient(sock core.VoipSocket, log *slog.Logger, makeExtensions func() []e
 
 func (c *Client) createCall(callID string) *CallManager {
 	cm := NewCallManager(c.sock, c.log, c.makeExtensions()...)
-	cm.observer = c.newObserver(callID)
+	cm.observer = core.MultiObserver(c.newObserver(callID), markTap{cm: cm, callID: callID, start: time.Now()})
 	c.onCall(callID, cm)
 	c.mu.Lock()
 	c.calls[callID] = cm

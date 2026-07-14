@@ -383,6 +383,7 @@ paths:
                   - $ref: "#/components/schemas/IncomingEvent"
                   - $ref: "#/components/schemas/IncomingClaimedEvent"
                   - $ref: "#/components/schemas/CallQualityEvent"
+                  - $ref: "#/components/schemas/CallMarkEvent"
                   - $ref: "#/components/schemas/PingEvent"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -733,6 +734,27 @@ components:
         hasRtt:
           type: boolean
           description: False until the peer echoes our SR (no RTT yet).
+    CallMarkEvent:
+      type: object
+      description: >-
+        A connection-setup phase mark reached, with elapsed ms since call start. Emitted live as
+        the call sets up (STUN/ICE/DTLS/SCTP and media first-packet). Transient, not persisted.
+      required: [type, sessionId, id, mark, elapsedMs]
+      properties:
+        type:
+          type: string
+          const: call-mark
+        sessionId:
+          type: string
+        id:
+          type: string
+        mark:
+          type: string
+          description: Phase id (transport.stun/ice/dtls/sctp_open, media.first_packet).
+        elapsedMs:
+          type: integer
+          format: int64
+          description: Milliseconds since the call started.
     PingEvent:
       type: object
       required: [type]

@@ -156,6 +156,30 @@ func TestEmitCallQuality(t *testing.T) {
 	}
 }
 
+func TestEmitCallMark(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	sub := b.subscribe("m")
+	defer b.unsubscribe(sub)
+
+	b.emitCallMark("s1", "c1", "transport.ice", 42)
+
+	select {
+	case data := <-sub.ch:
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev["type"] != "call-mark" || ev["sessionId"] != "s1" || ev["id"] != "c1" {
+			t.Fatalf("bad envelope: %v", ev)
+		}
+		if ev["mark"] != "transport.ice" || ev["elapsedMs"].(float64) != 42 {
+			t.Fatalf("bad mark fields: %v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no call-mark event received")
+	}
+}
+
 func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
 	b.SnapshotFn = func() []any {
