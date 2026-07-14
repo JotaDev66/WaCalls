@@ -125,7 +125,12 @@ func (m *CallManager) onRelayData(data []byte) {
 	}
 	if transport.IsRtcpPacket(data) {
 		ssrc, _ := media.ParseRTCPSenderSSRC(data)
-		m.log.Debug("inbound rtcp dropped", "pt", data[1], "ssrc", ssrc)
+		// Inbound RTCP is SRTCP QoS telemetry we do not consume yet (decode is out of scope); the
+		// sender SSRC stays in the clear, so we note peer liveness and drop. Log only the first per
+		// call to avoid a per-packet stream at the peer's report cadence.
+		if !m.inboundRtcpSeen.Swap(true) {
+			m.log.Debug("inbound rtcp dropped (decode out of scope)", "pt", data[1], "ssrc", ssrc)
+		}
 		m.notePeerMedia(ssrc)
 		return
 	}

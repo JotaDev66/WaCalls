@@ -231,6 +231,7 @@ func (m *CallManager) cleanupMedia() {
 	m.actualPeerSet = false
 	m.extAttached = false
 	m.lastMediaRecv.Store(0)
+	m.inboundRtcpSeen.Store(false)
 	if m.watchdogStop != nil {
 		close(m.watchdogStop)
 		m.watchdogStop = nil
