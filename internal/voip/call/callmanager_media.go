@@ -88,6 +88,9 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 		pkt.Header.ExtensionData = nil
 	}
 	m.firstPacketSent = true
+	m.rtpPacketsSent++
+	m.rtpOctetsSent += uint32(len(pkt.Payload))
+	m.lastRtpTs = pkt.Header.Timestamp
 	protected, err := m.srtp.Protect(pkt)
 	if err != nil {
 		m.log.Debug("srtp protect error", "err", err)
@@ -122,7 +125,12 @@ func (m *CallManager) onRelayData(data []byte) {
 	}
 	if transport.IsRtcpPacket(data) {
 		ssrc, _ := media.ParseRTCPSenderSSRC(data)
-		m.log.Debug("inbound rtcp dropped", "pt", data[1], "ssrc", ssrc)
+		// Inbound RTCP is SRTCP QoS telemetry we do not consume yet (decode is out of scope); the
+		// sender SSRC stays in the clear, so we note peer liveness and drop. Log only the first per
+		// call to avoid a per-packet stream at the peer's report cadence.
+		if !m.inboundRtcpSeen.Swap(true) {
+			m.log.Debug("inbound rtcp dropped (decode out of scope)", "pt", data[1], "ssrc", ssrc)
+		}
 		m.notePeerMedia(ssrc)
 		return
 	}
@@ -151,6 +159,7 @@ func (m *CallManager) onRelayData(data []byte) {
 	}
 	srtp := m.srtp
 	obs := m.observer
+	recvStats := m.recvStats
 	m.mu.Unlock()
 
 	m.extMu.Lock()
@@ -178,6 +187,9 @@ func (m *CallManager) onRelayData(data []byte) {
 	}
 	if len(pkt.Payload) == 0 {
 		return
+	}
+	if recvStats != nil {
+		recvStats.NoteRTP(pkt.Header.SequenceNumber, pkt.Header.Timestamp, uint64(time.Now().UnixMilli()))
 	}
 	handler(pkt)
 }
