@@ -12,13 +12,14 @@ type memObserver struct {
 	released int64
 }
 
-func (o *memObserver) Mark(string)            {}
-func (o *memObserver) SrtpRecvDrop(string)    {}
-func (o *memObserver) AddMem(int64)           {}
-func (o *memObserver) ReleaseMem(b int64)     { o.mu.Lock(); o.released += b; o.mu.Unlock() }
-func (o *memObserver) TrackGoroutine() func() { return func() {} }
-func (o *memObserver) End(string, string)     {}
-func (o *memObserver) rel() int64             { o.mu.Lock(); defer o.mu.Unlock(); return o.released }
+func (o *memObserver) Mark(string)                  {}
+func (o *memObserver) SrtpRecvDrop(string)          {}
+func (o *memObserver) NoteQuality(core.CallQuality) {}
+func (o *memObserver) AddMem(int64)                 {}
+func (o *memObserver) ReleaseMem(b int64)           { o.mu.Lock(); o.released += b; o.mu.Unlock() }
+func (o *memObserver) TrackGoroutine() func()       { return func() {} }
+func (o *memObserver) End(string, string)           {}
+func (o *memObserver) rel() int64                   { o.mu.Lock(); defer o.mu.Unlock(); return o.released }
 
 func addFakeConn(m *SctpRelayManager, id string, mem int64) *relayConnection {
 	conn := &relayConnection{id: id, stopCh: make(chan struct{}), mem: mem}

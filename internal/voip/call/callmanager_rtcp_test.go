@@ -119,6 +119,73 @@ func TestRtcpTxLoopBroadcasts(t *testing.T) {
 	}
 }
 
+func mid32For(nowMs uint64) uint32 {
+	ntpSec := uint32(nowMs/1000 + 2208988800)
+	ntpFrac := uint32(float64(nowMs%1000) / 1000.0 * 4294967296.0)
+	return ntpSec<<16 | ntpFrac>>16
+}
+
+func TestOnRelayDataDecodesInboundRtcp(t *testing.T) {
+	obs := &countingObserver{}
+	m := activeRtcpManager(t, nil)
+	m.observer = obs
+
+	recv, err := media.NewSrtcpContext(km(3))
+	if err != nil {
+		t.Fatalf("srtcp recv context: %v", err)
+	}
+	m.recvSrtcp = recv
+
+	// Anchor LSR to the wall clock onRelayData reads internally (time.Now); "1 s ago" leaves ample
+	// margin over the few-ms gap so the RTT underflow guard does not reject a legitimate sample.
+	now := uint64(time.Now().UnixMilli())
+	rb := &media.RTCPReportBlock{SSRC: m.selfSsrc, LSR: mid32For(now) - (1 << 16), DLSR: 0}
+	sr := media.BuildRTCPCompound(m.peerSsrcs[0], media.RTCPSenderStats{}, rb, "peer@wacalls", now)
+	protected, err := recv.Protect(sr, 0)
+	if err != nil {
+		t.Fatalf("protect: %v", err)
+	}
+
+	m.onRelayData(protected)
+
+	if obs.qualityNow() == 0 {
+		t.Fatal("onRelayData did not emit NoteQuality for a valid inbound rtcp compound")
+	}
+	if !m.recvStats.QualitySnapshot(now).HasRtt {
+		t.Fatal("peer report block echoing our ssrc did not yield rtt")
+	}
+}
+
+func TestOnRelayDataDropsUnauthenticatedRtcp(t *testing.T) {
+	obs := &dropRecordingObserver{}
+	m := activeRtcpManager(t, nil)
+	m.observer = obs
+
+	recv, err := media.NewSrtcpContext(km(3))
+	if err != nil {
+		t.Fatalf("srtcp recv context: %v", err)
+	}
+	m.recvSrtcp = recv
+
+	sr := media.BuildRTCPCompound(m.peerSsrcs[0], media.RTCPSenderStats{}, nil, "peer@wacalls", 1000)
+	protected, err := recv.Protect(sr, 0)
+	if err != nil {
+		t.Fatalf("protect: %v", err)
+	}
+	protected[len(protected)-1] ^= 0xff // corrupt the auth tag
+
+	m.onRelayData(protected)
+
+	drops := m.srtcpDrops.snapshotAndReset()
+	if len(drops) != 1 || drops[string(media.SrtpErrAuthFailed)] != 1 {
+		t.Fatalf("expected one auth_failed srtcp drop, got %v", drops)
+	}
+	// An SRTCP decode failure must not reach the media-plane SrtpRecvDrop counter.
+	if got := obs.recorded(); len(got) != 0 {
+		t.Fatalf("srtcp drop leaked into media SrtpRecvDrop: %v", got)
+	}
+}
+
 func TestRtcpTxLifecycle(t *testing.T) {
 	obs := &countingObserver{}
 	m := activeRtcpManager(t, nil)

@@ -18,6 +18,7 @@ type countingObserver struct {
 	mu           sync.Mutex
 	mem, memPeak int64
 	gor, gorPeak int64
+	quality      int64
 }
 
 func (o *countingObserver) AddMem(b int64) {
@@ -38,11 +39,13 @@ func (o *countingObserver) TrackGoroutine() func() {
 	o.mu.Unlock()
 	return func() { o.mu.Lock(); o.gor--; o.mu.Unlock() }
 }
-func (o *countingObserver) Mark(string)         {}
-func (o *countingObserver) SrtpRecvDrop(string) {}
-func (o *countingObserver) End(string, string)  {}
-func (o *countingObserver) memNow() int64       { o.mu.Lock(); defer o.mu.Unlock(); return o.mem }
-func (o *countingObserver) gorNow() int64       { o.mu.Lock(); defer o.mu.Unlock(); return o.gor }
+func (o *countingObserver) Mark(string)                  {}
+func (o *countingObserver) SrtpRecvDrop(string)          {}
+func (o *countingObserver) NoteQuality(core.CallQuality) { o.mu.Lock(); o.quality++; o.mu.Unlock() }
+func (o *countingObserver) End(string, string)           {}
+func (o *countingObserver) memNow() int64                { o.mu.Lock(); defer o.mu.Unlock(); return o.mem }
+func (o *countingObserver) gorNow() int64                { o.mu.Lock(); defer o.mu.Unlock(); return o.gor }
+func (o *countingObserver) qualityNow() int64            { o.mu.Lock(); defer o.mu.Unlock(); return o.quality }
 func (o *countingObserver) goroutinePeak() int64 {
 	o.mu.Lock()
 	defer o.mu.Unlock()

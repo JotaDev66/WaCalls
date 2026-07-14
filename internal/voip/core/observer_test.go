@@ -17,11 +17,12 @@ func TestNopObserverSatisfiesPortAndDoesNotPanic(t *testing.T) {
 }
 
 type recObserver struct {
-	marks []string
-	mem   []int64
-	gor   int
-	ends  []string
-	drops []string
+	marks   []string
+	mem     []int64
+	gor     int
+	ends    []string
+	drops   []string
+	quality int
 }
 
 func (r *recObserver) Mark(e string)      { r.marks = append(r.marks, e) }
@@ -33,6 +34,7 @@ func (r *recObserver) TrackGoroutine() func() {
 }
 func (r *recObserver) End(result, reason string)  { r.ends = append(r.ends, result+"/"+reason) }
 func (r *recObserver) SrtpRecvDrop(reason string) { r.drops = append(r.drops, reason) }
+func (r *recObserver) NoteQuality(CallQuality)    { r.quality++ }
 
 func TestMultiObserverFansOut(t *testing.T) {
 	a, b := &recObserver{}, &recObserver{}
@@ -63,6 +65,14 @@ func TestMultiObserverFansOut(t *testing.T) {
 		if len(r.drops) != 1 || r.drops[0] != "auth_failed" {
 			t.Fatalf("drops = %v", r.drops)
 		}
+	}
+}
+
+func TestMultiObserverNoteQuality(t *testing.T) {
+	a, b := &recObserver{}, &recObserver{}
+	MultiObserver(a, b).NoteQuality(CallQuality{RttMs: 12, HasRtt: true})
+	if a.quality != 1 || b.quality != 1 {
+		t.Fatalf("fan-out failed: %d %d", a.quality, b.quality)
 	}
 }
 

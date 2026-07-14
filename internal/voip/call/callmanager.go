@@ -43,15 +43,16 @@ type CallManager struct {
 	acceptedByJid         string
 	debeEnabled           bool
 
-	timeouts        Timeouts
-	watchdogTick    time.Duration
-	watchdogStop    chan struct{}
-	lastMediaRecv   atomic.Int64
-	lastRedialAt    time.Time
-	srtpDrops       srtpDropTally
-	inboundRtcpSeen atomic.Bool
+	timeouts      Timeouts
+	watchdogTick  time.Duration
+	watchdogStop  chan struct{}
+	lastMediaRecv atomic.Int64
+	lastRedialAt  time.Time
+	srtpDrops     srtpDropTally
 
 	sendSrtcp      *media.SrtcpContext
+	recvSrtcp      *media.SrtcpContext
+	srtcpDrops     srtpDropTally
 	recvStats      *media.RTCPReceiverStats
 	rtcpTxStop     chan struct{}
 	rtcpCName      string

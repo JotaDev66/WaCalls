@@ -3,20 +3,31 @@ package core
 type CallObserver interface {
 	Mark(event string)
 	SrtpRecvDrop(reason string)
+	NoteQuality(q CallQuality)
 	AddMem(bytes int64)
 	ReleaseMem(bytes int64)
 	TrackGoroutine() (done func())
 	End(result, reason string)
 }
 
+// CallQuality is a per-call reception quality sample derived from inbound RTCP: our loss/jitter of
+// the peer RTP stream, plus best-effort RTT (HasRtt false when the peer never echoed our SR).
+type CallQuality struct {
+	RttMs        float64
+	JitterMs     float64
+	LossFraction float64
+	HasRtt       bool
+}
+
 type NopObserver struct{}
 
-func (NopObserver) Mark(string)            {}
-func (NopObserver) SrtpRecvDrop(string)    {}
-func (NopObserver) AddMem(int64)           {}
-func (NopObserver) ReleaseMem(int64)       {}
-func (NopObserver) TrackGoroutine() func() { return func() {} }
-func (NopObserver) End(string, string)     {}
+func (NopObserver) Mark(string)             {}
+func (NopObserver) SrtpRecvDrop(string)     {}
+func (NopObserver) NoteQuality(CallQuality) {}
+func (NopObserver) AddMem(int64)            {}
+func (NopObserver) ReleaseMem(int64)        {}
+func (NopObserver) TrackGoroutine() func()  { return func() {} }
+func (NopObserver) End(string, string)      {}
 
 var _ CallObserver = NopObserver{}
 
@@ -49,6 +60,12 @@ func (m multiObserver) Mark(event string) {
 func (m multiObserver) SrtpRecvDrop(reason string) {
 	for _, o := range m {
 		o.SrtpRecvDrop(reason)
+	}
+}
+
+func (m multiObserver) NoteQuality(q CallQuality) {
+	for _, o := range m {
+		o.NoteQuality(q)
 	}
 }
 
