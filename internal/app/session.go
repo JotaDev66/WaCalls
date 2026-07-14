@@ -110,6 +110,9 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			_ = b.WritePCM(pcm16)
 		}
 	}
+	cm.OnQuality = func(callID string, q core.CallQuality) {
+		s.mgr.broker.emitCallQuality(s.id, callID, q)
+	}
 }
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID) (string, error) {

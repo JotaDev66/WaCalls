@@ -287,6 +287,16 @@ func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
 	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
 }
 
+// emitCallQuality broadcasts a live per-call reception-quality sample (RTT, jitter, loss) derived
+// from inbound RTCP. It is a transient live-only signal: it never touches CallRecord, persistence,
+// or webhooks, so the client's call card can render it without polluting the history contract.
+func (b *Broker) emitCallQuality(sessionID, callID string, q core.CallQuality) {
+	b.broadcast(map[string]any{
+		"type": "call-quality", "sessionId": sessionID, "id": callID,
+		"rttMs": q.RttMs, "jitterMs": q.JitterMs, "lossFraction": q.LossFraction, "hasRtt": q.HasRtt,
+	})
+}
+
 func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]CallRecord, core.HistoryCursor, error) {
 	if b.records == nil {
 		return []CallRecord{}, core.HistoryCursor{}, nil

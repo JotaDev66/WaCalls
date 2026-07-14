@@ -74,6 +74,7 @@ type CallManager struct {
 	OnIncoming    func(*CallInfo)
 	OnEnded       func(*CallInfo)
 	OnPeerAudio   func([]float32)
+	OnQuality     func(callID string, q core.CallQuality)
 }
 
 func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
