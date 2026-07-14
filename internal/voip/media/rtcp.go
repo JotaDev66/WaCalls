@@ -4,6 +4,7 @@ import "encoding/binary"
 
 const (
 	RTCPPayloadTypeSR       = 200
+	RTCPPayloadTypeRR       = 201
 	RTCPPayloadTypeSDES     = 202
 	RTCPPayloadTypeCompact  = 208
 	RTCPPayloadTypeCompact2 = 209
@@ -132,4 +133,69 @@ func ParseRTCPSenderSSRC(data []byte) (uint32, bool) {
 		return 0, false
 	}
 	return binary.BigEndian.Uint32(data[4:8]), true
+}
+
+// InboundReportBlock is a receiver report block parsed from an inbound peer SR or RR: the peer's
+// reception stats about the SSRC it reports on, including the LSR/DLSR we need to compute RTT.
+type InboundReportBlock struct {
+	SSRC           uint32
+	FractionLost   uint8
+	CumulativeLost uint32
+	ExtHighSeq     uint32
+	Jitter         uint32
+	LSR            uint32
+	DLSR           uint32
+}
+
+// InboundRTCP is the quality-relevant content of a decoded inbound RTCP compound.
+type InboundRTCP struct {
+	HasSR    bool
+	SRNtpMid uint32
+	Blocks   []InboundReportBlock
+}
+
+// ParseRTCPCompound walks a plaintext RTCP compound and extracts the peer SR NTP mid-32 and any
+// receiver report blocks (from SRs with RC>0 or RRs). Malformed or truncated input stops the walk.
+func ParseRTCPCompound(data []byte) InboundRTCP {
+	var out InboundRTCP
+	for off := 0; off+4 <= len(data); {
+		if (data[off]>>6)&0x03 != 2 {
+			break
+		}
+		rc := int(data[off] & 0x1f)
+		pt := data[off+1]
+		pktLen := (int(binary.BigEndian.Uint16(data[off+2:off+4])) + 1) * 4
+		if pktLen < 4 || off+pktLen > len(data) {
+			break
+		}
+		switch pt {
+		case RTCPPayloadTypeSR:
+			if pktLen >= 28 {
+				out.HasSR = true
+				out.SRNtpMid = binary.BigEndian.Uint32(data[off+10 : off+14])
+				parseReportBlocks(data[off+28:off+pktLen], rc, &out.Blocks)
+			}
+		case RTCPPayloadTypeRR:
+			if pktLen >= 8 {
+				parseReportBlocks(data[off+8:off+pktLen], rc, &out.Blocks)
+			}
+		}
+		off += pktLen
+	}
+	return out
+}
+
+func parseReportBlocks(b []byte, rc int, blocks *[]InboundReportBlock) {
+	for i := 0; i < rc && (i+1)*24 <= len(b); i++ {
+		p := b[i*24:]
+		*blocks = append(*blocks, InboundReportBlock{
+			SSRC:           binary.BigEndian.Uint32(p[0:4]),
+			FractionLost:   p[4],
+			CumulativeLost: uint32(p[5])<<16 | uint32(p[6])<<8 | uint32(p[7]),
+			ExtHighSeq:     binary.BigEndian.Uint32(p[8:12]),
+			Jitter:         binary.BigEndian.Uint32(p[12:16]),
+			LSR:            binary.BigEndian.Uint32(p[16:20]),
+			DLSR:           binary.BigEndian.Uint32(p[20:24]),
+		})
+	}
 }
