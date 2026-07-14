@@ -70,7 +70,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
             <div className="min-w-0 flex-1">
               <p className="truncate font-medium">{s.name}</p>
               {s.jid && (
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="truncate font-mono text-xs text-muted-foreground">
                   {s.jid.split("@")[0]}
                 </p>
               )}

@@ -1,11 +1,51 @@
 import { Mic, Volume2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useAudioDevices } from "@/hooks/useAudioDevices";
 import { useDevices } from "@/stores/devices";
+import type { AudioDevice } from "@/hooks/useAudioDevices";
 
-const selectClass = cn(
-  "h-9 rounded-md border border-input bg-transparent px-2 text-sm shadow-sm",
-  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+const DEFAULT_VALUE = "__default__";
+
+const DeviceSelect = ({
+  icon,
+  devices,
+  value,
+  defaultLabel,
+  onChange,
+}: {
+  icon: React.ReactNode;
+  devices: AudioDevice[];
+  value: string | null;
+  defaultLabel: string;
+  onChange: (id: string) => void;
+}) => (
+  <div className="inline-flex items-center gap-2">
+    {icon}
+    <Select
+      value={value ?? DEFAULT_VALUE}
+      onValueChange={(v) => onChange(v === DEFAULT_VALUE ? "" : v)}
+    >
+      <SelectTrigger className="w-auto min-w-[160px] max-w-[240px]">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={DEFAULT_VALUE}>{defaultLabel}</SelectItem>
+        {devices
+          .filter((d) => d.deviceId !== "")
+          .map((d) => (
+            <SelectItem key={d.deviceId} value={d.deviceId}>
+              {d.label}
+            </SelectItem>
+          ))}
+      </SelectContent>
+    </Select>
+  </div>
 );
 
 export const DeviceSelector = () => {
@@ -17,36 +57,20 @@ export const DeviceSelector = () => {
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="inline-flex items-center gap-2">
-        <Mic className="h-4 w-4 text-muted-foreground" />
-        <select
-          value={micId ?? ""}
-          onChange={(e) => setMic(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">Default mic</option>
-          {mics.map((d) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="inline-flex items-center gap-2">
-        <Volume2 className="h-4 w-4 text-muted-foreground" />
-        <select
-          value={outId ?? ""}
-          onChange={(e) => setOut(e.target.value)}
-          className={selectClass}
-        >
-          <option value="">Default speaker</option>
-          {outs.map((d) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <DeviceSelect
+        icon={<Mic className="h-4 w-4 text-muted-foreground" />}
+        devices={mics}
+        value={micId}
+        defaultLabel="Default mic"
+        onChange={setMic}
+      />
+      <DeviceSelect
+        icon={<Volume2 className="h-4 w-4 text-muted-foreground" />}
+        devices={outs}
+        value={outId}
+        defaultLabel="Default speaker"
+        onChange={setOut}
+      />
     </div>
   );
 };

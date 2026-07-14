@@ -19,10 +19,12 @@ export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
                 <Phone className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{c.peer}</p>
+                <p className="truncate font-mono text-sm font-medium">
+                  {c.peer}
+                </p>
                 <p className="text-xs text-muted-foreground">{c.direction}</p>
               </div>
-              <Badge variant="muted">
+              <Badge variant="muted" className="font-mono">
                 {formatCallDuration(c.startedAt, c.status)}
               </Badge>
             </CardContent>

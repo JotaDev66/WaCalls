@@ -88,7 +88,7 @@ const QualityBar = ({
       <span className="text-xs uppercase tracking-wide text-muted-foreground">
         {label}
       </span>
-      <span className={`text-xs font-semibold tabular-nums ${toneText[tone]}`}>
+      <span className={`font-mono text-xs font-semibold ${toneText[tone]}`}>
         {value}
       </span>
     </div>
@@ -161,7 +161,7 @@ const ConnectionTimeline = ({
         className="flex w-full items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-xs text-muted-foreground"
       >
         <Check className="h-3.5 w-3.5 text-primary" />
-        Connected in {mediaMs} ms
+        Connected in <span className="font-mono">{mediaMs} ms</span>
       </button>
     );
   }
@@ -176,7 +176,7 @@ const ConnectionTimeline = ({
           <button
             type="button"
             onClick={() => setExpanded(false)}
-            className="text-xs text-muted-foreground"
+            className="font-mono text-xs text-muted-foreground"
           >
             {mediaMs} ms
           </button>
@@ -195,7 +195,7 @@ const ConnectionTimeline = ({
                 {step.label}
               </span>
               <span
-                className={`text-[10px] tabular-nums ${reached ? "text-foreground" : "text-muted-foreground"}`}
+                className={`font-mono text-[10px] ${reached ? "text-foreground" : "text-muted-foreground"}`}
               >
                 {reached ? `${ms}` : "—"}
               </span>
@@ -254,8 +254,11 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate font-medium">{call.peer}</p>
-            <Badge variant={statusVariant[call.status]} className="mt-1">
+            <p className="truncate font-mono font-medium">{call.peer}</p>
+            <Badge
+              variant={statusVariant[call.status]}
+              className="mt-1 font-mono"
+            >
               {formatCallDuration(call.startedAt, call.status)}
             </Badge>
           </div>

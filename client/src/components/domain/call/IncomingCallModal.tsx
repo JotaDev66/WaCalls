@@ -89,7 +89,7 @@ export const IncomingCallModal = () => {
             <PhoneIncoming className="h-7 w-7" />
           </div>
           <DialogTitle>Incoming call</DialogTitle>
-          <DialogDescription className="truncate">
+          <DialogDescription className="truncate font-mono">
             {incoming?.peer}
           </DialogDescription>
         </DialogHeader>

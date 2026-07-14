@@ -26,7 +26,8 @@ export const CallsPage = ({ sid }: { sid: string }) => {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">
-          {mine.length} active call{mine.length === 1 ? "" : "s"}
+          <span className="font-mono">{mine.length}</span> active call
+          {mine.length === 1 ? "" : "s"}
         </h2>
         <HistoryDrawer sid={sid} />
       </div>
