@@ -18,6 +18,7 @@ import (
 
 type queriedStanza struct {
 	tag    string
+	to     string
 	ctxErr error
 }
 
@@ -37,8 +38,12 @@ func (s *ctxQuerySock) Query(ctx context.Context, node waBinary.Node) (*waBinary
 	if children := wanode.NodeChildren(&node); len(children) > 0 {
 		tag = children[0].Tag
 	}
+	to := ""
+	if j, ok := node.Attrs["to"].(types.JID); ok {
+		to = j.String()
+	}
 	s.mu.Lock()
-	s.queries = append(s.queries, queriedStanza{tag: tag, ctxErr: ctx.Err()})
+	s.queries = append(s.queries, queriedStanza{tag: tag, to: to, ctxErr: ctx.Err()})
 	s.mu.Unlock()
 	s.done <- struct{}{}
 	return nil, nil
@@ -108,6 +113,53 @@ func TestEndCallSurvivesCanceledContext(t *testing.T) {
 	}
 	if q[0].ctxErr != nil {
 		t.Fatalf("terminate must go out detached from the caller context, Query saw ctx err: %v", q[0].ctxErr)
+	}
+}
+
+func TestEndCallTerminatesToAnsweringDevice(t *testing.T) {
+	sock := newCtxQuerySock()
+	cm := ringingManager(t, sock)
+
+	// The peer answered on a companion device (e.g. WhatsApp Web :33); the terminate must target
+	// that device, not the base JID, or the companion never sees it and hangs in reconnecting.
+	answering := "62440234549366:33@lid"
+	cm.mu.Lock()
+	cm.acceptedByJid = answering
+	cm.mu.Unlock()
+
+	if err := cm.EndCall(context.Background(), core.EndCallReasonUserEnded); err != nil {
+		t.Fatalf("end call: %v", err)
+	}
+	awaitQuery(t, sock)
+	q := sock.queried()
+	if len(q) != 1 || q[0].tag != "terminate" {
+		t.Fatalf("want exactly one terminate stanza, got %+v", q)
+	}
+	if q[0].to != answering {
+		t.Fatalf("terminate must target the answering device %q, got to=%q", answering, q[0].to)
+	}
+}
+
+func TestEndCallTerminatesToPeerWhenNoAnswerDevice(t *testing.T) {
+	sock := newCtxQuerySock()
+	cm := ringingManager(t, sock)
+
+	// No accept device recorded (inbound call, or ended before accept): fall back to call.PeerJid.
+	want := cm.CurrentCall().PeerJid
+	if want == "" {
+		t.Fatal("call must have a peer jid")
+	}
+
+	if err := cm.EndCall(context.Background(), core.EndCallReasonUserEnded); err != nil {
+		t.Fatalf("end call: %v", err)
+	}
+	awaitQuery(t, sock)
+	q := sock.queried()
+	if len(q) != 1 || q[0].tag != "terminate" {
+		t.Fatalf("want exactly one terminate stanza, got %+v", q)
+	}
+	if q[0].to != want {
+		t.Fatalf("terminate must fall back to the peer jid %q, got to=%q", want, q[0].to)
 	}
 }
 
