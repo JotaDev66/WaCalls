@@ -73,6 +73,37 @@ func (c *SrtcpContext) Protect(rtcp []byte, index uint32) ([]byte, error) {
 	return out, nil
 }
 
+// Unprotect reverses Protect: it authenticates the trailing 10-byte tag, reads the SRTCP index from
+// the E+index word, and AES-CTR decrypts the payload. The 8-byte header (V/P/RC/PT/length + sender
+// SSRC) is authenticated in the clear. An E-bit of 0 means the payload was sent unencrypted (RFC 3711).
+func (c *SrtcpContext) Unprotect(protected []byte) ([]byte, error) {
+	n := len(protected)
+	if n < 8+4+srtcpAuthTagLen {
+		return nil, &SrtpError{SrtpErrPacketTooShort, fmt.Sprintf("srtcp too short: %d bytes", n)}
+	}
+	mac := hmac.New(sha1.New, c.authKey)
+	mac.Write(protected[:n-srtcpAuthTagLen])
+	if !hmac.Equal(mac.Sum(nil)[:srtcpAuthTagLen], protected[n-srtcpAuthTagLen:]) {
+		return nil, &SrtpError{SrtpErrAuthFailed, "srtcp auth tag mismatch"}
+	}
+	word := binary.BigEndian.Uint32(protected[n-14 : n-10])
+	plainLen := n - 14
+	out := make([]byte, plainLen)
+	copy(out[:8], protected[:8])
+	if plainLen > 8 {
+		if word&srtcpEncryptedFlag != 0 {
+			ssrc := binary.BigEndian.Uint32(protected[4:8])
+			iv := srtcpIV(c.sessionSalt, ssrc, uint64(word&srtcpMaxIndex))
+			if err := aesCtrXor(c.sessionKey, iv, protected[8:plainLen], out[8:]); err != nil {
+				return nil, &SrtpError{SrtpErrDecryption, err.Error()}
+			}
+		} else {
+			copy(out[8:], protected[8:plainLen])
+		}
+	}
+	return out, nil
+}
+
 // srtcpIV builds the AES-ICM nonce from the session salt, sender SSRC and SRTCP index, the same
 // layout the E2E SRTP path uses with the RTP packet index (see SrtpContext.generateIV).
 func srtcpIV(salt []byte, ssrc uint32, index uint64) []byte {
