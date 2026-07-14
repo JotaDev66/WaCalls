@@ -102,7 +102,11 @@ func (r *RTCPReceiverStats) NotePeerReportBlock(lsr, dlsr uint32, fractionLost u
 	if lsr == 0 {
 		return
 	}
-	rtt := mid32(nowMs) - lsr - dlsr
+	a := mid32(nowMs)
+	if a < lsr || a-lsr < dlsr {
+		return // clock stepped back or dlsr overruns elapsed: not a usable RTT sample
+	}
+	rtt := a - lsr - dlsr
 	r.rttMs = float64(rtt) * 1000.0 / 65536.0
 	r.hasRtt = true
 	r.rttSamples++

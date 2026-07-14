@@ -94,6 +94,22 @@ func TestNotePeerReportBlockZeroLSR(t *testing.T) {
 	}
 }
 
+func TestNotePeerReportBlockUnderflowGuard(t *testing.T) {
+	now := uint64(2_000_000)
+	// lsr in our future (wall clock stepped back between our SR and the echo).
+	r := NewRTCPReceiverStats()
+	r.NotePeerReportBlock(mid32(now)+1000, 0, 0, now)
+	if r.QualitySnapshot(now).HasRtt {
+		t.Fatal("future lsr must not yield rtt")
+	}
+	// dlsr larger than the elapsed time since our SR.
+	r2 := NewRTCPReceiverStats()
+	r2.NotePeerReportBlock(mid32(now)-100, 5000, 0, now)
+	if r2.QualitySnapshot(now).HasRtt {
+		t.Fatal("dlsr overrun must not yield rtt")
+	}
+}
+
 func TestQualitySnapshotLossNonConsuming(t *testing.T) {
 	r := NewRTCPReceiverStats()
 	r.NoteRTP(1, 100, 0)
