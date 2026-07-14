@@ -70,6 +70,48 @@ func TestReceiverLSRDLSR(t *testing.T) {
 	}
 }
 
+func TestNotePeerReportBlockRTT(t *testing.T) {
+	r := NewRTCPReceiverStats()
+	now := uint64(2_000_000)
+	a := mid32(now)
+	lsr := a - (2 << 16)    // our SR was echoed as sent 2 s ago
+	dlsr := uint32(1 << 16) // peer held it for 1 s
+	r.NotePeerReportBlock(lsr, dlsr, 3, now)
+	q := r.QualitySnapshot(now)
+	if !q.HasRtt {
+		t.Fatal("expected rtt")
+	}
+	if q.RttMs < 990 || q.RttMs > 1010 {
+		t.Fatalf("rtt_ms = %f, want ~1000", q.RttMs)
+	}
+}
+
+func TestNotePeerReportBlockZeroLSR(t *testing.T) {
+	r := NewRTCPReceiverStats()
+	r.NotePeerReportBlock(0, 0, 0, 1000)
+	if r.QualitySnapshot(1000).HasRtt {
+		t.Fatal("lsr=0 must not yield rtt")
+	}
+}
+
+func TestQualitySnapshotLossNonConsuming(t *testing.T) {
+	r := NewRTCPReceiverStats()
+	r.NoteRTP(1, 100, 0)
+	r.NoteRTP(3, 300, 20) // seq 2 lost
+	q1 := r.QualitySnapshot(100)
+	q2 := r.QualitySnapshot(100)
+	if q1.LossFraction != q2.LossFraction {
+		t.Fatalf("snapshot must be non-consuming: %f vs %f", q1.LossFraction, q2.LossFraction)
+	}
+	if q1.LossFraction <= 0 {
+		t.Fatalf("expected some loss, got %f", q1.LossFraction)
+	}
+	// The interval-consuming ReportBlock must still see the loss (snapshot did not advance it).
+	if rb := r.ReportBlock(0xabc, 100); rb.FractionLost == 0 {
+		t.Fatal("ReportBlock fraction lost = 0 after snapshots; snapshot consumed the interval")
+	}
+}
+
 func TestReceiverSeqWrap(t *testing.T) {
 	r := NewRTCPReceiverStats()
 	r.NoteRTP(65534, 1000, 0)

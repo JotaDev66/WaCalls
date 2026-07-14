@@ -1,6 +1,10 @@
 package media
 
-import "sync"
+import (
+	"sync"
+
+	"wacalls/internal/voip/core"
+)
 
 // audioClockRate is the RTP timestamp clock for WhatsApp audio (960 ts units / 60 ms frame).
 const audioClockRate = 16000
@@ -26,6 +30,11 @@ type RTCPReceiverStats struct {
 
 	lsr        uint32 // middle 32 bits of the peer's last SR NTP
 	lsrArrival uint64 // wall clock (ms) that SR arrived
+
+	rttMs            float64
+	hasRtt           bool
+	rttSamples       uint32
+	peerFractionLost uint8 // the peer's most recent fraction-lost about our stream
 }
 
 func NewRTCPReceiverStats() *RTCPReceiverStats {
@@ -74,6 +83,58 @@ func (r *RTCPReceiverStats) NoteSenderReport(ntpMid uint32, arrivalMs uint64) {
 	r.lsr = ntpMid
 	r.lsrArrival = arrivalMs
 	r.mu.Unlock()
+}
+
+// mid32 converts a wall clock (ms) to the middle 32 bits of NTP time (low 16 of seconds, high 16 of
+// the fraction), the unit RFC 3550 uses for LSR/DLSR and the RTT arrival instant.
+func mid32(nowMs uint64) uint32 {
+	ntpSec := uint32(nowMs/1000 + ntpUnixOffsetSecs)
+	ntpFrac := uint32(float64(nowMs%1000) / 1000.0 * 4294967296.0)
+	return ntpSec<<16 | ntpFrac>>16
+}
+
+// NotePeerReportBlock consumes a report block the peer sent about our SSRC. When it echoes our SR
+// (lsr != 0) it yields RTT = A - LSR - DLSR in NTP mid-32 units (RFC 3550 6.4.1).
+func (r *RTCPReceiverStats) NotePeerReportBlock(lsr, dlsr uint32, fractionLost uint8, nowMs uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.peerFractionLost = fractionLost
+	if lsr == 0 {
+		return
+	}
+	rtt := mid32(nowMs) - lsr - dlsr
+	r.rttMs = float64(rtt) * 1000.0 / 65536.0
+	r.hasRtt = true
+	r.rttSamples++
+}
+
+// QualitySnapshot reports current reception quality without advancing the report-block interval:
+// loss is cumulative so the TX ReportBlock keeps owning the per-interval fraction.
+func (r *RTCPReceiverStats) QualitySnapshot(nowMs uint64) core.CallQuality {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var loss float64
+	if r.initSeq {
+		expected := (r.cycles | uint32(r.maxSeq)) - r.baseSeq + 1
+		if expected > 0 {
+			if cum := int64(expected) - int64(r.received); cum > 0 {
+				loss = float64(cum) / float64(expected)
+			}
+		}
+	}
+	return core.CallQuality{
+		RttMs:        r.rttMs,
+		JitterMs:     r.jitter / float64(r.clockRate) * 1000.0,
+		LossFraction: loss,
+		HasRtt:       r.hasRtt,
+	}
+}
+
+// RttSamples returns how many RTT measurements have been taken, for the end-of-call summary.
+func (r *RTCPReceiverStats) RttSamples() uint32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rttSamples
 }
 
 // ReportBlock builds the report block about the peer SSRC as of nowMs.
