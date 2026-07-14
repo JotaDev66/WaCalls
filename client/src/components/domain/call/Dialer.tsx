@@ -36,7 +36,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             }}
             placeholder="+55 11 99999 9999"
             inputMode="tel"
-            className="min-w-[200px] flex-1"
+            className="min-w-[200px] flex-1 font-mono"
           />
           <Button
             onClick={submit}

@@ -70,9 +70,12 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
               <ul className="space-y-2">
                 {rows.map((r) => (
                   <li key={r.callId} className="rounded-lg border p-3">
-                    <p className="font-medium">{r.peer}</p>
+                    <p className="font-mono font-medium">{r.peer}</p>
                     <p className="text-xs text-muted-foreground">
-                      {r.direction} · {new Date(r.startedAt).toLocaleString()}
+                      {r.direction} ·{" "}
+                      <span className="font-mono">
+                        {new Date(r.startedAt).toLocaleString()}
+                      </span>
                     </p>
                   </li>
                 ))}
