@@ -259,7 +259,16 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 		return nil
 	}
 	_ = call.ApplyTransition(Transition{Type: TransitionTerminated, Reason: reason})
-	node := signaling.BuildTerminateStanza(wanode.MustJID(call.PeerJid), call.CallID, wanode.MustJID(call.CallCreator))
+	// Route the terminate to the device that actually answered, like the rest of the in-call
+	// signaling. Sending it to the base JID lets the server deliver it to the peer's primary
+	// device, so a call answered on a companion (e.g. WhatsApp Web) never sees the terminate and
+	// hangs in "reconnecting" until it times out. acceptedByJid is empty for inbound calls, where
+	// call.PeerJid already carries the caller's device.
+	termDest := call.PeerJid
+	if m.acceptedByJid != "" {
+		termDest = m.acceptedByJid
+	}
+	node := signaling.BuildTerminateStanza(wanode.MustJID(termDest), call.CallID, wanode.MustJID(call.CallCreator))
 	ended := call
 	m.emitState()
 	m.mu.Unlock()
