@@ -88,6 +88,7 @@ export const ptBR: Messages = {
     phonePlaceholder: "+55 11 99999 9999",
     call: "Ligar",
     calling: "Ligando…",
+    backspace: "Apagar",
     defaultMic: "Microfone padrão",
     defaultSpeaker: "Alto-falante padrão",
   },
