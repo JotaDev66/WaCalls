@@ -134,7 +134,9 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		auth:           bundle.Auth,
 		hasAdmin:       hasAdmin,
 		apiToken:       cfg.APIToken,
+		loginLimiter:   newIPRateLimiterWithBurst(loginRateRPS, loginRateBurst),
 	}
+	go srv.loginLimiter.janitor(ctx)
 	srv.authorize = srv.authorizeRequest
 	return srv, nil
 }
