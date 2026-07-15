@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ContactAvatar } from "@/components/domain/contacts/ContactAvatar";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { useContacts } from "@/hooks/useContacts";
 import { filterContacts } from "@/lib/contacts";
 import { useStartCall } from "@/hooks/useStartCall";
@@ -97,7 +97,7 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
                   key={c.jid}
                   className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted/50"
                 >
-                  <ContactAvatar name={c.name} />
+                  <PeerAvatar name={c.name} photoUrl={c.photoUrl} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{c.name}</p>
                     <p className="truncate font-mono text-xs text-muted-foreground">

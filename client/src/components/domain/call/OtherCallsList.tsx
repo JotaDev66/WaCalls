@@ -1,6 +1,6 @@
-import { Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { formatCallDuration } from "@/utils/format";
 import { callStatusTone, callStatusPulse } from "@/lib/status";
 import { useT } from "@/hooks/useT";
@@ -18,12 +18,13 @@ export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
         {calls.map((c) => (
           <Card key={c.callId} className="opacity-90">
             <CardContent className="flex items-center gap-3 p-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Phone className="h-4 w-4" />
-              </span>
+              <PeerAvatar
+                name={c.peerName || c.peer}
+                photoUrl={c.peerPhotoUrl}
+              />
               <div className="min-w-0 flex-1">
-                <p className="truncate font-mono text-sm font-medium">
-                  {c.peer}
+                <p className="truncate text-sm font-medium">
+                  {c.peerName || c.peer}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {t.calls.direction[c.direction]}

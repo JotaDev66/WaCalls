@@ -14,6 +14,7 @@ import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
 import { useT } from "@/hooks/useT";
 import { callStatusTone, callStatusPulse } from "@/lib/status";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { waveLevel } from "@/lib/waveform";
 import { formatCallDuration } from "@/utils/format";
 import type {
@@ -288,17 +289,25 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
     <Card>
       <CardContent className="space-y-3 p-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-mono font-medium">{call.peer}</p>
-            <StatusBadge
-              tone={callStatusTone(call.status)}
-              pulse={callStatusPulse(call.status)}
-              className="mt-1"
-            >
-              {call.status === "connected"
-                ? formatCallDuration(call.startedAt)
-                : t.calls.status[call.status]}
-            </StatusBadge>
+          <div className="flex min-w-0 items-center gap-3">
+            <PeerAvatar
+              name={call.peerName || call.peer}
+              photoUrl={call.peerPhotoUrl}
+            />
+            <div className="min-w-0">
+              <p className="truncate font-medium">
+                {call.peerName || call.peer}
+              </p>
+              <StatusBadge
+                tone={callStatusTone(call.status)}
+                pulse={callStatusPulse(call.status)}
+                className="mt-1"
+              >
+                {call.status === "connected"
+                  ? formatCallDuration(call.startedAt)
+                  : t.calls.status[call.status]}
+              </StatusBadge>
+            </div>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>

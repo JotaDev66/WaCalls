@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
+import { Phone, PhoneOff } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useAcceptCall } from "@/hooks/useAcceptCall";
@@ -87,12 +88,15 @@ export const IncomingCallModal = () => {
         className="sm:max-w-sm"
       >
         <DialogHeader className="items-center text-center">
-          <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <PhoneIncoming className="h-7 w-7" />
+          <div className="mb-2">
+            <PeerAvatar
+              name={incoming?.peerName || incoming?.peer || ""}
+              photoUrl={incoming?.peerPhotoUrl}
+            />
           </div>
           <DialogTitle>{t.incoming.title}</DialogTitle>
-          <DialogDescription className="truncate font-mono">
-            {incoming?.peer}
+          <DialogDescription className="truncate">
+            {incoming?.peerName || incoming?.peer}
           </DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex items-center justify-center gap-6">
