@@ -11,7 +11,7 @@ import (
 
 func TestLoginLimiterBurstThenBlocks(t *testing.T) {
 	l := newIPRateLimiterWithBurst(0.0001, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !l.allow("ip") {
 			t.Fatalf("attempt %d should pass within burst", i)
 		}

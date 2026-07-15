@@ -127,9 +127,9 @@ func (f *fakeAuth) GetAdmin(context.Context) (core.AdminCredential, bool, error)
 	}
 	return *f.admin, true, nil
 }
-func (f *fakeAuth) CreateAdmin(context.Context, string, string) error    { return nil }
-func (f *fakeAuth) SetAdminPassword(context.Context, string) error       { return nil }
-func (f *fakeAuth) CreateSession(context.Context, string, int64) error   { return nil }
+func (f *fakeAuth) CreateAdmin(context.Context, string, string) error  { return nil }
+func (f *fakeAuth) SetAdminPassword(context.Context, string) error     { return nil }
+func (f *fakeAuth) CreateSession(context.Context, string, int64) error { return nil }
 func (f *fakeAuth) SessionValid(_ context.Context, h string, _ int64) (bool, error) {
 	return h != "" && h == f.validHash, nil
 }
