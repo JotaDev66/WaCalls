@@ -141,7 +141,8 @@ export const ptBR: Messages = {
     save: "Salvar",
     saving: "Salvando…",
     notOnWhatsApp: "Este número não está no WhatsApp",
-    appStateSyncing: "Sincronizando com o WhatsApp, tente novamente em instantes",
+    appStateSyncing:
+      "Sincronizando com o WhatsApp, tente novamente em instantes",
     saveError: "Não foi possível salvar o contato",
     saveSuccess: "Contato salvo",
     phoneRequired: "Informe o telefone",

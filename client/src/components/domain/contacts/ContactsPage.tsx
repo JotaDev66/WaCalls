@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { Phone, RefreshCw, Search } from "lucide-react";
+import { Pencil, Phone, RefreshCw, Search, UserPlus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
+import { ContactForm } from "@/components/domain/contacts/ContactForm";
+import type { Contact } from "@/types/contact";
 import { useContacts } from "@/hooks/useContacts";
 import { filterContacts } from "@/lib/contacts";
 import { useStartCall } from "@/hooks/useStartCall";
@@ -28,6 +30,19 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
     true,
   );
   const [q, setQ] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Contact | undefined>(undefined);
+  const [formKey, setFormKey] = useState(0);
+  const openNew = () => {
+    setEditing(undefined);
+    setFormKey((k) => k + 1);
+    setFormOpen(true);
+  };
+  const openEdit = (c: Contact) => {
+    setEditing(c);
+    setFormKey((k) => k + 1);
+    setFormOpen(true);
+  };
   const list = useMemo(() => filterContacts(q, data ?? []), [q, data]);
 
   return (
@@ -35,18 +50,24 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
       <CardHeader className="space-y-3">
         <div className="flex items-center justify-between">
           <CardTitle>{t.contacts.title}</CardTitle>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => refetch()}
-            disabled={isFetching}
-          >
-            <RefreshCw
-              className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
-            />
-            {t.contacts.refresh}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button type="button" variant="outline" size="sm" onClick={openNew}>
+              <UserPlus className="h-4 w-4" />
+              {t.contacts.newContact}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`}
+              />
+              {t.contacts.refresh}
+            </Button>
+          </div>
         </div>
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -106,6 +127,15 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
                   </div>
                   <Button
                     type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => openEdit(c)}
+                    aria-label={t.contacts.editAria(c.name)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
                     size="sm"
                     onClick={() => call(c.phone)}
                     disabled={startCall.isPending}
@@ -120,6 +150,14 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
           </ScrollArea>
         )}
       </CardContent>
+      <ContactForm
+        key={formKey}
+        sid={sid}
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        editing={editing}
+        existing={data ?? []}
+      />
     </Card>
   );
 };
