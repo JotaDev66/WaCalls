@@ -115,4 +115,24 @@ export const ptBR: Messages = {
     switchTo: (name) => `Ir para ${name}`,
     empty: "Nenhum resultado",
   },
+  nav: {
+    console: "Console",
+    contacts: "Contatos",
+  },
+  contacts: {
+    title: "Contatos",
+    searchPlaceholder: "Buscar por nome ou número",
+    loading: "Carregando contatos…",
+    empty: "Nenhum contato ainda",
+    emptyHint:
+      "O WhatsApp ainda pode estar sincronizando esta conta. Tente atualizar em instantes.",
+    noResults: "Nenhum contato corresponde à busca",
+    error: "Não foi possível carregar os contatos",
+    retry: "Tentar de novo",
+    refresh: "Atualizar",
+    call: "Ligar",
+    callAria: (name) => `Ligar para ${name}`,
+    pick: "Escolher contato",
+    pickTitle: "Escolha um contato para discar",
+  },
 };

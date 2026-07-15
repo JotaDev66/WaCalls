@@ -109,4 +109,23 @@ export type Messages = {
     switchTo: (name: string) => string;
     empty: string;
   };
+  nav: {
+    console: string;
+    contacts: string;
+  };
+  contacts: {
+    title: string;
+    searchPlaceholder: string;
+    loading: string;
+    empty: string;
+    emptyHint: string;
+    noResults: string;
+    error: string;
+    retry: string;
+    refresh: string;
+    call: string;
+    callAria: (name: string) => string;
+    pick: string;
+    pickTitle: string;
+  };
 };
