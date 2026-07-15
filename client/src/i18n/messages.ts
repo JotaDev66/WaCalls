@@ -5,6 +5,14 @@ export type Messages = {
     selectAccountTitle: string;
     selectAccountDescription: string;
   };
+  onboarding: {
+    title: string;
+    subtitle: string;
+    dismiss: string;
+    link: string;
+    createCta: string;
+    call: string;
+  };
   header: {
     accounts: string;
     toggleTheme: string;
@@ -57,6 +65,8 @@ export type Messages = {
     };
     direction: { inbound: string; outbound: string };
     reconnectingMedia: string;
+    reconnectWhy: string;
+    reconnectHint: string;
     measuringQuality: string;
     connectedIn: string;
     connection: string;

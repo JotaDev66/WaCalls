@@ -15,12 +15,15 @@ import { useTheme } from "@/stores/theme";
 import { setOnUnauthorized } from "@/lib/api";
 import { promptForToken } from "@/stores/auth";
 import { AuthGate } from "@/components/domain/auth/AuthGate";
+import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
+import { useOnboarding } from "@/stores/onboarding";
 import { useT } from "@/hooks/useT";
 
 export const App = () => {
   const sessions = useSessions((s) => s.sessions);
   const activeId = useSessions((s) => s.activeId);
   const theme = useTheme((s) => s.theme);
+  const onboardingDismissed = useOnboarding((s) => s.dismissed);
   const t = useT();
 
   useEffect(() => {
@@ -35,27 +38,32 @@ export const App = () => {
   return (
     <TooltipProvider delayDuration={200}>
       <AppShell>
-        {sessions.length === 0 ? (
-          <EmptyState
-            icon={<PlusCircle className="h-6 w-6" />}
-            title={t.app.noAccountsTitle}
-            description={t.app.noAccountsDescription}
-          />
-        ) : active ? (
-          <div className="space-y-6">
-            <SessionHeader session={active} />
-            {active.paired ? (
-              <CallsPage sid={active.id} />
-            ) : (
-              <SessionPairing session={active} />
-            )}
-          </div>
-        ) : (
-          <EmptyState
-            title={t.app.selectAccountTitle}
-            description={t.app.selectAccountDescription}
-          />
-        )}
+        <div className="space-y-6">
+          <OnboardingChecklist />
+          {sessions.length === 0 ? (
+            onboardingDismissed ? (
+              <EmptyState
+                icon={<PlusCircle className="h-6 w-6" />}
+                title={t.app.noAccountsTitle}
+                description={t.app.noAccountsDescription}
+              />
+            ) : null
+          ) : active ? (
+            <>
+              <SessionHeader session={active} />
+              {active.paired ? (
+                <CallsPage sid={active.id} />
+              ) : (
+                <SessionPairing session={active} />
+              )}
+            </>
+          ) : (
+            <EmptyState
+              title={t.app.selectAccountTitle}
+              description={t.app.selectAccountDescription}
+            />
+          )}
+        </div>
       </AppShell>
       <IncomingCallModal />
       <AuthGate />

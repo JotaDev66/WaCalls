@@ -214,6 +214,27 @@ const ConnectionTimeline = ({
   );
 };
 
+const ReconnectingNotice = () => {
+  const t = useT();
+  const [showHint, setShowHint] = useState(false);
+  return (
+    <div className="space-y-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
+      <div className="flex items-center gap-2">
+        <WifiOff className="h-3.5 w-3.5" />
+        {t.calls.reconnectingMedia}
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowHint((v) => !v)}
+        className="underline underline-offset-2"
+      >
+        {t.calls.reconnectWhy}
+      </button>
+      {showHint && <p className="leading-relaxed">{t.calls.reconnectHint}</p>}
+    </div>
+  );
+};
+
 export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
   const quality = useCalls((s) => s.quality.get(call.callId));
@@ -288,12 +309,7 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
             <TooltipContent>{t.calls.endCall}</TooltipContent>
           </Tooltip>
         </div>
-        {call.status === "reconnecting" && (
-          <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
-            <WifiOff className="h-3.5 w-3.5" />
-            {t.calls.reconnectingMedia}
-          </div>
-        )}
+        {call.status === "reconnecting" && <ReconnectingNotice />}
         {marks && marks.length > 0 && (
           <ConnectionTimeline marks={marks} status={call.status} />
         )}
