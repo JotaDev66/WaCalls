@@ -15,6 +15,7 @@ import { useTheme } from "@/stores/theme";
 import { setOnUnauthorized } from "@/lib/api";
 import { promptForToken } from "@/stores/auth";
 import { AuthGate } from "@/components/domain/auth/AuthGate";
+import { Omnibox } from "@/components/domain/omnibox/Omnibox";
 import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
 import { useOnboarding } from "@/stores/onboarding";
 import { useT } from "@/hooks/useT";
@@ -66,6 +67,7 @@ export const App = () => {
         </div>
       </AppShell>
       <IncomingCallModal />
+      <Omnibox />
       <AuthGate />
       <Toaster theme={theme} position="top-right" richColors closeButton />
     </TooltipProvider>

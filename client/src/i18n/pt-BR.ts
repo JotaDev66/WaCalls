@@ -108,4 +108,10 @@ export const ptBR: Messages = {
   connection: {
     reconnecting: "Reconectando ao servidor…",
   },
+  omnibox: {
+    placeholder: "Disque um número ou busque…",
+    dial: (phone) => `Ligar ${phone}`,
+    switchTo: (name) => `Ir para ${name}`,
+    empty: "Nenhum resultado",
+  },
 };

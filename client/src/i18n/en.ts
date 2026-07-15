@@ -106,4 +106,10 @@ export const en: Messages = {
   connection: {
     reconnecting: "Reconnecting to server…",
   },
+  omnibox: {
+    placeholder: "Dial a number or search…",
+    dial: (phone) => `Call ${phone}`,
+    switchTo: (name) => `Switch to ${name}`,
+    empty: "No results",
+  },
 };
