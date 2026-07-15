@@ -106,3 +106,17 @@
 .tom-pulse {
   animation: tom-pulse 2s infinite;
 }
+
+@keyframes tom-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.tom-wave {
+  animation: tom-wave 1.1s ease-in-out infinite;
+}

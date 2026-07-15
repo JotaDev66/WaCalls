@@ -14,6 +14,7 @@ import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
 import { useT } from "@/hooks/useT";
 import { callStatusTone, callStatusPulse } from "@/lib/status";
+import { waveLevel } from "@/lib/waveform";
 import { formatCallDuration } from "@/utils/format";
 import type {
   CallStatus,
@@ -22,20 +23,35 @@ import type {
   SetupMark,
 } from "@/types/call";
 
-const Meter = ({ label, db }: { label: string; db: number }) => {
-  const pct = Math.max(0, Math.min(100, Math.round(((db + 60) / 60) * 100)));
-  return (
-    <div className="space-y-1">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <div className="h-2 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full bg-primary transition-all"
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
-};
+const waveBars = [
+  { h: 8, delay: "0s" },
+  { h: 14, delay: "0.12s" },
+  { h: 20, delay: "0.24s" },
+  { h: 13, delay: "0.12s" },
+  { h: 9, delay: "0s" },
+];
+
+const Waveform = ({ db }: { db: number }) => (
+  <div
+    className="flex h-5 items-center gap-[3px]"
+    style={{ transform: `scaleY(${waveLevel(db)})` }}
+  >
+    {waveBars.map((bar, i) => (
+      <span
+        key={i}
+        className="tom-wave w-[2.5px] rounded-full bg-primary"
+        style={{ height: `${bar.h}px`, animationDelay: bar.delay }}
+      />
+    ))}
+  </div>
+);
+
+const Meter = ({ label, db }: { label: string; db: number }) => (
+  <div className="space-y-1">
+    <p className="text-xs text-muted-foreground">{label}</p>
+    <Waveform db={db} />
+  </div>
+);
 
 type QualityTone = "ok" | "warn" | "bad" | "idle";
 
