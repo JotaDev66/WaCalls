@@ -27,6 +27,7 @@ type SessionManager struct {
 	maxCalls    int
 	newObserver func(string) core.CallObserver
 	tracer      telemetry.CallTracer
+	photos      core.ContactPhotoStore
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
@@ -39,7 +40,7 @@ func newSessionID() string {
 	return hex.EncodeToString(b)
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer) *SessionManager {
+func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
 	if newObserver == nil {
 		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}
@@ -56,6 +57,7 @@ func newSessionManager(ctx context.Context, container *sqlstore.Container, broke
 		maxCalls:    maxCalls,
 		newObserver: newObserver,
 		tracer:      tracer,
+		photos:      photos,
 		sessions:    map[string]*Session{},
 	}
 }

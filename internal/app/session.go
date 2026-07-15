@@ -65,12 +65,17 @@ func (s *Session) makeExtensions() []engine.Extension {
 
 func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnIncoming = func(c *call.CallInfo) {
+		pj, _ := types.ParseJID(c.PeerJid)
+		peerName := resolvePeerName(context.Background(), s.client, pj)
+		photoURL := cachedPhotoURL(context.Background(), s.mgr.photos, s.id, c.PeerJid)
 		s.mgr.broker.upsertCall(CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
+			PeerName: peerName, PeerPhotoURL: photoURL,
 			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid)
+		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid, peerName, photoURL)
 		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound"})
+		go s.fetchPeerPhoto(pj, c.CallID)
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
@@ -97,6 +102,8 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		if existing != nil {
 			rec.Owner = existing.Owner
 			rec.StartedAt = existing.StartedAt
+			rec.PeerName = existing.PeerName
+			rec.PeerPhotoURL = existing.PeerPhotoURL
 		}
 		s.mgr.broker.upsertCall(rec)
 	}

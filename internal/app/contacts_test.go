@@ -66,6 +66,9 @@ func (f fakeContacts) GetAllContacts(ctx context.Context) (map[types.JID]types.C
 	return f.all, nil
 }
 func (f fakeContacts) GetContact(ctx context.Context, u types.JID) (types.ContactInfo, error) {
+	if info, ok := f.all[u]; ok {
+		return info, nil
+	}
 	return types.ContactInfo{}, nil
 }
 func (f fakeContacts) PutPushName(ctx context.Context, u types.JID, n string) (bool, string, error) {
@@ -143,5 +146,18 @@ func TestContactListUnknownSession(t *testing.T) {
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/ghost/contacts", nil))
 	if rec.Code != 404 {
 		t.Fatalf("unknown session: want 404, got %d", rec.Code)
+	}
+}
+
+func TestResolvePeerName(t *testing.T) {
+	jid := mkJID("5511", types.DefaultUserServer)
+	cli := &whatsmeow.Client{Store: &store.Device{Contacts: fakeContacts{all: map[types.JID]types.ContactInfo{
+		jid: {Found: true, FullName: "Alice"},
+	}}}}
+	if got := resolvePeerName(context.Background(), cli, jid); got != "Alice" {
+		t.Fatalf("want Alice, got %q", got)
+	}
+	if got := resolvePeerName(context.Background(), cli, mkJID("9999", types.DefaultUserServer)); got != "" {
+		t.Fatalf("want empty for unknown contact, got %q", got)
 	}
 }
