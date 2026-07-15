@@ -102,4 +102,10 @@ export type Messages = {
   connection: {
     reconnecting: string;
   };
+  omnibox: {
+    placeholder: string;
+    dial: (phone: string) => string;
+    switchTo: (name: string) => string;
+    empty: string;
+  };
 };
