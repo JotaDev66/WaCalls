@@ -23,10 +23,21 @@ func main() {
 	debug := flag.Bool("debug", false, "verbose logging")
 	maxCalls := flag.Int("max-calls-per-session", 8, "max concurrent calls per session (0 = unlimited)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	doctor := flag.Bool("doctor", false, "run preflight connectivity checks and exit")
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("wacalls " + version)
+		return
+	}
+
+	cfg := app.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
+	cfg.Version = version
+
+	if *doctor {
+		if !app.Doctor(context.Background(), cfg, os.Stdout) {
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -54,8 +65,6 @@ func main() {
 		_ = shutdown(sctx)
 	}()
 
-	cfg := app.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
-	cfg.Version = version
 	srv, err := app.NewServer(ctx, cfg, obsFactory, tracer, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
