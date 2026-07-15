@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DeviceSelector } from "@/components/form/DeviceSelector";
 import { DialPad } from "@/components/domain/call/DialPad";
+import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useDevices } from "@/stores/devices";
 import { useT } from "@/hooks/useT";
@@ -52,6 +53,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             <Delete className="h-4 w-4" />
           </Button>
         </div>
+        <ContactPicker sid={sid} onPick={(p) => setPhone(p)} />
         <DialPad onKey={(c) => setPhone((p) => p + c)} />
         <Button
           className="w-full"
