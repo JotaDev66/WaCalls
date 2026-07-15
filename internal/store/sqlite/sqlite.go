@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"wacalls/internal/store/migrate"
@@ -17,6 +18,7 @@ type Bundle struct {
 	Container *sqlstore.Container
 	Sessions  core.SessionStore
 	Calls     core.CallRecordStore
+	Photos    core.ContactPhotoStore
 	db        *sql.DB
 }
 
@@ -37,6 +39,14 @@ var migrations = [][]string{
 		end_reason TEXT NOT NULL DEFAULT ''
 	)`,
 		`CREATE INDEX idx_call_records_session_ended ON call_records (session_id, ended_at DESC)`},
+	{`CREATE TABLE contact_photos (
+		session_id TEXT NOT NULL,
+		jid        TEXT NOT NULL,
+		url        TEXT NOT NULL,
+		picture_id TEXT NOT NULL DEFAULT '',
+		fetched_at INTEGER NOT NULL,
+		PRIMARY KEY (session_id, jid)
+	)`},
 }
 
 func Open(ctx context.Context, path string) (*Bundle, error) {
@@ -53,7 +63,7 @@ func Open(ctx context.Context, path string) (*Bundle, error) {
 	if err := migrate.Apply(ctx, db, migrations); err != nil {
 		return nil, err
 	}
-	return &Bundle{Container: container, Sessions: &sessionStore{db: db}, Calls: &callRecordStore{db: db}, db: db}, nil
+	return &Bundle{Container: container, Sessions: &sessionStore{db: db}, Calls: &callRecordStore{db: db}, Photos: &contactPhotoStore{db: db}, db: db}, nil
 }
 
 func (b *Bundle) Close() error {
@@ -147,3 +157,61 @@ func (s *callRecordStore) Prune(ctx context.Context, keep int) error {
 }
 
 var _ core.CallRecordStore = (*callRecordStore)(nil)
+
+func placeholders(n int) string {
+	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
+}
+
+type contactPhotoStore struct{ db *sql.DB }
+
+func (s *contactPhotoStore) Upsert(ctx context.Context, p core.ContactPhoto) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO contact_photos
+		(session_id, jid, url, picture_id, fetched_at) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (session_id, jid) DO UPDATE SET
+			url = excluded.url, picture_id = excluded.picture_id, fetched_at = excluded.fetched_at`,
+		p.SessionID, p.Jid, p.URL, p.PictureID, p.FetchedAt)
+	return err
+}
+
+func (s *contactPhotoStore) Get(ctx context.Context, sessionID, jid string) (core.ContactPhoto, bool, error) {
+	var p core.ContactPhoto
+	err := s.db.QueryRowContext(ctx,
+		`SELECT session_id, jid, url, picture_id, fetched_at FROM contact_photos WHERE session_id = ? AND jid = ?`,
+		sessionID, jid).Scan(&p.SessionID, &p.Jid, &p.URL, &p.PictureID, &p.FetchedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.ContactPhoto{}, false, nil
+	}
+	if err != nil {
+		return core.ContactPhoto{}, false, err
+	}
+	return p, true, nil
+}
+
+func (s *contactPhotoStore) GetMany(ctx context.Context, sessionID string, jids []string) (map[string]core.ContactPhoto, error) {
+	out := map[string]core.ContactPhoto{}
+	if len(jids) == 0 {
+		return out, nil
+	}
+	args := make([]any, 0, len(jids)+1)
+	args = append(args, sessionID)
+	for _, j := range jids {
+		args = append(args, j)
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT session_id, jid, url, picture_id, fetched_at FROM contact_photos WHERE session_id = ? AND jid IN (`+placeholders(len(jids))+`)`,
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var p core.ContactPhoto
+		if err := rows.Scan(&p.SessionID, &p.Jid, &p.URL, &p.PictureID, &p.FetchedAt); err != nil {
+			return nil, err
+		}
+		out[p.Jid] = p
+	}
+	return out, rows.Err()
+}
+
+var _ core.ContactPhotoStore = (*contactPhotoStore)(nil)

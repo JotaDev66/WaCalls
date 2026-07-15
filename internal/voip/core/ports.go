@@ -49,3 +49,17 @@ type CallRecordStore interface {
 	List(ctx context.Context, sessionID string, limit int, before HistoryCursor) ([]CallRecord, error)
 	Prune(ctx context.Context, keep int) error
 }
+
+type ContactPhoto struct {
+	SessionID string
+	Jid       string
+	URL       string
+	PictureID string
+	FetchedAt int64
+}
+
+type ContactPhotoStore interface {
+	Get(ctx context.Context, sessionID, jid string) (ContactPhoto, bool, error)
+	GetMany(ctx context.Context, sessionID string, jids []string) (map[string]ContactPhoto, error)
+	Upsert(ctx context.Context, p ContactPhoto) error
+}
