@@ -363,19 +363,17 @@ srv, err := app.NewServer(ctx, cfg, obsFactory, tracer, log)
 
 ## Security
 
-Set `WACALLS_API_TOKEN` to require a bearer token on every `/api` and `/debug` route;
-leave it empty to disable auth (trusted LAN only). Clients send it as
-`Authorization: Bearer <token>`; the SSE stream (`/api/events`) takes it as a
-`?access_token=<token>` query parameter.
+Auth is required: the app does not boot without an admin. Set `WACALLS_ADMIN_USER` and
+`WACALLS_ADMIN_PASSWORD` together to seed the single admin on first start. The web UI then
+requires signing in and issues an httpOnly, SameSite=Strict session cookie (7-day expiry) that
+also carries the SSE stream (`/api/events`) - there is no open/LAN mode. Change the password from
+the account menu (which revokes every other session); the seed never overwrites an existing
+admin, so a UI password change survives restarts and you can clear the env vars afterward.
 
-For a human-facing login, set `WACALLS_ADMIN_USER` and `WACALLS_ADMIN_PASSWORD` together
-(both or neither, or the boot fails). On first start they seed a single admin; the web UI
-then requires signing in and issues an httpOnly, SameSite=Strict session cookie (7-day
-expiry). `WACALLS_API_TOKEN` keeps working in parallel for automation, so scripts using the
-bearer header are unaffected. Change the password from the account menu (which also revokes
-every other session); the seed never overwrites an existing admin, so a UI password change
-survives restarts. The `/login` endpoint has a dedicated strict rate limit on top of the
-global one. Set `WACALLS_CORS_ORIGINS` to a comma-separated
+`WACALLS_API_TOKEN` is optional and only for automation/scripts (`Authorization: Bearer <token>`);
+the UI does not need it. With no token set, the API is reachable only via the login cookie. The
+`/login` endpoint has a dedicated strict rate limit on top of the global one.
+Set `WACALLS_CORS_ORIGINS` to a comma-separated
 list of browser origins when the web client is served from a different origin than the
 API; empty means same-origin only. Every `/api` route is rate limited per client IP
 (default 20 requests per second, burst 40); tune it with `WACALLS_RATE_LIMIT` (requests
