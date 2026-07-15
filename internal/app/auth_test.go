@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"wacalls/internal/voip/core"
 )
 
 func TestRequestTokenPrefersHeader(t *testing.T) {
@@ -110,5 +113,68 @@ func TestRoutesEventsRequireToken(t *testing.T) {
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/events", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("SSE without token: want 401, got %d", rec.Code)
+	}
+}
+
+type fakeAuth struct {
+	admin     *core.AdminCredential
+	validHash string
+}
+
+func (f *fakeAuth) GetAdmin(context.Context) (core.AdminCredential, bool, error) {
+	if f.admin == nil {
+		return core.AdminCredential{}, false, nil
+	}
+	return *f.admin, true, nil
+}
+func (f *fakeAuth) CreateAdmin(context.Context, string, string) error    { return nil }
+func (f *fakeAuth) SetAdminPassword(context.Context, string) error       { return nil }
+func (f *fakeAuth) CreateSession(context.Context, string, int64) error   { return nil }
+func (f *fakeAuth) SessionValid(_ context.Context, h string, _ int64) (bool, error) {
+	return h != "" && h == f.validHash, nil
+}
+func (f *fakeAuth) DeleteSession(context.Context, string) error        { return nil }
+func (f *fakeAuth) DeleteSessionsExcept(context.Context, string) error { return nil }
+func (f *fakeAuth) PurgeExpiredSessions(context.Context, int64) error  { return nil }
+
+func TestAuthorizeRequestOpenMode(t *testing.T) {
+	s := &Server{auth: &fakeAuth{}, hasAdmin: false, apiToken: ""}
+	if !s.authorizeRequest(httptest.NewRequest("GET", "/api/x", nil)) {
+		t.Fatal("open mode allows all")
+	}
+}
+
+func TestAuthorizeRequestTokenMode(t *testing.T) {
+	s := &Server{auth: &fakeAuth{}, hasAdmin: false, apiToken: "secret"}
+	r := httptest.NewRequest("GET", "/api/x", nil)
+	if s.authorizeRequest(r) {
+		t.Fatal("no bearer rejected")
+	}
+	r.Header.Set("Authorization", "Bearer secret")
+	if !s.authorizeRequest(r) {
+		t.Fatal("correct bearer allowed")
+	}
+}
+
+func TestAuthorizeRequestLoginMode(t *testing.T) {
+	valid := hashToken("cookie-token")
+	s := &Server{auth: &fakeAuth{admin: &core.AdminCredential{}, validHash: valid}, hasAdmin: true, apiToken: "secret"}
+	if s.authorizeRequest(httptest.NewRequest("GET", "/api/x", nil)) {
+		t.Fatal("login mode rejects anonymous")
+	}
+	r := httptest.NewRequest("GET", "/api/x", nil)
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: "cookie-token"})
+	if !s.authorizeRequest(r) {
+		t.Fatal("valid session cookie allowed")
+	}
+	r2 := httptest.NewRequest("GET", "/api/x", nil)
+	r2.Header.Set("Authorization", "Bearer secret")
+	if !s.authorizeRequest(r2) {
+		t.Fatal("bearer fallback allowed in login mode")
+	}
+	r3 := httptest.NewRequest("GET", "/api/x", nil)
+	r3.AddCookie(&http.Cookie{Name: sessionCookie, Value: "wrong"})
+	if s.authorizeRequest(r3) {
+		t.Fatal("bad cookie rejected")
 	}
 }

@@ -16,6 +16,7 @@ import (
 
 	"github.com/pion/webrtc/v4"
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -47,6 +48,10 @@ type Server struct {
 	rateLimiter    *ipRateLimiter
 	trustedProxies []netip.Prefix
 	photos         core.ContactPhotoStore
+	auth           core.AuthStore
+	hasAdmin       bool
+	apiToken       string
+	loginLimiter   *ipRateLimiter
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -66,6 +71,21 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
 	if err != nil {
 		return nil, err
+	}
+
+	_, hasAdmin, err := bundle.Auth.GetAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAdmin && cfg.AdminUser != "" && cfg.AdminPassword != "" {
+		hash, herr := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+		if herr != nil {
+			return nil, herr
+		}
+		if err := bundle.Auth.CreateAdmin(ctx, cfg.AdminUser, string(hash)); err != nil {
+			return nil, err
+		}
+		hasAdmin = true
 	}
 
 	api, err := buildBrowserAPI(cfg.WebRTCUDPPort, cfg.PublicIPs)
@@ -99,20 +119,24 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		return nil, err
 	}
 
-	return &Server{
+	srv := &Server{
 		broker:         broker,
 		sessions:       mgr,
 		log:            log,
 		staticDir:      cfg.StaticDir,
 		version:        cmp.Or(cfg.Version, "dev"),
 		debug:          cfg.Debug,
-		authorize:      bearerAuthorizer(cfg.APIToken),
 		allowedOrigins: parseOrigins(cfg.CORSOrigins),
 		webrtcAPI:      api,
 		rateLimiter:    limiter,
 		trustedProxies: trustedProxies,
 		photos:         bundle.Photos,
-	}, nil
+		auth:           bundle.Auth,
+		hasAdmin:       hasAdmin,
+		apiToken:       cfg.APIToken,
+	}
+	srv.authorize = srv.authorizeRequest
+	return srv, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
