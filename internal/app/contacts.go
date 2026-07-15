@@ -2,6 +2,7 @@ package app
 
 import (
 	"cmp"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -34,4 +35,21 @@ func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
 		return out[i].Phone < out[j].Phone
 	})
 	return out
+}
+
+func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	if sess.client.Store.ID == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
+		return
+	}
+	raw, err := sess.client.Store.Contacts.GetAllContacts(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"contacts": contactsFromStore(raw)})
 }

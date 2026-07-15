@@ -354,6 +354,35 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}/contacts:
+    get:
+      operationId: listContacts
+      summary: Dialable contacts from the paired session store
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "200":
+          description: Dialable contacts sorted by name then phone
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contacts]
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Contact"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503":
+          description: Session is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/version:
     get:
       operationId: getVersion
@@ -554,6 +583,19 @@ components:
     CallStatus:
       type: string
       enum: [starting, ringing, connected, reconnecting, ended]
+    Contact:
+      type: object
+      required: [jid, name, phone]
+      properties:
+        jid:
+          type: string
+          description: Full JID (always @s.whatsapp.net for dialable contacts)
+        name:
+          type: string
+          description: FullName, else FirstName, PushName, BusinessName, else phone
+        phone:
+          type: string
+          description: Digits only (JID user part)
     CallRecord:
       type: object
       required: [sessionId, callId, owner, direction, peer, startedAt, status]

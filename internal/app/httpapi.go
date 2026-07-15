@@ -35,6 +35,7 @@ var apiRoutes = []struct {
 	{"DELETE", "/sessions/{sid}/calls/{id}", (*Server).handleEndCall},
 	{"GET", "/sessions/{sid}/history", (*Server).handleHistory},
 	{"GET", "/sessions/{sid}/history/export", (*Server).handleHistoryExport},
+	{"GET", "/sessions/{sid}/contacts", (*Server).handleContactList},
 	{"GET", "/version", (*Server).handleVersion},
 	{"GET", "/events", (*Server).handleEvents},
 }

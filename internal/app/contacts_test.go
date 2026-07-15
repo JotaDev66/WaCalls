@@ -1,8 +1,13 @@
 package app
 
 import (
+	"context"
+	"encoding/json"
+	"net/http/httptest"
 	"testing"
 
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 )
 
@@ -50,5 +55,93 @@ func TestContactsFromStoreEmptyIsNonNil(t *testing.T) {
 	out := contactsFromStore(map[types.JID]types.ContactInfo{})
 	if out == nil {
 		t.Fatal("must be non-nil slice so JSON encodes []")
+	}
+}
+
+type fakeContacts struct {
+	all map[types.JID]types.ContactInfo
+}
+
+func (f fakeContacts) GetAllContacts(ctx context.Context) (map[types.JID]types.ContactInfo, error) {
+	return f.all, nil
+}
+func (f fakeContacts) GetContact(ctx context.Context, u types.JID) (types.ContactInfo, error) {
+	return types.ContactInfo{}, nil
+}
+func (f fakeContacts) PutPushName(ctx context.Context, u types.JID, n string) (bool, string, error) {
+	return false, "", nil
+}
+func (f fakeContacts) PutBusinessName(ctx context.Context, u types.JID, n string) (bool, string, error) {
+	return false, "", nil
+}
+func (f fakeContacts) PutContactName(ctx context.Context, u types.JID, full, first string) error {
+	return nil
+}
+func (f fakeContacts) PutAllContactNames(ctx context.Context, c []store.ContactEntry) error {
+	return nil
+}
+func (f fakeContacts) PutManyRedactedPhones(ctx context.Context, e []store.RedactedPhoneEntry) error {
+	return nil
+}
+
+func contactsServer(paired bool, all map[types.JID]types.ContactInfo) *Server {
+	dev := &store.Device{Contacts: fakeContacts{all: all}}
+	if paired {
+		owner := types.NewJID("owner", types.DefaultUserServer)
+		dev.ID = &owner
+	}
+	return &Server{
+		authorize: bearerAuthorizer(""),
+		sessions: &SessionManager{sessions: map[string]*Session{
+			"s1": {id: "s1", client: &whatsmeow.Client{Store: dev}},
+		}},
+	}
+}
+
+func TestContactListOK(t *testing.T) {
+	s := contactsServer(true, map[types.JID]types.ContactInfo{
+		mkJID("5511999998888", types.DefaultUserServer): {FirstName: "Alice"},
+		mkJID("hidden", types.HiddenUserServer):         {FullName: "LID"},
+	})
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
+	if rec.Code != 200 {
+		t.Fatalf("want 200, got %d %s", rec.Code, rec.Body.String())
+	}
+	var body struct {
+		Contacts []contactDTO `json:"contacts"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Contacts) != 1 || body.Contacts[0].Phone != "5511999998888" {
+		t.Fatalf("want 1 dialable Alice, got %+v", body.Contacts)
+	}
+}
+
+func TestContactListEmptyIsJSONArray(t *testing.T) {
+	s := contactsServer(true, map[types.JID]types.ContactInfo{})
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
+	if rec.Code != 200 || rec.Body.String() != "{\"contacts\":[]}\n" {
+		t.Fatalf("empty must be JSON array, got %d %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestContactListNotPaired(t *testing.T) {
+	s := contactsServer(false, map[types.JID]types.ContactInfo{})
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
+	if rec.Code != 503 {
+		t.Fatalf("unpaired: want 503, got %d", rec.Code)
+	}
+}
+
+func TestContactListUnknownSession(t *testing.T) {
+	s := contactsServer(true, nil)
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/ghost/contacts", nil))
+	if rec.Code != 404 {
+		t.Fatalf("unknown session: want 404, got %d", rec.Code)
 	}
 }
