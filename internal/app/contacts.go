@@ -11,7 +11,10 @@ import (
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type contactDTO struct {
@@ -127,6 +130,30 @@ func enrichPeers(rows []CallRecord, names map[string]string, photos map[string]c
 			rows[i].PeerName = n
 		}
 		rows[i].PeerPhotoURL = photos[rows[i].Peer].URL
+	}
+}
+
+func splitName(name string) (full, first string) {
+	full = strings.TrimSpace(name)
+	if fields := strings.Fields(full); len(fields) > 0 {
+		first = fields[0]
+	}
+	return full, first
+}
+
+func buildContactPatch(jid types.JID, fullName, firstName string) appstate.PatchInfo {
+	return appstate.PatchInfo{
+		Type: appstate.WAPatchCriticalUnblockLow,
+		Mutations: []appstate.MutationInfo{{
+			Index:   []string{appstate.IndexContact, jid.String()},
+			Version: 2,
+			Value: &waSyncAction.SyncActionValue{
+				ContactAction: &waSyncAction.ContactAction{
+					FullName:  proto.String(fullName),
+					FirstName: proto.String(firstName),
+				},
+			},
+		}},
 	}
 }
 

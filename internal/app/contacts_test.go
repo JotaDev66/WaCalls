@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"slices"
 	"testing"
 
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -247,5 +249,42 @@ func TestResolvePeerName(t *testing.T) {
 	}
 	if got := resolvePeerName(context.Background(), cli, mkJID("9999", types.DefaultUserServer)); got != "" {
 		t.Fatalf("want empty for unknown contact, got %q", got)
+	}
+}
+
+func TestSplitName(t *testing.T) {
+	cases := []struct{ in, full, first string }{
+		{"Alice Souza", "Alice Souza", "Alice"},
+		{"  Bob  ", "Bob", "Bob"},
+		{"  Ana   Paula  Lima ", "Ana   Paula  Lima", "Ana"},
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		full, first := splitName(c.in)
+		if full != c.full || first != c.first {
+			t.Errorf("splitName(%q) = (%q,%q), want (%q,%q)", c.in, full, first, c.full, c.first)
+		}
+	}
+}
+
+func TestBuildContactPatch(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	p := buildContactPatch(jid, "Alice Souza", "Alice")
+	if p.Type != appstate.WAPatchCriticalUnblockLow {
+		t.Fatalf("type = %v", p.Type)
+	}
+	if len(p.Mutations) != 1 {
+		t.Fatalf("mutations = %d", len(p.Mutations))
+	}
+	m := p.Mutations[0]
+	if !slices.Equal(m.Index, []string{"contact", jid.String()}) {
+		t.Fatalf("index = %v", m.Index)
+	}
+	if m.Version != 2 {
+		t.Fatalf("version = %d", m.Version)
+	}
+	ca := m.Value.GetContactAction()
+	if ca.GetFullName() != "Alice Souza" || ca.GetFirstName() != "Alice" {
+		t.Fatalf("action = %+v", ca)
 	}
 }
