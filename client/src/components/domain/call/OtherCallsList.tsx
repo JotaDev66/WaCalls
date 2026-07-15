@@ -1,7 +1,8 @@
 import { Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { formatCallDuration } from "@/utils/format";
+import { callStatusTone, callStatusPulse } from "@/lib/status";
 import { useT } from "@/hooks/useT";
 import type { CallSummary } from "@/types/call";
 
@@ -28,11 +29,14 @@ export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
                   {t.calls.direction[c.direction]}
                 </p>
               </div>
-              <Badge variant="muted" className="font-mono">
+              <StatusBadge
+                tone={callStatusTone(c.status)}
+                pulse={callStatusPulse(c.status)}
+              >
                 {c.status === "connected"
                   ? formatCallDuration(c.startedAt)
                   : t.calls.status[c.status]}
-              </Badge>
+              </StatusBadge>
             </CardContent>
           </Card>
         ))}
