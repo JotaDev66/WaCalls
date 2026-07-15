@@ -3,6 +3,7 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -186,6 +187,45 @@ func upsertContact(ctx context.Context, cc contactClient, phone, name string) (c
 		return contactDTO{}, fmt.Errorf("sending app state: %w", err)
 	}
 	return contactDTO{JID: jid.String(), Name: full, Phone: jid.User}, nil
+}
+
+func statusForContactErr(err error) int {
+	switch {
+	case errors.Is(err, errNotOnWhatsApp):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, errAppStateSyncing):
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	if sess.client.Store.ID == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
+		return
+	}
+	var body struct {
+		Phone string `json:"phone"`
+		Name  string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	phone := normalizePhone(body.Phone)
+	name := strings.TrimSpace(body.Name)
+	if phone == "" || name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "phone and name required"})
+		return
+	}
+	dto, err := upsertContact(r.Context(), sess.client, phone, name)
+	if err != nil {
+		writeJSON(w, statusForContactErr(err), map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"contact": dto})
 }
 
 func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {

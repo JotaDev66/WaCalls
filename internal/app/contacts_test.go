@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	"wacalls/internal/voip/core"
@@ -361,5 +363,54 @@ func TestUpsertContactSendError(t *testing.T) {
 	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
 	if err == nil || errors.Is(err, errAppStateSyncing) || errors.Is(err, errNotOnWhatsApp) {
 		t.Fatalf("err = %v, want a plain wrapped error", err)
+	}
+}
+
+func TestStatusForContactErr(t *testing.T) {
+	cases := []struct {
+		err  error
+		want int
+	}{
+		{errNotOnWhatsApp, 422},
+		{errAppStateSyncing, 503},
+		{errors.New("boom"), 500},
+		{fmt.Errorf("wrap: %w", errNotOnWhatsApp), 422},
+	}
+	for _, c := range cases {
+		if got := statusForContactErr(c.err); got != c.want {
+			t.Errorf("statusForContactErr(%v) = %d, want %d", c.err, got, c.want)
+		}
+	}
+}
+
+func TestContactSaveUnknownSession(t *testing.T) {
+	s := contactsServer(true, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/sessions/ghost/contacts", strings.NewReader(`{"phone":"5511","name":"x"}`))
+	s.routes().ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("want 404, got %d", rec.Code)
+	}
+}
+
+func TestContactSaveNotPaired(t *testing.T) {
+	s := contactsServer(false, map[types.JID]types.ContactInfo{})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/sessions/s1/contacts", strings.NewReader(`{"phone":"5511","name":"x"}`))
+	s.routes().ServeHTTP(rec, req)
+	if rec.Code != 503 {
+		t.Fatalf("want 503, got %d", rec.Code)
+	}
+}
+
+func TestContactSaveBadBody(t *testing.T) {
+	for _, body := range []string{`{"phone":"","name":"x"}`, `{"phone":"5511","name":"  "}`} {
+		s := contactsServer(true, map[types.JID]types.ContactInfo{})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/sessions/s1/contacts", strings.NewReader(body))
+		s.routes().ServeHTTP(rec, req)
+		if rec.Code != 400 {
+			t.Fatalf("body %q: want 400, got %d", body, rec.Code)
+		}
 	}
 }

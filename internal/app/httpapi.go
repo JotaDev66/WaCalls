@@ -36,6 +36,7 @@ var apiRoutes = []struct {
 	{"GET", "/sessions/{sid}/history", (*Server).handleHistory},
 	{"GET", "/sessions/{sid}/history/export", (*Server).handleHistoryExport},
 	{"GET", "/sessions/{sid}/contacts", (*Server).handleContactList},
+	{"POST", "/sessions/{sid}/contacts", (*Server).handleContactSave},
 	{"GET", "/version", (*Server).handleVersion},
 	{"GET", "/events", (*Server).handleEvents},
 }
