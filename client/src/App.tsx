@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AppShell } from "@/components/layout/AppShell";
 import { CallsPage } from "@/pages/CallsPage";
+import { ContactsPage } from "@/components/domain/contacts/ContactsPage";
 import { SessionPairing } from "@/components/domain/session/SessionPairing";
 import { SessionHeader } from "@/components/domain/session/SessionHeader";
 import { IncomingCallModal } from "@/components/domain/call/IncomingCallModal";
@@ -18,6 +19,8 @@ import { AuthGate } from "@/components/domain/auth/AuthGate";
 import { Omnibox } from "@/components/domain/omnibox/Omnibox";
 import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
 import { useOnboarding } from "@/stores/onboarding";
+import { useNav } from "@/stores/nav";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/useT";
 
 export const App = () => {
@@ -25,6 +28,8 @@ export const App = () => {
   const activeId = useSessions((s) => s.activeId);
   const theme = useTheme((s) => s.theme);
   const onboardingDismissed = useOnboarding((s) => s.dismissed);
+  const view = useNav((s) => s.view);
+  const setView = useNav((s) => s.setView);
   const t = useT();
 
   useEffect(() => {
@@ -33,6 +38,10 @@ export const App = () => {
     ensureSessionsWired();
     ensureCallsWired();
   }, []);
+
+  useEffect(() => {
+    setView("console");
+  }, [activeId, setView]);
 
   const active = sessions.find((s) => s.id === activeId) ?? null;
 
@@ -53,7 +62,29 @@ export const App = () => {
             <>
               <SessionHeader session={active} />
               {active.paired ? (
-                <CallsPage sid={active.id} />
+                <>
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant={view === "console" ? "default" : "ghost"}
+                      onClick={() => setView("console")}
+                    >
+                      {t.nav.console}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={view === "contacts" ? "default" : "ghost"}
+                      onClick={() => setView("contacts")}
+                    >
+                      {t.nav.contacts}
+                    </Button>
+                  </div>
+                  {view === "contacts" ? (
+                    <ContactsPage sid={active.id} />
+                  ) : (
+                    <CallsPage sid={active.id} />
+                  )}
+                </>
               ) : (
                 <SessionPairing session={active} />
               )}

@@ -113,4 +113,24 @@ export const en: Messages = {
     switchTo: (name) => `Switch to ${name}`,
     empty: "No results",
   },
+  nav: {
+    console: "Console",
+    contacts: "Contacts",
+  },
+  contacts: {
+    title: "Contacts",
+    searchPlaceholder: "Search by name or number",
+    loading: "Loading contacts…",
+    empty: "No contacts yet",
+    emptyHint:
+      "WhatsApp may still be syncing this account. Try refreshing in a moment.",
+    noResults: "No contacts match your search",
+    error: "Could not load contacts",
+    retry: "Try again",
+    refresh: "Refresh",
+    call: "Call",
+    callAria: (name) => `Call ${name}`,
+    pick: "Pick a contact",
+    pickTitle: "Pick a contact to dial",
+  },
 };
