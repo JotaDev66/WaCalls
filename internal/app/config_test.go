@@ -34,6 +34,21 @@ func TestValidateConfigWebhook(t *testing.T) {
 	}
 }
 
+func TestValidateConfigAdminPair(t *testing.T) {
+	if err := validateConfig(Config{AdminUser: "a", AdminPassword: "b"}); err != nil {
+		t.Fatalf("both set must be ok: %v", err)
+	}
+	if err := validateConfig(Config{}); err != nil {
+		t.Fatalf("neither set must be ok: %v", err)
+	}
+	if err := validateConfig(Config{AdminUser: "a"}); err == nil {
+		t.Fatal("user without password must error")
+	}
+	if err := validateConfig(Config{AdminPassword: "b"}); err == nil {
+		t.Fatal("password without user must error")
+	}
+}
+
 func TestLoadConfigReadsEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://x")
 	t.Setenv("WACALLS_API_TOKEN", "tok")

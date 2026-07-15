@@ -63,3 +63,19 @@ type ContactPhotoStore interface {
 	GetMany(ctx context.Context, sessionID string, jids []string) (map[string]ContactPhoto, error)
 	Upsert(ctx context.Context, p ContactPhoto) error
 }
+
+type AdminCredential struct {
+	Username     string
+	PasswordHash string
+}
+
+type AuthStore interface {
+	GetAdmin(ctx context.Context) (AdminCredential, bool, error)
+	CreateAdmin(ctx context.Context, username, passwordHash string) error
+	SetAdminPassword(ctx context.Context, passwordHash string) error
+	CreateSession(ctx context.Context, tokenHash string, expiresAt int64) error
+	SessionValid(ctx context.Context, tokenHash string, now int64) (bool, error)
+	DeleteSession(ctx context.Context, tokenHash string) error
+	DeleteSessionsExcept(ctx context.Context, keepTokenHash string) error
+	PurgeExpiredSessions(ctx context.Context, now int64) error
+}

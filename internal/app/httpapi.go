@@ -38,6 +38,8 @@ var apiRoutes = []struct {
 	{"GET", "/sessions/{sid}/contacts", (*Server).handleContactList},
 	{"POST", "/sessions/{sid}/contacts", (*Server).handleContactSave},
 	{"GET", "/version", (*Server).handleVersion},
+	{"POST", "/logout", (*Server).handleLogout},
+	{"POST", "/auth/password", (*Server).handlePassword},
 	{"GET", "/events", (*Server).handleEvents},
 }
 
@@ -61,6 +63,8 @@ func (s *Server) routes() http.Handler {
 	root := http.NewServeMux()
 	root.HandleFunc("GET /healthz", handleHealthz)
 	root.HandleFunc("GET /api/openapi.yaml", handleOpenAPI)
+	root.Handle("GET /api/auth/status", s.withRateLimit(maxBytes(http.HandlerFunc(s.handleAuthStatus))))
+	root.Handle("POST /api/login", s.withLoginRateLimit(s.withRateLimit(maxBytes(http.HandlerFunc(s.handleLogin)))))
 	root.Handle("/api/", s.withRateLimit(s.withAuth(maxBytes(api))))
 	if s.debug {
 		root.Handle("/debug/", loopbackOnly(s.withAuth(api)))

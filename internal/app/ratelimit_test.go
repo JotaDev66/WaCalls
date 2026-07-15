@@ -9,6 +9,18 @@ import (
 	"time"
 )
 
+func TestLoginLimiterBurstThenBlocks(t *testing.T) {
+	l := newIPRateLimiterWithBurst(0.0001, 3)
+	for i := range 3 {
+		if !l.allow("ip") {
+			t.Fatalf("attempt %d should pass within burst", i)
+		}
+	}
+	if l.allow("ip") {
+		t.Fatal("4th attempt should be blocked")
+	}
+}
+
 func TestParseTrustedProxies(t *testing.T) {
 	got, err := parseTrustedProxies(" 127.0.0.1, 10.0.0.0/8 , ::1 ")
 	if err != nil || len(got) != 3 {

@@ -21,6 +21,7 @@ type Bundle struct {
 	Sessions  core.SessionStore
 	Calls     core.CallRecordStore
 	Photos    core.ContactPhotoStore
+	Auth      core.AuthStore
 	db        *sql.DB
 }
 
@@ -50,6 +51,18 @@ var migrations = [][]string{
 		fetched_at BIGINT NOT NULL,
 		PRIMARY KEY (session_id, jid)
 	)`},
+	{`CREATE TABLE auth_user (
+		id            SMALLINT PRIMARY KEY CHECK (id = 1),
+		username      TEXT NOT NULL,
+		password_hash TEXT NOT NULL,
+		updated_at    BIGINT NOT NULL
+	)`,
+		`CREATE TABLE auth_session (
+		token_hash TEXT PRIMARY KEY,
+		expires_at BIGINT NOT NULL,
+		created_at BIGINT NOT NULL
+	)`,
+		`CREATE INDEX idx_auth_session_expires ON auth_session (expires_at)`},
 }
 
 func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
@@ -73,7 +86,7 @@ func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
 		_ = db.Close()
 		return nil, err
 	}
-	return &Bundle{Container: container, Sessions: &sessionStore{db: db}, Calls: &callRecordStore{db: db}, Photos: &contactPhotoStore{db: db}, db: db}, nil
+	return &Bundle{Container: container, Sessions: &sessionStore{db: db}, Calls: &callRecordStore{db: db}, Photos: &contactPhotoStore{db: db}, Auth: &authStore{db: db}, db: db}, nil
 }
 
 func (b *Bundle) Close() error { return b.db.Close() }
@@ -224,3 +237,65 @@ func (s *contactPhotoStore) GetMany(ctx context.Context, sessionID string, jids 
 }
 
 var _ core.ContactPhotoStore = (*contactPhotoStore)(nil)
+
+type authStore struct{ db *sql.DB }
+
+func (s *authStore) GetAdmin(ctx context.Context) (core.AdminCredential, bool, error) {
+	var c core.AdminCredential
+	err := s.db.QueryRowContext(ctx, `SELECT username, password_hash FROM auth_user WHERE id = 1`).
+		Scan(&c.Username, &c.PasswordHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return core.AdminCredential{}, false, nil
+	}
+	if err != nil {
+		return core.AdminCredential{}, false, err
+	}
+	return c, true, nil
+}
+
+func (s *authStore) CreateAdmin(ctx context.Context, username, passwordHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO auth_user (id, username, password_hash, updated_at) VALUES (1, $1, $2, EXTRACT(epoch FROM now())::bigint)`,
+		username, passwordHash)
+	return err
+}
+
+func (s *authStore) SetAdminPassword(ctx context.Context, passwordHash string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE auth_user SET password_hash = $1, updated_at = EXTRACT(epoch FROM now())::bigint WHERE id = 1`, passwordHash)
+	return err
+}
+
+func (s *authStore) CreateSession(ctx context.Context, tokenHash string, expiresAt int64) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO auth_session (token_hash, expires_at, created_at) VALUES ($1, $2, EXTRACT(epoch FROM now())::bigint)`,
+		tokenHash, expiresAt)
+	return err
+}
+
+func (s *authStore) SessionValid(ctx context.Context, tokenHash string, now int64) (bool, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT 1 FROM auth_session WHERE token_hash = $1 AND expires_at > $2`, tokenHash, now).Scan(&n)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+func (s *authStore) DeleteSession(ctx context.Context, tokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_session WHERE token_hash = $1`, tokenHash)
+	return err
+}
+
+func (s *authStore) DeleteSessionsExcept(ctx context.Context, keepTokenHash string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_session WHERE token_hash != $1`, keepTokenHash)
+	return err
+}
+
+func (s *authStore) PurgeExpiredSessions(ctx context.Context, now int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM auth_session WHERE expires_at <= $1`, now)
+	return err
+}
+
+var _ core.AuthStore = (*authStore)(nil)

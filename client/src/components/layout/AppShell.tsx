@@ -10,6 +10,7 @@ import {
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
 import { LocaleToggle } from "./LocaleToggle";
+import { AccountMenu } from "@/components/domain/auth/AccountMenu";
 import { ConnectionBanner } from "@/components/shared/ConnectionBanner";
 import { useServerVersion } from "@/hooks/useServerVersion";
 import { useT } from "@/hooks/useT";
@@ -56,6 +57,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
         <div className="flex items-center gap-2">
           <LocaleToggle />
           <ThemeToggle />
+          <AccountMenu />
         </div>
       </header>
       <ConnectionBanner />

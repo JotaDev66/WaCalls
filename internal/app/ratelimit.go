@@ -55,8 +55,16 @@ type ipRateLimiter struct {
 	burst int
 }
 
+const (
+	loginRateRPS   = 0.1 // ~6/min sustained
+	loginRateBurst = 5
+)
+
 func newIPRateLimiter(rps float64) *ipRateLimiter {
-	burst := max(1, int(2*rps))
+	return newIPRateLimiterWithBurst(rps, max(1, int(2*rps)))
+}
+
+func newIPRateLimiterWithBurst(rps float64, burst int) *ipRateLimiter {
 	return &ipRateLimiter{
 		perIP: map[string]*ipLimiterEntry{},
 		rps:   rate.Limit(rps),
@@ -139,6 +147,20 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 		if !s.rateLimiter.allow(clientIP(r, s.trustedProxies)) {
 			w.Header().Set("Retry-After", "1")
 			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "rate limit exceeded"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) withLoginRateLimit(next http.Handler) http.Handler {
+	if s.loginLimiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !s.loginLimiter.allow(clientIP(r, s.trustedProxies)) {
+			w.Header().Set("Retry-After", "5")
+			writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many login attempts"})
 			return
 		}
 		next.ServeHTTP(w, r)

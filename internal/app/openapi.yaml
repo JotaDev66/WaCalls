@@ -430,6 +430,85 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/auth/status:
+    get:
+      operationId: authStatus
+      summary: Auth mode and whether the caller is authenticated
+      responses:
+        "200":
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, authenticated]
+                properties:
+                  mode:
+                    type: string
+                    enum: [open, token, login]
+                  authenticated:
+                    type: boolean
+  /api/login:
+    post:
+      operationId: login
+      summary: Admin login; sets an httpOnly session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Logged in; sets the wacalls_session cookie
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/logout:
+    post:
+      operationId: logout
+      summary: Invalidate the current session and clear the cookie
+      responses:
+        "204":
+          description: Logged out
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/auth/password:
+    post:
+      operationId: changePassword
+      summary: Change the admin password (kills other sessions)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        "204":
+          description: Password changed
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
   /api/version:
     get:
       operationId: getVersion

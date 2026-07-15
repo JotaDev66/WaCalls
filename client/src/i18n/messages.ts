@@ -143,4 +143,24 @@ export type Messages = {
     editThisInstead: string;
     editAria: (name: string) => string;
   };
+  login: {
+    title: string;
+    description: string;
+    user: string;
+    password: string;
+    submit: string;
+    submitting: string;
+    error: string;
+  };
+  password: {
+    title: string;
+    current: string;
+    next: string;
+    submit: string;
+    saving: string;
+    success: string;
+    error: string;
+    menu: string;
+  };
+  account: { logout: string };
 };
