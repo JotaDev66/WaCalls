@@ -596,6 +596,9 @@ components:
         phone:
           type: string
           description: Digits only (JID user part)
+        photoUrl:
+          type: string
+          description: Cached WhatsApp profile-picture URL (present only if fetched on a prior call)
     CallRecord:
       type: object
       required: [sessionId, callId, owner, direction, peer, startedAt, status]
@@ -612,6 +615,12 @@ components:
           enum: [outbound, inbound]
         peer:
           type: string
+        peerName:
+          type: string
+          description: Resolved contact name for the peer, when known
+        peerPhotoUrl:
+          type: string
+          description: Cached WhatsApp profile-picture URL for the peer, when known
         startedAt:
           type: integer
           format: int64

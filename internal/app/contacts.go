@@ -15,9 +15,10 @@ import (
 )
 
 type contactDTO struct {
-	JID   string `json:"jid"`
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
+	JID      string `json:"jid"`
+	Name     string `json:"name"`
+	Phone    string `json:"phone"`
+	PhotoURL string `json:"photoUrl,omitempty"`
 }
 
 func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
@@ -91,5 +92,51 @@ func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"contacts": contactsFromStore(raw)})
+	out := contactsFromStore(raw)
+	if s.photos != nil && len(out) > 0 {
+		jids := make([]string, len(out))
+		for i := range out {
+			jids[i] = out[i].JID
+		}
+		if photos, err := s.photos.GetMany(r.Context(), sess.id, jids); err == nil {
+			for i := range out {
+				out[i].PhotoURL = photos[out[i].JID].URL
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"contacts": out})
+}
+
+func enrichPeers(rows []CallRecord, names map[string]string, photos map[string]core.ContactPhoto) {
+	for i := range rows {
+		if n, ok := names[rows[i].Peer]; ok {
+			rows[i].PeerName = n
+		}
+		rows[i].PeerPhotoURL = photos[rows[i].Peer].URL
+	}
+}
+
+func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {
+	if len(rows) == 0 {
+		return
+	}
+	names := map[string]string{}
+	if sess.client != nil && sess.client.Store != nil && sess.client.Store.Contacts != nil {
+		if all, err := sess.client.Store.Contacts.GetAllContacts(ctx); err == nil {
+			for jid, info := range all {
+				names[jid.String()] = cmp.Or(info.FullName, info.FirstName, info.PushName, info.BusinessName)
+			}
+		}
+	}
+	photos := map[string]core.ContactPhoto{}
+	if s.photos != nil {
+		peers := make([]string, len(rows))
+		for i := range rows {
+			peers[i] = rows[i].Peer
+		}
+		if m, err := s.photos.GetMany(ctx, sess.id, peers); err == nil {
+			photos = m
+		}
+	}
+	enrichPeers(rows, names, photos)
 }

@@ -6,10 +6,29 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"wacalls/internal/voip/core"
+
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 )
+
+type fakePhotos struct{ m map[string]core.ContactPhoto }
+
+func (f fakePhotos) Get(ctx context.Context, sid, jid string) (core.ContactPhoto, bool, error) {
+	p, ok := f.m[jid]
+	return p, ok, nil
+}
+func (f fakePhotos) GetMany(ctx context.Context, sid string, jids []string) (map[string]core.ContactPhoto, error) {
+	out := map[string]core.ContactPhoto{}
+	for _, j := range jids {
+		if p, ok := f.m[j]; ok {
+			out[j] = p
+		}
+	}
+	return out, nil
+}
+func (f fakePhotos) Upsert(ctx context.Context, p core.ContactPhoto) error { return nil }
 
 func mkJID(user, server string) types.JID { return types.NewJID(user, server) }
 
@@ -146,6 +165,43 @@ func TestContactListUnknownSession(t *testing.T) {
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/ghost/contacts", nil))
 	if rec.Code != 404 {
 		t.Fatalf("unknown session: want 404, got %d", rec.Code)
+	}
+}
+
+func TestContactListWithPhoto(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	owner := types.NewJID("owner", types.DefaultUserServer)
+	dev := &store.Device{ID: &owner, Contacts: fakeContacts{all: map[types.JID]types.ContactInfo{jid: {FirstName: "Alice"}}}}
+	s := &Server{
+		authorize: bearerAuthorizer(""),
+		photos:    fakePhotos{m: map[string]core.ContactPhoto{jid.String(): {URL: "http://cdn/pic.jpg"}}},
+		sessions: &SessionManager{sessions: map[string]*Session{
+			"s1": {id: "s1", client: &whatsmeow.Client{Store: dev}},
+		}},
+	}
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
+	var body struct {
+		Contacts []contactDTO `json:"contacts"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Contacts) != 1 || body.Contacts[0].PhotoURL != "http://cdn/pic.jpg" {
+		t.Fatalf("want photoUrl, got %+v", body.Contacts)
+	}
+}
+
+func TestEnrichPeers(t *testing.T) {
+	rows := []CallRecord{{Peer: "5511@s.whatsapp.net"}, {Peer: "9999@s.whatsapp.net"}}
+	names := map[string]string{"5511@s.whatsapp.net": "Alice"}
+	photos := map[string]core.ContactPhoto{"5511@s.whatsapp.net": {URL: "u1"}}
+	enrichPeers(rows, names, photos)
+	if rows[0].PeerName != "Alice" || rows[0].PeerPhotoURL != "u1" {
+		t.Fatalf("row0 not enriched: %+v", rows[0])
+	}
+	if rows[1].PeerName != "" || rows[1].PeerPhotoURL != "" {
+		t.Fatalf("row1 should stay empty: %+v", rows[1])
 	}
 }
 

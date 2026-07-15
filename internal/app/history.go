@@ -75,6 +75,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.enrichHistoryPeers(r.Context(), sess, rows)
 	resp := map[string]any{"calls": rows}
 	if next != (core.HistoryCursor{}) {
 		resp["nextCursor"] = encodeHistoryCursor(next)
