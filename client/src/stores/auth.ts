@@ -1,18 +1,9 @@
 import { create } from "zustand";
-import type { AuthStatus } from "@/lib/auth-mode";
+import type { AuthStatus } from "@/services/auth";
 
-type State = { needsToken: boolean; status: AuthStatus | null };
+type State = { status: AuthStatus | null };
 
-export const useAuth = create<State>(() => ({
-  needsToken: false,
-  status: null,
-}));
-
-export const promptForToken = (): void =>
-  useAuth.setState({ needsToken: true });
-
-export const clearTokenPrompt = (): void =>
-  useAuth.setState({ needsToken: false });
+export const useAuth = create<State>(() => ({ status: null }));
 
 export const setAuthStatus = (status: AuthStatus): void =>
   useAuth.setState({ status });

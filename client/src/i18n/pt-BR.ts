@@ -27,12 +27,6 @@ export const ptBR: Messages = {
     delete: "Excluir",
     loading: "Carregando…",
   },
-  auth: {
-    title: "Autenticação necessária",
-    description: "Informe o token da API para continuar.",
-    tokenPlaceholder: "Token da API",
-    submit: "Salvar e recarregar",
-  },
   sessions: {
     accounts: "Contas",
     newSession: "Nova sessão",

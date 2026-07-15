@@ -1,6 +1,5 @@
 import type { CallStatus } from "@/types/call";
 import type { SessionInfo, SessionState } from "@/types/session";
-import { getToken } from "./api-token";
 
 type CallListRow = {
   sessionId: string;
@@ -98,10 +97,8 @@ class EventStream {
 
   #open(): void {
     if (this.#es) return;
-    const token = getToken();
-    const auth = token ? `&access_token=${encodeURIComponent(token)}` : "";
     const es = new EventSource(
-      `/api/events?clientId=${encodeURIComponent(this.#clientId)}${auth}`,
+      `/api/events?clientId=${encodeURIComponent(this.#clientId)}`,
     );
     this.#es = es;
     this.#lastActivity = Date.now();

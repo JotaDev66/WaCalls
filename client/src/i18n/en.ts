@@ -27,12 +27,6 @@ export const en: Messages = {
     delete: "Delete",
     loading: "Loading…",
   },
-  auth: {
-    title: "Authentication required",
-    description: "Enter the API token to continue.",
-    tokenPlaceholder: "API token",
-    submit: "Save and reload",
-  },
   sessions: {
     accounts: "Accounts",
     newSession: "New session",

@@ -18,7 +18,7 @@ export const AccountMenu = () => {
   const status = useAuth((s) => s.status);
   const [pwOpen, setPwOpen] = useState(false);
 
-  if (status?.mode !== "login" || !status.authenticated) return null;
+  if (!status?.authenticated) return null;
 
   const doLogout = async () => {
     await logout();

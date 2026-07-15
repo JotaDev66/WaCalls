@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from "@/lib/api";
-import type { AuthStatus } from "@/lib/auth-mode";
+
+export type AuthStatus = { authenticated: boolean };
 
 export const fetchAuthStatus = () => apiGet<AuthStatus>("/api/auth/status");
 

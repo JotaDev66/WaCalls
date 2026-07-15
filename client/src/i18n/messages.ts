@@ -24,12 +24,6 @@ export type Messages = {
     delete: string;
     loading: string;
   };
-  auth: {
-    title: string;
-    description: string;
-    tokenPlaceholder: string;
-    submit: string;
-  };
   sessions: {
     accounts: string;
     newSession: string;

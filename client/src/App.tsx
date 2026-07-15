@@ -14,7 +14,7 @@ import { ensureCallsWired } from "@/stores/calls";
 import { ensureConnectionWired } from "@/stores/connection";
 import { useTheme } from "@/stores/theme";
 import { setOnUnauthorized } from "@/lib/api";
-import { promptForToken } from "@/stores/auth";
+import { setAuthStatus } from "@/stores/auth";
 import { AuthGate } from "@/components/domain/auth/AuthGate";
 import { Omnibox } from "@/components/domain/omnibox/Omnibox";
 import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
@@ -33,7 +33,7 @@ export const App = () => {
   const t = useT();
 
   useEffect(() => {
-    setOnUnauthorized(promptForToken);
+    setOnUnauthorized(() => setAuthStatus({ authenticated: false }));
     ensureConnectionWired();
     ensureSessionsWired();
     ensureCallsWired();

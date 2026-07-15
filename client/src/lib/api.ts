@@ -1,24 +1,17 @@
 import { getClientId } from "./client-id";
-import { getToken, clearToken } from "./api-token";
 
 let onUnauthorized: () => void = () => {};
 export const setOnUnauthorized = (fn: () => void): void => {
   onUnauthorized = fn;
 };
 
-const baseHeaders = (): HeadersInit => {
-  const h: Record<string, string> = {
-    "X-Client-Id": getClientId(),
-    "Content-Type": "application/json",
-  };
-  const token = getToken();
-  if (token) h["Authorization"] = `Bearer ${token}`;
-  return h;
-};
+const baseHeaders = (): HeadersInit => ({
+  "X-Client-Id": getClientId(),
+  "Content-Type": "application/json",
+});
 
 const guard = (status: number): void => {
   if (status === 401) {
-    clearToken();
     onUnauthorized();
   }
 };
