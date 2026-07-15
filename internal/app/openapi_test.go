@@ -25,7 +25,12 @@ func TestOpenAPISpecMatchesRoutes(t *testing.T) {
 			}
 		}
 	}
-	served := map[string]bool{"GET /healthz": true, "GET /api/openapi.yaml": true}
+	served := map[string]bool{
+		"GET /healthz":          true,
+		"GET /api/openapi.yaml": true,
+		"GET /api/auth/status":  true,
+		"POST /api/login":       true,
+	}
 	for _, rt := range apiRoutes {
 		served[rt.method+" /api"+rt.path] = true
 	}
