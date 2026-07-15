@@ -35,6 +35,7 @@ var apiRoutes = []struct {
 	{"DELETE", "/sessions/{sid}/calls/{id}", (*Server).handleEndCall},
 	{"GET", "/sessions/{sid}/history", (*Server).handleHistory},
 	{"GET", "/sessions/{sid}/history/export", (*Server).handleHistoryExport},
+	{"GET", "/version", (*Server).handleVersion},
 	{"GET", "/events", (*Server).handleEvents},
 }
 
@@ -151,6 +152,10 @@ func (s *Server) sessionByID(w http.ResponseWriter, sid string) *Session {
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.broker.serveSSE(w, r, clientID(r))
+}
+
+func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"version": s.version})
 }
 
 func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {

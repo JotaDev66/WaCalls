@@ -11,6 +11,7 @@ type Config struct {
 	Addr           string
 	DBPath         string
 	StaticDir      string
+	Version        string
 	Debug          bool
 	MaxCalls       int
 	DatabaseURL    string

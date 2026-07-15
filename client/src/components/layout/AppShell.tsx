@@ -10,9 +10,11 @@ import {
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
 import { ConnectionBanner } from "@/components/shared/ConnectionBanner";
+import { useServerVersion } from "@/hooks/useServerVersion";
 
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: server } = useServerVersion();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -37,7 +39,16 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <PhoneCall className="h-4 w-4" />
           </span>
-          <span className="text-lg font-semibold tracking-tight">WaCalls</span>
+          <div className="flex flex-col leading-none">
+            <span className="text-lg font-semibold tracking-tight">
+              WaCalls
+            </span>
+            {server?.version && (
+              <span className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+                {server.version}
+              </span>
+            )}
+          </div>
         </div>
         <ThemeToggle />
       </header>

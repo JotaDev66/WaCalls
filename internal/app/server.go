@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
@@ -38,6 +39,7 @@ type Server struct {
 	sessions       *SessionManager
 	log            *slog.Logger
 	staticDir      string
+	version        string
 	debug          bool
 	authorize      func(*http.Request) bool
 	allowedOrigins map[string]struct{}
@@ -101,6 +103,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		sessions:       mgr,
 		log:            log,
 		staticDir:      cfg.StaticDir,
+		version:        cmp.Or(cfg.Version, "dev"),
 		debug:          cfg.Debug,
 		authorize:      bearerAuthorizer(cfg.APIToken),
 		allowedOrigins: parseOrigins(cfg.CORSOrigins),

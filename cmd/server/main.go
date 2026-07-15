@@ -55,6 +55,7 @@ func main() {
 	}()
 
 	cfg := app.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
+	cfg.Version = version
 	srv, err := app.NewServer(ctx, cfg, obsFactory, tracer, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
