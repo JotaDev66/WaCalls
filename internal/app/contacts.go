@@ -43,6 +43,20 @@ func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
 	return out
 }
 
+// resolvePeerJID maps a @lid peer (as seen on incoming calls) back to its phone-number JID via the
+// whatsmeow LID store, so name and photo lookups (which are keyed by @s.whatsapp.net) match. Returns
+// the input unchanged when it is not a LID or has no known mapping.
+func resolvePeerJID(ctx context.Context, cli *whatsmeow.Client, raw types.JID) types.JID {
+	if raw.Server != types.HiddenUserServer || cli == nil || cli.Store == nil || cli.Store.LIDs == nil {
+		return raw
+	}
+	pn, err := cli.Store.LIDs.GetPNForLID(ctx, raw.ToNonAD())
+	if err != nil || pn.IsEmpty() {
+		return raw
+	}
+	return pn
+}
+
 func resolvePeerName(ctx context.Context, cli *whatsmeow.Client, jid types.JID) string {
 	if cli == nil || cli.Store == nil || cli.Store.Contacts == nil {
 		return ""

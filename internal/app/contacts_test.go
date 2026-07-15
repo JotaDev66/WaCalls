@@ -30,6 +30,22 @@ func (f fakePhotos) GetMany(ctx context.Context, sid string, jids []string) (map
 }
 func (f fakePhotos) Upsert(ctx context.Context, p core.ContactPhoto) error { return nil }
 
+type fakeLIDs struct{ m map[types.JID]types.JID }
+
+func (f fakeLIDs) GetPNForLID(ctx context.Context, lid types.JID) (types.JID, error) {
+	return f.m[lid], nil
+}
+func (f fakeLIDs) GetLIDForPN(ctx context.Context, pn types.JID) (types.JID, error) {
+	return types.JID{}, nil
+}
+func (f fakeLIDs) PutLIDMapping(ctx context.Context, lid, jid types.JID) error { return nil }
+func (f fakeLIDs) PutManyLIDMappings(ctx context.Context, m []store.LIDMapping) error {
+	return nil
+}
+func (f fakeLIDs) GetManyLIDsForPNs(ctx context.Context, pns []types.JID) (map[types.JID]types.JID, error) {
+	return nil, nil
+}
+
 func mkJID(user, server string) types.JID { return types.NewJID(user, server) }
 
 func TestContactsFromStoreFiltersAndSorts(t *testing.T) {
@@ -202,6 +218,22 @@ func TestEnrichPeers(t *testing.T) {
 	}
 	if rows[1].PeerName != "" || rows[1].PeerPhotoURL != "" {
 		t.Fatalf("row1 should stay empty: %+v", rows[1])
+	}
+}
+
+func TestResolvePeerJID(t *testing.T) {
+	pn := mkJID("5511999998888", types.DefaultUserServer)
+	lid := types.NewJID("62440234549366", types.HiddenUserServer)
+	cli := &whatsmeow.Client{Store: &store.Device{LIDs: fakeLIDs{m: map[types.JID]types.JID{lid: pn}}}}
+	if got := resolvePeerJID(context.Background(), cli, lid); got != pn {
+		t.Fatalf("lid should map to pn, got %s", got)
+	}
+	if got := resolvePeerJID(context.Background(), cli, pn); got != pn {
+		t.Fatalf("pn should be unchanged, got %s", got)
+	}
+	unmapped := types.NewJID("99999", types.HiddenUserServer)
+	if got := resolvePeerJID(context.Background(), cli, unmapped); got != unmapped {
+		t.Fatalf("unmapped lid should be unchanged, got %s", got)
 	}
 }
 
