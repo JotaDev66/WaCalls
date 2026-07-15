@@ -16,6 +16,8 @@ type Config struct {
 	MaxCalls       int
 	DatabaseURL    string
 	APIToken       string
+	AdminUser      string
+	AdminPassword  string
 	CORSOrigins    string
 	RateLimit      float64
 	WebRTCUDPPort  int
@@ -34,6 +36,8 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 		MaxCalls:       maxCalls,
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		APIToken:       os.Getenv("WACALLS_API_TOKEN"),
+		AdminUser:      strings.TrimSpace(os.Getenv("WACALLS_ADMIN_USER")),
+		AdminPassword:  os.Getenv("WACALLS_ADMIN_PASSWORD"),
 		CORSOrigins:    os.Getenv("WACALLS_CORS_ORIGINS"),
 		RateLimit:      parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
 		WebRTCUDPPort:  parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
@@ -47,6 +51,9 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 func validateConfig(cfg Config) error {
 	if cfg.WebhookURL != "" && cfg.WebhookSecret == "" {
 		return errors.New("WACALLS_WEBHOOK_URL requires WACALLS_WEBHOOK_SECRET")
+	}
+	if (cfg.AdminUser == "") != (cfg.AdminPassword == "") {
+		return errors.New("WACALLS_ADMIN_USER and WACALLS_ADMIN_PASSWORD must be set together")
 	}
 	return nil
 }
