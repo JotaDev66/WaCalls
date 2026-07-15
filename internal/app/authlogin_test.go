@@ -15,33 +15,34 @@ func loginServer(t *testing.T, user, pass string) *Server {
 	t.Helper()
 	hash, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.MinCost)
 	fa := &fakeAuth{admin: &core.AdminCredential{Username: user, PasswordHash: string(hash)}}
-	s := &Server{auth: fa, hasAdmin: true, apiToken: ""}
+	s := &Server{auth: fa, apiToken: ""}
 	s.authorize = s.authorizeRequest
 	return s
 }
 
-func TestAuthStatusModes(t *testing.T) {
-	cases := []struct {
-		hasAdmin bool
-		token    string
-		want     string
-	}{
-		{false, "", "open"},
-		{false, "t", "token"},
-		{true, "", "login"},
-		{true, "t", "login"},
-	}
-	for _, c := range cases {
-		s := &Server{auth: &fakeAuth{}, hasAdmin: c.hasAdmin, apiToken: c.token}
-		rec := httptest.NewRecorder()
-		s.handleAuthStatus(rec, httptest.NewRequest("GET", "/api/auth/status", nil))
+func TestAuthStatusAuthenticated(t *testing.T) {
+	decode := func(rec *httptest.ResponseRecorder) bool {
 		var body struct {
-			Mode string `json:"mode"`
+			Authenticated bool `json:"authenticated"`
 		}
 		_ = json.Unmarshal(rec.Body.Bytes(), &body)
-		if body.Mode != c.want {
-			t.Fatalf("hasAdmin=%v token=%q: want mode %q, got %q", c.hasAdmin, c.token, c.want, body.Mode)
-		}
+		return body.Authenticated
+	}
+
+	s := &Server{auth: &fakeAuth{}, apiToken: ""}
+	rec := httptest.NewRecorder()
+	s.handleAuthStatus(rec, httptest.NewRequest("GET", "/api/auth/status", nil))
+	if decode(rec) {
+		t.Fatal("no credential must report not authenticated")
+	}
+
+	s2 := &Server{auth: &fakeAuth{}, apiToken: "secret"}
+	rec2 := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/auth/status", nil)
+	req.Header.Set("Authorization", "Bearer secret")
+	s2.handleAuthStatus(rec2, req)
+	if !decode(rec2) {
+		t.Fatal("valid bearer must report authenticated")
 	}
 }
 

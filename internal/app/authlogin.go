@@ -9,20 +9,8 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-func (s *Server) authMode() string {
-	switch {
-	case s.hasAdmin:
-		return "login"
-	case s.apiToken != "":
-		return "token"
-	default:
-		return "open"
-	}
-}
-
 func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
-	authed := s.authMode() == "open" || s.authorizeRequest(r)
-	writeJSON(w, http.StatusOK, map[string]any{"mode": s.authMode(), "authenticated": authed})
+	writeJSON(w, http.StatusOK, map[string]any{"authenticated": s.authorizeRequest(r)})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {

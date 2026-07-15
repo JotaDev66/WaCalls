@@ -137,15 +137,15 @@ func (f *fakeAuth) DeleteSession(context.Context, string) error        { return 
 func (f *fakeAuth) DeleteSessionsExcept(context.Context, string) error { return nil }
 func (f *fakeAuth) PurgeExpiredSessions(context.Context, int64) error  { return nil }
 
-func TestAuthorizeRequestOpenMode(t *testing.T) {
-	s := &Server{auth: &fakeAuth{}, hasAdmin: false, apiToken: ""}
-	if !s.authorizeRequest(httptest.NewRequest("GET", "/api/x", nil)) {
-		t.Fatal("open mode allows all")
+func TestAuthorizeRequestNoCredential(t *testing.T) {
+	s := &Server{auth: &fakeAuth{}, apiToken: ""}
+	if s.authorizeRequest(httptest.NewRequest("GET", "/api/x", nil)) {
+		t.Fatal("no cookie and no token must be rejected (no open mode)")
 	}
 }
 
-func TestAuthorizeRequestTokenMode(t *testing.T) {
-	s := &Server{auth: &fakeAuth{}, hasAdmin: false, apiToken: "secret"}
+func TestAuthorizeRequestToken(t *testing.T) {
+	s := &Server{auth: &fakeAuth{}, apiToken: "secret"}
 	r := httptest.NewRequest("GET", "/api/x", nil)
 	if s.authorizeRequest(r) {
 		t.Fatal("no bearer rejected")
@@ -156,11 +156,11 @@ func TestAuthorizeRequestTokenMode(t *testing.T) {
 	}
 }
 
-func TestAuthorizeRequestLoginMode(t *testing.T) {
+func TestAuthorizeRequestCookie(t *testing.T) {
 	valid := hashToken("cookie-token")
-	s := &Server{auth: &fakeAuth{admin: &core.AdminCredential{}, validHash: valid}, hasAdmin: true, apiToken: "secret"}
+	s := &Server{auth: &fakeAuth{validHash: valid}, apiToken: ""}
 	if s.authorizeRequest(httptest.NewRequest("GET", "/api/x", nil)) {
-		t.Fatal("login mode rejects anonymous")
+		t.Fatal("no cookie must be rejected")
 	}
 	r := httptest.NewRequest("GET", "/api/x", nil)
 	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: "cookie-token"})
@@ -168,13 +168,8 @@ func TestAuthorizeRequestLoginMode(t *testing.T) {
 		t.Fatal("valid session cookie allowed")
 	}
 	r2 := httptest.NewRequest("GET", "/api/x", nil)
-	r2.Header.Set("Authorization", "Bearer secret")
-	if !s.authorizeRequest(r2) {
-		t.Fatal("bearer fallback allowed in login mode")
-	}
-	r3 := httptest.NewRequest("GET", "/api/x", nil)
-	r3.AddCookie(&http.Cookie{Name: sessionCookie, Value: "wrong"})
-	if s.authorizeRequest(r3) {
+	r2.AddCookie(&http.Cookie{Name: sessionCookie, Value: "wrong"})
+	if s.authorizeRequest(r2) {
 		t.Fatal("bad cookie rejected")
 	}
 }

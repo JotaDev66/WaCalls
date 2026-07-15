@@ -40,17 +40,14 @@ func (s *Server) tokenMatches(r *http.Request) bool {
 	return s.apiToken != "" && subtle.ConstantTimeCompare([]byte(requestToken(r)), []byte(s.apiToken)) == 1
 }
 
+// authorizeRequest allows a request with a valid session cookie (human, via login) or a matching
+// bearer token (automation). There is no open mode: the admin is required at boot, so every /api
+// request must carry one of the two credentials.
 func (s *Server) authorizeRequest(r *http.Request) bool {
-	if s.hasAdmin {
-		if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
-			if ok, _ := s.auth.SessionValid(r.Context(), hashToken(c.Value), time.Now().Unix()); ok {
-				return true
-			}
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		if ok, _ := s.auth.SessionValid(r.Context(), hashToken(c.Value), time.Now().Unix()); ok {
+			return true
 		}
-		return s.tokenMatches(r)
-	}
-	if s.apiToken == "" {
-		return true
 	}
 	return s.tokenMatches(r)
 }

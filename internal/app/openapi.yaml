@@ -433,7 +433,7 @@ paths:
   /api/auth/status:
     get:
       operationId: authStatus
-      summary: Auth mode and whether the caller is authenticated
+      summary: Whether the caller is already authenticated (session cookie or bearer token)
       responses:
         "200":
           description: Auth status
@@ -441,11 +441,8 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [mode, authenticated]
+                required: [authenticated]
                 properties:
-                  mode:
-                    type: string
-                    enum: [open, token, login]
                   authenticated:
                     type: boolean
   /api/login:

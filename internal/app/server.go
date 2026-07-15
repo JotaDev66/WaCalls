@@ -49,7 +49,6 @@ type Server struct {
 	trustedProxies []netip.Prefix
 	photos         core.ContactPhotoStore
 	auth           core.AuthStore
-	hasAdmin       bool
 	apiToken       string
 	loginLimiter   *ipRateLimiter
 }
@@ -86,6 +85,9 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 			return nil, err
 		}
 		hasAdmin = true
+	}
+	if !hasAdmin {
+		return nil, errors.New("no admin configured: set WACALLS_ADMIN_USER and WACALLS_ADMIN_PASSWORD to create the initial admin")
 	}
 
 	api, err := buildBrowserAPI(cfg.WebRTCUDPPort, cfg.PublicIPs)
@@ -132,7 +134,6 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		trustedProxies: trustedProxies,
 		photos:         bundle.Photos,
 		auth:           bundle.Auth,
-		hasAdmin:       hasAdmin,
 		apiToken:       cfg.APIToken,
 		loginLimiter:   newIPRateLimiterWithBurst(loginRateRPS, loginRateBurst),
 	}
