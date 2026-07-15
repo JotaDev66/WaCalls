@@ -2,17 +2,23 @@ package app
 
 import (
 	"cmp"
+	"context"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
+	"wacalls/internal/voip/core"
+
+	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
 )
 
 type contactDTO struct {
-	JID   string `json:"jid"`
-	Name  string `json:"name"`
-	Phone string `json:"phone"`
+	JID      string `json:"jid"`
+	Name     string `json:"name"`
+	Phone    string `json:"phone"`
+	PhotoURL string `json:"photoUrl,omitempty"`
 }
 
 func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
@@ -37,6 +43,55 @@ func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
 	return out
 }
 
+// resolvePeerJID maps a @lid peer (as seen on incoming calls) back to its phone-number JID via the
+// whatsmeow LID store, so name and photo lookups (which are keyed by @s.whatsapp.net) match. Returns
+// the input unchanged when it is not a LID or has no known mapping.
+func resolvePeerJID(ctx context.Context, cli *whatsmeow.Client, raw types.JID) types.JID {
+	if raw.Server != types.HiddenUserServer || cli == nil || cli.Store == nil || cli.Store.LIDs == nil {
+		return raw
+	}
+	pn, err := cli.Store.LIDs.GetPNForLID(ctx, raw.ToNonAD())
+	if err != nil || pn.IsEmpty() {
+		return raw
+	}
+	return pn
+}
+
+func resolvePeerName(ctx context.Context, cli *whatsmeow.Client, jid types.JID) string {
+	if cli == nil || cli.Store == nil || cli.Store.Contacts == nil {
+		return ""
+	}
+	info, err := cli.Store.Contacts.GetContact(ctx, jid)
+	if err != nil || !info.Found {
+		return ""
+	}
+	return cmp.Or(info.FullName, info.FirstName, info.PushName, info.BusinessName)
+}
+
+func cachedPhotoURL(ctx context.Context, photos core.ContactPhotoStore, sessionID, jid string) string {
+	if photos == nil {
+		return ""
+	}
+	p, ok, err := photos.Get(ctx, sessionID, jid)
+	if err != nil || !ok {
+		return ""
+	}
+	return p.URL
+}
+
+func (s *Session) fetchPeerPhoto(jid types.JID, callID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	info, err := s.client.GetProfilePictureInfo(ctx, jid, &whatsmeow.GetProfilePictureParams{Preview: true})
+	if err != nil || info == nil || info.URL == "" {
+		return
+	}
+	_ = s.mgr.photos.Upsert(ctx, core.ContactPhoto{
+		SessionID: s.id, Jid: jid.String(), URL: info.URL, PictureID: info.ID, FetchedAt: time.Now().UnixMilli(),
+	})
+	s.mgr.broker.setCallPhoto(callID, info.URL)
+}
+
 func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessionByID(w, r.PathValue("sid"))
 	if sess == nil {
@@ -51,5 +106,51 @@ func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"contacts": contactsFromStore(raw)})
+	out := contactsFromStore(raw)
+	if s.photos != nil && len(out) > 0 {
+		jids := make([]string, len(out))
+		for i := range out {
+			jids[i] = out[i].JID
+		}
+		if photos, err := s.photos.GetMany(r.Context(), sess.id, jids); err == nil {
+			for i := range out {
+				out[i].PhotoURL = photos[out[i].JID].URL
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"contacts": out})
+}
+
+func enrichPeers(rows []CallRecord, names map[string]string, photos map[string]core.ContactPhoto) {
+	for i := range rows {
+		if n, ok := names[rows[i].Peer]; ok {
+			rows[i].PeerName = n
+		}
+		rows[i].PeerPhotoURL = photos[rows[i].Peer].URL
+	}
+}
+
+func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {
+	if len(rows) == 0 {
+		return
+	}
+	names := map[string]string{}
+	if sess.client != nil && sess.client.Store != nil && sess.client.Store.Contacts != nil {
+		if all, err := sess.client.Store.Contacts.GetAllContacts(ctx); err == nil {
+			for jid, info := range all {
+				names[jid.String()] = cmp.Or(info.FullName, info.FirstName, info.PushName, info.BusinessName)
+			}
+		}
+	}
+	photos := map[string]core.ContactPhoto{}
+	if s.photos != nil {
+		peers := make([]string, len(rows))
+		for i := range rows {
+			peers[i] = rows[i].Peer
+		}
+		if m, err := s.photos.GetMany(ctx, sess.id, peers); err == nil {
+			photos = m
+		}
+	}
+	enrichPeers(rows, names, photos)
 }

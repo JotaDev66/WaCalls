@@ -7,6 +7,8 @@ export type CallSummary = {
   owner: string | null;
   direction: "outbound" | "inbound";
   peer: string;
+  peerName?: string;
+  peerPhotoUrl?: string;
   startedAt: number;
   status: CallStatus;
 };
@@ -15,6 +17,8 @@ export type IncomingPayload = {
   sessionId: string;
   callId: string;
   peer: string;
+  peerName?: string;
+  peerPhotoUrl?: string;
   offeredAt: number;
 };
 

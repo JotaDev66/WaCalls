@@ -8,7 +8,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { ContactAvatar } from "@/components/domain/contacts/ContactAvatar";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { useContacts } from "@/hooks/useContacts";
 import { filterContacts } from "@/lib/contacts";
 import { useT } from "@/hooks/useT";
@@ -64,7 +64,7 @@ export const ContactPicker = ({
                 close();
               }}
             >
-              <ContactAvatar name={c.name} />
+              <PeerAvatar name={c.name} photoUrl={c.photoUrl} />
               <span className="flex-1 truncate">{c.name}</span>
               <span className="font-mono text-xs text-muted-foreground">
                 {c.phone}

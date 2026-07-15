@@ -274,10 +274,14 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	peerName := resolvePeerName(r.Context(), sess.client, peer)
+	photoURL := cachedPhotoURL(r.Context(), s.photos, sess.id, peer.String())
 	s.broker.upsertCall(CallRecord{
 		SessionID: sess.id, CallID: callID, Owner: ownerRef(owner), Direction: "outbound", Peer: peer.String(),
+		PeerName: peerName, PeerPhotoURL: photoURL,
 		StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 	})
+	go sess.fetchPeerPhoto(peer, callID)
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
 }
 

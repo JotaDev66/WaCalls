@@ -49,6 +49,8 @@ export const ensureCallsWired = (): void => {
                 sessionId: ev.sessionId,
                 status: ev.status,
                 peer: ev.peer,
+                peerName: ev.peerName ?? c.peerName,
+                peerPhotoUrl: ev.peerPhotoUrl ?? c.peerPhotoUrl,
                 startedAt: ev.startedAt,
               }
             : c,
@@ -105,6 +107,8 @@ export const ensureCallsWired = (): void => {
           sessionId: ev.sessionId,
           callId: ev.id,
           peer: ev.peer,
+          peerName: ev.peerName,
+          peerPhotoUrl: ev.peerPhotoUrl,
           offeredAt: ev.offeredAt,
         },
       });

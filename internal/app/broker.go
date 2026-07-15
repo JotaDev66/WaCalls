@@ -25,15 +25,17 @@ const (
 )
 
 type CallRecord struct {
-	SessionID string     `json:"sessionId"`
-	CallID    string     `json:"callId"`
-	Owner     *string    `json:"owner"`
-	Direction string     `json:"direction"`
-	Peer      string     `json:"peer"`
-	StartedAt int64      `json:"startedAt"`
-	Status    CallStatus `json:"status"`
-	EndedAt   *int64     `json:"endedAt,omitempty"`
-	EndReason string     `json:"endReason,omitempty"`
+	SessionID    string     `json:"sessionId"`
+	CallID       string     `json:"callId"`
+	Owner        *string    `json:"owner"`
+	Direction    string     `json:"direction"`
+	Peer         string     `json:"peer"`
+	PeerName     string     `json:"peerName,omitempty"`
+	PeerPhotoURL string     `json:"peerPhotoUrl,omitempty"`
+	StartedAt    int64      `json:"startedAt"`
+	Status       CallStatus `json:"status"`
+	EndedAt      *int64     `json:"endedAt,omitempty"`
+	EndReason    string     `json:"endReason,omitempty"`
 }
 
 type AuthSnapshot struct {
@@ -150,7 +152,17 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
 		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
+		"peerName": r.PeerName, "peerPhotoUrl": r.PeerPhotoURL,
 	})
+}
+
+func (b *Broker) setCallPhoto(callID, url string) {
+	rec, ok := b.getCall(callID)
+	if !ok || url == "" || rec.PeerPhotoURL == url {
+		return
+	}
+	rec.PeerPhotoURL = url
+	b.upsertCall(*rec)
 }
 
 func (b *Broker) getCall(id string) (*CallRecord, bool) {
@@ -276,9 +288,10 @@ func (b *Broker) broadcastCallList() {
 	b.broadcast(map[string]any{"type": "call-list", "calls": b.callList()})
 }
 
-func (b *Broker) emitIncoming(sessionID, id, peer string) {
+func (b *Broker) emitIncoming(sessionID, id, peer, peerName, peerPhotoURL string) {
 	b.broadcast(map[string]any{
 		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer,
+		"peerName": peerName, "peerPhotoUrl": peerPhotoURL,
 		"offeredAt": time.Now().UnixMilli(),
 	})
 }

@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
 import { useHistory } from "@/hooks/useHistory";
 import { exportHistoryCsv } from "@/services/history";
 import { useT } from "@/hooks/useT";
@@ -73,14 +74,25 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
             <>
               <ul className="space-y-2">
                 {rows.map((r) => (
-                  <li key={r.callId} className="rounded-lg border p-3">
-                    <p className="font-mono font-medium">{r.peer}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.calls.direction[r.direction]} ·{" "}
-                      <span className="font-mono">
-                        {new Date(r.startedAt).toLocaleString(locale)}
-                      </span>
-                    </p>
+                  <li
+                    key={r.callId}
+                    className="flex items-center gap-3 rounded-lg border p-3"
+                  >
+                    <PeerAvatar
+                      name={r.peerName || r.peer}
+                      photoUrl={r.peerPhotoUrl}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {r.peerName || r.peer}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {t.calls.direction[r.direction]} ·{" "}
+                        <span className="font-mono">
+                          {new Date(r.startedAt).toLocaleString(locale)}
+                        </span>
+                      </p>
+                    </div>
                   </li>
                 ))}
               </ul>

@@ -11,6 +11,10 @@ export function filterContacts(query: string, contacts: Contact[]): Contact[] {
   );
 }
 
+export function hasLetters(s: string): boolean {
+  return /\p{L}/u.test(s);
+}
+
 export function contactInitials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (words.length === 0) return "#";

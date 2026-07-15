@@ -46,6 +46,7 @@ type Server struct {
 	webrtcAPI      *webrtc.API
 	rateLimiter    *ipRateLimiter
 	trustedProxies []netip.Prefix
+	photos         core.ContactPhotoStore
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -78,7 +79,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 	}
 
 	broker := NewBroker(bundle.Calls, log)
-	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer)
+	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer, bundle.Photos)
 	broker.SnapshotFn = mgr.snapshotEvents
 
 	if cfg.WebhookURL != "" {
@@ -110,6 +111,7 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		webrtcAPI:      api,
 		rateLimiter:    limiter,
 		trustedProxies: trustedProxies,
+		photos:         bundle.Photos,
 	}, nil
 }
 

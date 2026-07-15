@@ -1,1 +1,6 @@
-export type Contact = { jid: string; name: string; phone: string };
+export type Contact = {
+  jid: string;
+  name: string;
+  phone: string;
+  photoUrl?: string;
+};
