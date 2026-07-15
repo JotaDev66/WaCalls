@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"slices"
 	"testing"
@@ -286,5 +287,79 @@ func TestBuildContactPatch(t *testing.T) {
 	ca := m.Value.GetContactAction()
 	if ca.GetFullName() != "Alice Souza" || ca.GetFirstName() != "Alice" {
 		t.Fatalf("action = %+v", ca)
+	}
+}
+
+type fakeContactClient struct {
+	resp      []types.IsOnWhatsAppResponse
+	isErr     error
+	sent      *appstate.PatchInfo
+	sentPhone string
+	sendErr   error
+}
+
+func (f *fakeContactClient) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+	if len(phones) == 1 {
+		f.sentPhone = phones[0]
+	}
+	return f.resp, f.isErr
+}
+
+func (f *fakeContactClient) SendAppState(ctx context.Context, patch appstate.PatchInfo) error {
+	f.sent = &patch
+	return f.sendErr
+}
+
+func TestUpsertContactHappy(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{resp: []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}}}
+	dto, err := upsertContact(context.Background(), cc, "5511999998888", "Alice Souza")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if dto.JID != jid.String() || dto.Name != "Alice Souza" || dto.Phone != "5511999998888" {
+		t.Fatalf("dto = %+v", dto)
+	}
+	if cc.sentPhone != "+5511999998888" {
+		t.Fatalf("IsOnWhatsApp got %q, want +prefixed", cc.sentPhone)
+	}
+	if cc.sent == nil || cc.sent.Mutations[0].Value.GetContactAction().GetFirstName() != "Alice" {
+		t.Fatalf("patch not sent correctly: %+v", cc.sent)
+	}
+}
+
+func TestUpsertContactNotOnWhatsApp(t *testing.T) {
+	cc := &fakeContactClient{resp: []types.IsOnWhatsAppResponse{{IsIn: false}}}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if !errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("err = %v, want errNotOnWhatsApp", err)
+	}
+	cc2 := &fakeContactClient{resp: nil}
+	if _, err := upsertContact(context.Background(), cc2, "5511999998888", "Alice"); !errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("empty resp err = %v", err)
+	}
+}
+
+func TestUpsertContactSyncingError(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{
+		resp:    []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}},
+		sendErr: errors.New("no app state keys found, creating app state keys is not yet supported"),
+	}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if !errors.Is(err, errAppStateSyncing) {
+		t.Fatalf("err = %v, want errAppStateSyncing", err)
+	}
+}
+
+func TestUpsertContactSendError(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{
+		resp:    []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}},
+		sendErr: errors.New("boom"),
+	}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if err == nil || errors.Is(err, errAppStateSyncing) || errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("err = %v, want a plain wrapped error", err)
 	}
 }

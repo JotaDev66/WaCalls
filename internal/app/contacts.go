@@ -3,6 +3,8 @@ package app
 import (
 	"cmp"
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -155,6 +157,35 @@ func buildContactPatch(jid types.JID, fullName, firstName string) appstate.Patch
 			},
 		}},
 	}
+}
+
+type contactClient interface {
+	IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
+	SendAppState(ctx context.Context, patch appstate.PatchInfo) error
+}
+
+var (
+	errNotOnWhatsApp   = errors.New("number not on WhatsApp")
+	errAppStateSyncing = errors.New("app state not synced yet")
+)
+
+func upsertContact(ctx context.Context, cc contactClient, phone, name string) (contactDTO, error) {
+	full, first := splitName(name)
+	resp, err := cc.IsOnWhatsApp(ctx, []string{"+" + phone})
+	if err != nil {
+		return contactDTO{}, fmt.Errorf("checking whatsapp: %w", err)
+	}
+	if len(resp) == 0 || !resp[0].IsIn {
+		return contactDTO{}, errNotOnWhatsApp
+	}
+	jid := resp[0].JID
+	if err := cc.SendAppState(ctx, buildContactPatch(jid, full, first)); err != nil {
+		if strings.Contains(err.Error(), "no app state keys found") {
+			return contactDTO{}, fmt.Errorf("%w: %v", errAppStateSyncing, err)
+		}
+		return contactDTO{}, fmt.Errorf("sending app state: %w", err)
+	}
+	return contactDTO{JID: jid.String(), Name: full, Phone: jid.User}, nil
 }
 
 func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {
