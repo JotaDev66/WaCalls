@@ -12,6 +12,7 @@ import { attachMeter } from "@/lib/audio-meter";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
+import { useT } from "@/hooks/useT";
 import { formatCallDuration } from "@/utils/format";
 import type {
   CallStatus,
@@ -102,30 +103,35 @@ const QualityBar = ({
 );
 
 const QualityPanel = ({ q }: { q: QualitySample | undefined }) => {
+  const t = useT();
   if (!q) {
-    return <p className="text-xs text-muted-foreground">Measuring quality…</p>;
+    return (
+      <p className="text-xs text-muted-foreground">
+        {t.calls.measuringQuality}
+      </p>
+    );
   }
   const lossPct = q.lossFraction * 100;
   return (
     <div className="space-y-2 rounded-md border border-border/60 p-2">
       {q.hasRtt ? (
         <QualityBar
-          label="RTT"
+          label={t.calls.rtt}
           value={`${Math.round(q.rttMs)} ms`}
           pct={clampPct(q.rttMs, 400)}
           tone={rttTone(q.rttMs)}
         />
       ) : (
-        <QualityBar label="RTT" value="—" pct={0} tone="idle" />
+        <QualityBar label={t.calls.rtt} value="—" pct={0} tone="idle" />
       )}
       <QualityBar
-        label="Jitter"
+        label={t.calls.jitter}
         value={`${Math.round(q.jitterMs)} ms`}
         pct={clampPct(q.jitterMs, 80)}
         tone={jitterTone(q.jitterMs)}
       />
       <QualityBar
-        label="Loss"
+        label={t.calls.loss}
         value={`${lossPct.toFixed(1)}%`}
         pct={clampPct(lossPct, 10)}
         tone={lossTone(q.lossFraction)}
@@ -150,6 +156,7 @@ const ConnectionTimeline = ({
   status: CallStatus;
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
   const byMark = new Map(marks.map((m) => [m.mark, m.elapsedMs]));
   const mediaMs = byMark.get("media.first_packet");
 
@@ -161,7 +168,7 @@ const ConnectionTimeline = ({
         className="flex w-full items-center gap-2 rounded-md border border-border/60 px-2 py-1.5 text-xs text-muted-foreground"
       >
         <Check className="h-3.5 w-3.5 text-primary" />
-        Connected in <span className="font-mono">{mediaMs} ms</span>
+        {t.calls.connectedIn} <span className="font-mono">{mediaMs} ms</span>
       </button>
     );
   }
@@ -170,7 +177,7 @@ const ConnectionTimeline = ({
     <div className="space-y-2 rounded-md border border-border/60 p-2">
       <div className="flex items-center justify-between">
         <span className="text-xs uppercase tracking-wide text-muted-foreground">
-          Connection
+          {t.calls.connection}
         </span>
         {mediaMs !== undefined && (
           <button
@@ -213,14 +220,15 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
   const marks = useCalls((s) => s.marks.get(call.callId));
   const outDeviceId = useDevices((s) => s.outId);
   const endCall = useEndCall();
+  const t = useT();
   const [, force] = useState(0);
   const [micDb, setMicDb] = useState(-60);
   const [peerDb, setPeerDb] = useState(-60);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    const t = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -259,7 +267,9 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
               variant={statusVariant[call.status]}
               className="mt-1 font-mono"
             >
-              {formatCallDuration(call.startedAt, call.status)}
+              {call.status === "connected"
+                ? formatCallDuration(call.startedAt)
+                : t.calls.status[call.status]}
             </Badge>
           </div>
           <Tooltip>
@@ -270,25 +280,25 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
                 onClick={() =>
                   endCall.mutate({ sid: call.sessionId, callId: call.callId })
                 }
-                aria-label="End call"
+                aria-label={t.calls.endCall}
               >
                 <PhoneOff className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>End call</TooltipContent>
+            <TooltipContent>{t.calls.endCall}</TooltipContent>
           </Tooltip>
         </div>
         {call.status === "reconnecting" && (
           <div className="flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-600 dark:text-amber-400">
             <WifiOff className="h-3.5 w-3.5" />
-            Reconnecting media…
+            {t.calls.reconnectingMedia}
           </div>
         )}
         {marks && marks.length > 0 && (
           <ConnectionTimeline marks={marks} status={call.status} />
         )}
-        <Meter label="Mic" db={micDb} />
-        <Meter label="Peer" db={peerDb} />
+        <Meter label={t.calls.mic} db={micDb} />
+        <Meter label={t.calls.peer} db={peerDb} />
         {call.status === "connected" && <QualityPanel q={quality} />}
         <audio ref={audioRef} autoPlay />
       </CardContent>

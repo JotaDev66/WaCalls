@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { setActiveSession, useSessions } from "@/stores/sessions";
 import { createSession, deleteSession } from "@/services/sessions";
+import { useT } from "@/hooks/useT";
 import type { SessionInfo, SessionState } from "@/types/session";
 
 const dotClass: Record<SessionState, string> = {
@@ -20,6 +21,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
   const activeId = useSessions((s) => s.activeId);
   const [creating, setCreating] = useState(false);
   const [toDelete, setToDelete] = useState<SessionInfo | null>(null);
+  const t = useT();
 
   const onNew = async () => {
     setCreating(true);
@@ -45,7 +47,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
   return (
     <div className="flex h-full flex-col gap-2 p-3">
       <p className="px-2 pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Accounts
+        {t.sessions.accounts}
       </p>
       <div className="flex-1 space-y-1 overflow-y-auto">
         {sessions.map((s) => (
@@ -81,14 +83,16 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                 setToDelete(s);
               }}
               className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
-              aria-label={`Delete ${s.name}`}
+              aria-label={t.sessions.deleteAria(s.name)}
             >
               <Trash2 className="h-4 w-4" />
             </button>
           </div>
         ))}
         {sessions.length === 0 && (
-          <p className="px-2 text-sm text-muted-foreground">No accounts yet.</p>
+          <p className="px-2 text-sm text-muted-foreground">
+            {t.sessions.noAccounts}
+          </p>
         )}
       </div>
       <Button
@@ -102,19 +106,17 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
         ) : (
           <Plus className="h-4 w-4" />
         )}
-        New session
+        {t.sessions.newSession}
       </Button>
 
       <ConfirmDialog
         open={!!toDelete}
         onOpenChange={(o) => !o && setToDelete(null)}
-        title="Delete account?"
+        title={t.sessions.deleteTitle}
         description={
-          toDelete
-            ? `${toDelete.name} will be logged out and removed.`
-            : undefined
+          toDelete ? t.sessions.deleteDescription(toDelete.name) : undefined
         }
-        confirmLabel="Delete"
+        confirmLabel={t.common.delete}
         destructive
         onConfirm={() => {
           if (toDelete) void remove(toDelete.id);

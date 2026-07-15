@@ -9,12 +9,15 @@ import {
 } from "@/components/ui/sheet";
 import { Sidebar } from "./Sidebar";
 import { ThemeToggle } from "./ThemeToggle";
+import { LocaleToggle } from "./LocaleToggle";
 import { ConnectionBanner } from "@/components/shared/ConnectionBanner";
 import { useServerVersion } from "@/hooks/useServerVersion";
+import { useT } from "@/hooks/useT";
 
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { data: server } = useServerVersion();
+  const t = useT();
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -26,13 +29,13 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
                 variant="outline"
                 size="icon"
                 className="md:hidden"
-                aria-label="Accounts"
+                aria-label={t.header.accounts}
               >
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-72 p-0">
-              <SheetTitle className="px-3 pt-3">Accounts</SheetTitle>
+              <SheetTitle className="px-3 pt-3">{t.header.accounts}</SheetTitle>
               <Sidebar onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
@@ -50,7 +53,10 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
             )}
           </div>
         </div>
-        <ThemeToggle />
+        <div className="flex items-center gap-2">
+          <LocaleToggle />
+          <ThemeToggle />
+        </div>
       </header>
       <ConnectionBanner />
       <div className="flex flex-1">

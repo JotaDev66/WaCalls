@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { DeviceSelector } from "@/components/form/DeviceSelector";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useDevices } from "@/stores/devices";
+import { useT } from "@/hooks/useT";
 
 export const Dialer = ({ sid }: { sid: string }) => {
   const [phone, setPhone] = useState("");
   const micId = useDevices((s) => s.micId);
   const startCall = useStartCall(sid, micId);
+  const t = useT();
 
   const submit = () => {
     if (!phone.trim() || startCall.isPending) return;
@@ -23,7 +25,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Dialer</CardTitle>
+        <CardTitle>{t.dialer.title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <DeviceSelector />
@@ -34,7 +36,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            placeholder="+55 11 99999 9999"
+            placeholder={t.dialer.phonePlaceholder}
             inputMode="tel"
             className="min-w-[200px] flex-1 font-mono"
           />
@@ -43,7 +45,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             disabled={startCall.isPending || !phone.trim()}
           >
             <Phone className="h-4 w-4" />
-            {startCall.isPending ? "Calling…" : "Call"}
+            {startCall.isPending ? t.dialer.calling : t.dialer.call}
           </Button>
         </div>
       </CardContent>

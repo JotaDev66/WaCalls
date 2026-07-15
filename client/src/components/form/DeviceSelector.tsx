@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/select";
 import { useAudioDevices } from "@/hooks/useAudioDevices";
 import { useDevices } from "@/stores/devices";
+import { useT } from "@/hooks/useT";
 import type { AudioDevice } from "@/hooks/useAudioDevices";
 
 const DEFAULT_VALUE = "__default__";
@@ -54,6 +55,7 @@ export const DeviceSelector = () => {
   const outId = useDevices((s) => s.outId);
   const setMic = useDevices((s) => s.setMic);
   const setOut = useDevices((s) => s.setOut);
+  const t = useT();
 
   return (
     <div className="flex flex-wrap items-center gap-3">
@@ -61,14 +63,14 @@ export const DeviceSelector = () => {
         icon={<Mic className="h-4 w-4 text-muted-foreground" />}
         devices={mics}
         value={micId}
-        defaultLabel="Default mic"
+        defaultLabel={t.dialer.defaultMic}
         onChange={setMic}
       />
       <DeviceSelect
         icon={<Volume2 className="h-4 w-4 text-muted-foreground" />}
         devices={outs}
         value={outId}
-        defaultLabel="Default speaker"
+        defaultLabel={t.dialer.defaultSpeaker}
         onChange={setOut}
       />
     </div>

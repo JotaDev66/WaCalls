@@ -2,14 +2,16 @@ import { Phone } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCallDuration } from "@/utils/format";
+import { useT } from "@/hooks/useT";
 import type { CallSummary } from "@/types/call";
 
 export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
+  const t = useT();
   if (calls.length === 0) return null;
   return (
     <section className="space-y-3">
       <h2 className="text-sm font-medium text-muted-foreground">
-        Other active calls
+        {t.calls.otherActive}
       </h2>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {calls.map((c) => (
@@ -22,10 +24,14 @@ export const OtherCallsList = ({ calls }: { calls: CallSummary[] }) => {
                 <p className="truncate font-mono text-sm font-medium">
                   {c.peer}
                 </p>
-                <p className="text-xs text-muted-foreground">{c.direction}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t.calls.direction[c.direction]}
+                </p>
               </div>
               <Badge variant="muted" className="font-mono">
-                {formatCallDuration(c.startedAt, c.status)}
+                {c.status === "connected"
+                  ? formatCallDuration(c.startedAt)
+                  : t.calls.status[c.status]}
               </Badge>
             </CardContent>
           </Card>

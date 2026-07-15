@@ -12,6 +12,7 @@ import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useAcceptCall } from "@/hooks/useAcceptCall";
 import { useRejectCall } from "@/hooks/useRejectCall";
+import { useT } from "@/hooks/useT";
 
 type RingHandle = { stop: () => void };
 
@@ -68,6 +69,7 @@ export const IncomingCallModal = () => {
   const accept = useAcceptCall(micId);
   const reject = useRejectCall();
   const busy = accept.isPending || reject.isPending;
+  const t = useT();
 
   useEffect(() => {
     if (!incoming) return;
@@ -88,7 +90,7 @@ export const IncomingCallModal = () => {
           <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
             <PhoneIncoming className="h-7 w-7" />
           </div>
-          <DialogTitle>Incoming call</DialogTitle>
+          <DialogTitle>{t.incoming.title}</DialogTitle>
           <DialogDescription className="truncate font-mono">
             {incoming?.peer}
           </DialogDescription>
@@ -106,7 +108,7 @@ export const IncomingCallModal = () => {
                 callId: incoming.callId,
               })
             }
-            aria-label="Reject"
+            aria-label={t.incoming.reject}
           >
             <PhoneOff className="h-6 w-6" />
           </Button>
@@ -121,7 +123,7 @@ export const IncomingCallModal = () => {
                 callId: incoming.callId,
               })
             }
-            aria-label="Accept"
+            aria-label={t.incoming.accept}
           >
             <Phone className="h-6 w-6" />
           </Button>

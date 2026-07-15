@@ -4,14 +4,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { logoutSession, pairSession } from "@/services/sessions";
+import { useT } from "@/hooks/useT";
 import type { SessionInfo, SessionState } from "@/types/session";
-
-const statusLabel: Record<SessionState, string> = {
-  open: "Connected",
-  qr: "Scan QR",
-  connecting: "Connecting…",
-  logged_out: "Disconnected",
-};
 
 const statusVariant: Record<
   SessionState,
@@ -25,6 +19,7 @@ const statusVariant: Record<
 
 export const SessionHeader = ({ session }: { session: SessionInfo }) => {
   const [busy, setBusy] = useState(false);
+  const t = useT();
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -44,7 +39,7 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
           {session.name}
         </h1>
         <Badge variant={statusVariant[session.state]}>
-          {statusLabel[session.state]}
+          {t.sessions.status[session.state]}
         </Badge>
       </div>
       {session.paired ? (
@@ -59,7 +54,7 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
           ) : (
             <Power className="h-4 w-4" />
           )}
-          Disconnect
+          {t.sessions.disconnect}
         </Button>
       ) : (
         <Button
@@ -72,7 +67,7 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
           ) : (
             <QrCode className="h-4 w-4" />
           )}
-          Reactivate
+          {t.sessions.reactivate}
         </Button>
       )}
     </div>
