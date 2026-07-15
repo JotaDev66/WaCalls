@@ -8,6 +8,8 @@ type CallListRow = {
   owner: string | null;
   direction: "outbound" | "inbound";
   peer: string;
+  peerName?: string;
+  peerPhotoUrl?: string;
   startedAt: number;
   status: CallStatus;
   endedAt?: number;
@@ -32,6 +34,8 @@ export type BrokerEvent =
       owner: string | null;
       status: CallStatus;
       peer: string;
+      peerName?: string;
+      peerPhotoUrl?: string;
       startedAt: number;
     }
   | {
@@ -47,6 +51,8 @@ export type BrokerEvent =
       sessionId: string;
       id: string;
       peer: string;
+      peerName?: string;
+      peerPhotoUrl?: string;
       offeredAt: number;
     }
   | { type: "incoming-claimed"; sessionId: string; id: string; owner: string }

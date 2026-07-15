@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Phone } from "lucide-react";
 import { ContactAvatar } from "./ContactAvatar";
 import { hasLetters } from "@/lib/contacts";
@@ -10,15 +10,16 @@ export function PeerAvatar({
   name: string;
   photoUrl?: string;
 }) {
-  const [failed, setFailed] = useState(false);
-  useEffect(() => setFailed(false), [photoUrl]);
+  // Track the URL that failed rather than a boolean so a new photoUrl retries
+  // on its own, without an effect resetting state.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
-  if (photoUrl && !failed) {
+  if (photoUrl && photoUrl !== failedUrl) {
     return (
       <img
         src={photoUrl}
         alt=""
-        onError={() => setFailed(true)}
+        onError={() => setFailedUrl(photoUrl)}
         className="size-9 shrink-0 rounded-full object-cover"
       />
     );
