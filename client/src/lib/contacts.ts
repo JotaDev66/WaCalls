@@ -29,3 +29,20 @@ export function avatarColorIndex(name: string): number {
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
   return Math.abs(h) % AVATAR_PALETTE_SIZE;
 }
+
+export function findContactByPhone(
+  contacts: Contact[],
+  phone: string,
+): Contact | undefined {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return undefined;
+  return contacts.find((c) => c.phone.replace(/\D/g, "") === digits);
+}
+
+export function contactErrorKey(
+  message: string,
+): "notOnWhatsApp" | "appStateSyncing" | "saveError" {
+  if (message.includes("422")) return "notOnWhatsApp";
+  if (message.includes("503")) return "appStateSyncing";
+  return "saveError";
+}
