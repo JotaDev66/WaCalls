@@ -3,12 +3,17 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http/httptest"
+	"slices"
+	"strings"
 	"testing"
 
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 )
@@ -247,5 +252,165 @@ func TestResolvePeerName(t *testing.T) {
 	}
 	if got := resolvePeerName(context.Background(), cli, mkJID("9999", types.DefaultUserServer)); got != "" {
 		t.Fatalf("want empty for unknown contact, got %q", got)
+	}
+}
+
+func TestSplitName(t *testing.T) {
+	cases := []struct{ in, full, first string }{
+		{"Alice Souza", "Alice Souza", "Alice"},
+		{"  Bob  ", "Bob", "Bob"},
+		{"  Ana   Paula  Lima ", "Ana   Paula  Lima", "Ana"},
+		{"", "", ""},
+	}
+	for _, c := range cases {
+		full, first := splitName(c.in)
+		if full != c.full || first != c.first {
+			t.Errorf("splitName(%q) = (%q,%q), want (%q,%q)", c.in, full, first, c.full, c.first)
+		}
+	}
+}
+
+func TestBuildContactPatch(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	p := buildContactPatch(jid, "Alice Souza", "Alice")
+	if p.Type != appstate.WAPatchCriticalUnblockLow {
+		t.Fatalf("type = %v", p.Type)
+	}
+	if len(p.Mutations) != 1 {
+		t.Fatalf("mutations = %d", len(p.Mutations))
+	}
+	m := p.Mutations[0]
+	if !slices.Equal(m.Index, []string{"contact", jid.String()}) {
+		t.Fatalf("index = %v", m.Index)
+	}
+	if m.Version != 2 {
+		t.Fatalf("version = %d", m.Version)
+	}
+	ca := m.Value.GetContactAction()
+	if ca.GetFullName() != "Alice Souza" || ca.GetFirstName() != "Alice" {
+		t.Fatalf("action = %+v", ca)
+	}
+}
+
+type fakeContactClient struct {
+	resp      []types.IsOnWhatsAppResponse
+	isErr     error
+	sent      *appstate.PatchInfo
+	sentPhone string
+	sendErr   error
+}
+
+func (f *fakeContactClient) IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error) {
+	if len(phones) == 1 {
+		f.sentPhone = phones[0]
+	}
+	return f.resp, f.isErr
+}
+
+func (f *fakeContactClient) SendAppState(ctx context.Context, patch appstate.PatchInfo) error {
+	f.sent = &patch
+	return f.sendErr
+}
+
+func TestUpsertContactHappy(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{resp: []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}}}
+	dto, err := upsertContact(context.Background(), cc, "5511999998888", "Alice Souza")
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if dto.JID != jid.String() || dto.Name != "Alice Souza" || dto.Phone != "5511999998888" {
+		t.Fatalf("dto = %+v", dto)
+	}
+	if cc.sentPhone != "+5511999998888" {
+		t.Fatalf("IsOnWhatsApp got %q, want +prefixed", cc.sentPhone)
+	}
+	if cc.sent == nil || cc.sent.Mutations[0].Value.GetContactAction().GetFirstName() != "Alice" {
+		t.Fatalf("patch not sent correctly: %+v", cc.sent)
+	}
+}
+
+func TestUpsertContactNotOnWhatsApp(t *testing.T) {
+	cc := &fakeContactClient{resp: []types.IsOnWhatsAppResponse{{IsIn: false}}}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if !errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("err = %v, want errNotOnWhatsApp", err)
+	}
+	cc2 := &fakeContactClient{resp: nil}
+	if _, err := upsertContact(context.Background(), cc2, "5511999998888", "Alice"); !errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("empty resp err = %v", err)
+	}
+}
+
+func TestUpsertContactSyncingError(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{
+		resp:    []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}},
+		sendErr: errors.New("no app state keys found, creating app state keys is not yet supported"),
+	}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if !errors.Is(err, errAppStateSyncing) {
+		t.Fatalf("err = %v, want errAppStateSyncing", err)
+	}
+}
+
+func TestUpsertContactSendError(t *testing.T) {
+	jid := mkJID("5511999998888", types.DefaultUserServer)
+	cc := &fakeContactClient{
+		resp:    []types.IsOnWhatsAppResponse{{JID: jid, IsIn: true}},
+		sendErr: errors.New("boom"),
+	}
+	_, err := upsertContact(context.Background(), cc, "5511999998888", "Alice")
+	if err == nil || errors.Is(err, errAppStateSyncing) || errors.Is(err, errNotOnWhatsApp) {
+		t.Fatalf("err = %v, want a plain wrapped error", err)
+	}
+}
+
+func TestStatusForContactErr(t *testing.T) {
+	cases := []struct {
+		err  error
+		want int
+	}{
+		{errNotOnWhatsApp, 422},
+		{errAppStateSyncing, 503},
+		{errors.New("boom"), 500},
+		{fmt.Errorf("wrap: %w", errNotOnWhatsApp), 422},
+	}
+	for _, c := range cases {
+		if got := statusForContactErr(c.err); got != c.want {
+			t.Errorf("statusForContactErr(%v) = %d, want %d", c.err, got, c.want)
+		}
+	}
+}
+
+func TestContactSaveUnknownSession(t *testing.T) {
+	s := contactsServer(true, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/sessions/ghost/contacts", strings.NewReader(`{"phone":"5511","name":"x"}`))
+	s.routes().ServeHTTP(rec, req)
+	if rec.Code != 404 {
+		t.Fatalf("want 404, got %d", rec.Code)
+	}
+}
+
+func TestContactSaveNotPaired(t *testing.T) {
+	s := contactsServer(false, map[types.JID]types.ContactInfo{})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/sessions/s1/contacts", strings.NewReader(`{"phone":"5511","name":"x"}`))
+	s.routes().ServeHTTP(rec, req)
+	if rec.Code != 503 {
+		t.Fatalf("want 503, got %d", rec.Code)
+	}
+}
+
+func TestContactSaveBadBody(t *testing.T) {
+	for _, body := range []string{`{"phone":"","name":"x"}`, `{"phone":"5511","name":"  "}`} {
+		s := contactsServer(true, map[types.JID]types.ContactInfo{})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("POST", "/api/sessions/s1/contacts", strings.NewReader(body))
+		s.routes().ServeHTTP(rec, req)
+		if rec.Code != 400 {
+			t.Fatalf("body %q: want 400, got %d", body, rec.Code)
+		}
 	}
 }

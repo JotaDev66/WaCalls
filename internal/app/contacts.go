@@ -3,6 +3,9 @@ package app
 import (
 	"cmp"
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -11,7 +14,10 @@ import (
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/types"
+	"google.golang.org/protobuf/proto"
 )
 
 type contactDTO struct {
@@ -128,6 +134,98 @@ func enrichPeers(rows []CallRecord, names map[string]string, photos map[string]c
 		}
 		rows[i].PeerPhotoURL = photos[rows[i].Peer].URL
 	}
+}
+
+func splitName(name string) (full, first string) {
+	full = strings.TrimSpace(name)
+	if fields := strings.Fields(full); len(fields) > 0 {
+		first = fields[0]
+	}
+	return full, first
+}
+
+func buildContactPatch(jid types.JID, fullName, firstName string) appstate.PatchInfo {
+	return appstate.PatchInfo{
+		Type: appstate.WAPatchCriticalUnblockLow,
+		Mutations: []appstate.MutationInfo{{
+			Index:   []string{appstate.IndexContact, jid.String()},
+			Version: 2,
+			Value: &waSyncAction.SyncActionValue{
+				ContactAction: &waSyncAction.ContactAction{
+					FullName:  proto.String(fullName),
+					FirstName: proto.String(firstName),
+				},
+			},
+		}},
+	}
+}
+
+type contactClient interface {
+	IsOnWhatsApp(ctx context.Context, phones []string) ([]types.IsOnWhatsAppResponse, error)
+	SendAppState(ctx context.Context, patch appstate.PatchInfo) error
+}
+
+var (
+	errNotOnWhatsApp   = errors.New("number not on WhatsApp")
+	errAppStateSyncing = errors.New("app state not synced yet")
+)
+
+func upsertContact(ctx context.Context, cc contactClient, phone, name string) (contactDTO, error) {
+	full, first := splitName(name)
+	resp, err := cc.IsOnWhatsApp(ctx, []string{"+" + phone})
+	if err != nil {
+		return contactDTO{}, fmt.Errorf("checking whatsapp: %w", err)
+	}
+	if len(resp) == 0 || !resp[0].IsIn {
+		return contactDTO{}, errNotOnWhatsApp
+	}
+	jid := resp[0].JID
+	if err := cc.SendAppState(ctx, buildContactPatch(jid, full, first)); err != nil {
+		if strings.Contains(err.Error(), "no app state keys found") {
+			return contactDTO{}, fmt.Errorf("%w: %v", errAppStateSyncing, err)
+		}
+		return contactDTO{}, fmt.Errorf("sending app state: %w", err)
+	}
+	return contactDTO{JID: jid.String(), Name: full, Phone: jid.User}, nil
+}
+
+func statusForContactErr(err error) int {
+	switch {
+	case errors.Is(err, errNotOnWhatsApp):
+		return http.StatusUnprocessableEntity
+	case errors.Is(err, errAppStateSyncing):
+		return http.StatusServiceUnavailable
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	if sess.client.Store.ID == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
+		return
+	}
+	var body struct {
+		Phone string `json:"phone"`
+		Name  string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	phone := normalizePhone(body.Phone)
+	name := strings.TrimSpace(body.Name)
+	if phone == "" || name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "phone and name required"})
+		return
+	}
+	dto, err := upsertContact(r.Context(), sess.client, phone, name)
+	if err != nil {
+		writeJSON(w, statusForContactErr(err), map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"contact": dto})
 }
 
 func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {

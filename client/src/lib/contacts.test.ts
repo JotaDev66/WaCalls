@@ -4,6 +4,8 @@ import {
   contactInitials,
   avatarColorIndex,
   hasLetters,
+  findContactByPhone,
+  contactErrorKey,
 } from "./contacts";
 import type { Contact } from "@/types/contact";
 
@@ -61,5 +63,31 @@ describe("hasLetters", () => {
   });
   it("false for empty", () => {
     expect(hasLetters("")).toBe(false);
+  });
+});
+
+describe("findContactByPhone", () => {
+  it("matches ignoring formatting", () => {
+    expect(findContactByPhone(sample, "+55 11 99999-0000")?.name).toBe(
+      "Alice Silva",
+    );
+  });
+  it("returns undefined when none match", () => {
+    expect(findContactByPhone(sample, "5511777776666")).toBeUndefined();
+  });
+  it("returns undefined for empty input", () => {
+    expect(findContactByPhone(sample, "  ")).toBeUndefined();
+  });
+});
+
+describe("contactErrorKey", () => {
+  it("maps 422 to notOnWhatsApp", () => {
+    expect(contactErrorKey("/api/... 422 {}")).toBe("notOnWhatsApp");
+  });
+  it("maps 503 to appStateSyncing", () => {
+    expect(contactErrorKey("/api/... 503 {}")).toBe("appStateSyncing");
+  });
+  it("falls back to saveError", () => {
+    expect(contactErrorKey("network down")).toBe("saveError");
   });
 });

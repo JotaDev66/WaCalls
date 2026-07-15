@@ -383,6 +383,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+    post:
+      operationId: saveContact
+      summary: Create or edit a contact, propagated to WhatsApp via app state
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, name]
+              properties:
+                phone:
+                  type: string
+                  description: E.164-ish phone number; non-digits are stripped
+                name:
+                  type: string
+                  description: Display name; the first word becomes the WhatsApp first name
+      responses:
+        "200":
+          description: The saved contact
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contact]
+                properties:
+                  contact:
+                    $ref: "#/components/schemas/Contact"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: The number is not on WhatsApp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503":
+          description: Session not paired, or app state not synced yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/version:
     get:
       operationId: getVersion

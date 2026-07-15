@@ -4,3 +4,8 @@ export type Contact = {
   phone: string;
   photoUrl?: string;
 };
+
+export type SaveContactInput = {
+  phone: string;
+  name: string;
+};
