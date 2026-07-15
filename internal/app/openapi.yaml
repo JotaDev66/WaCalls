@@ -354,6 +354,24 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
         "500": { $ref: "#/components/responses/InternalError" }
+  /api/version:
+    get:
+      operationId: getVersion
+      summary: Server build version
+      responses:
+        "200":
+          description: The running server version (the ldflags-injected build tag, or "dev")
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version]
+                properties:
+                  version:
+                    type: string
+                    examples: ["v0.1.0", "dev"]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/events:
     get:
       operationId: streamEvents
