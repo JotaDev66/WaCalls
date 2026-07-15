@@ -8,6 +8,14 @@ export const ptBR: Messages = {
     selectAccountTitle: "Selecione uma conta",
     selectAccountDescription: "Escolha uma conta na barra lateral.",
   },
+  onboarding: {
+    title: "Primeiros passos",
+    subtitle: "Dois passos até sua primeira chamada.",
+    dismiss: "Dispensar o onboarding",
+    link: "Conecte sua conta do WhatsApp",
+    createCta: "Criar conta",
+    call: "Faça sua primeira chamada",
+  },
   header: {
     accounts: "Contas",
     toggleTheme: "Alternar tema",
@@ -62,6 +70,9 @@ export const ptBR: Messages = {
     },
     direction: { inbound: "recebida", outbound: "realizada" },
     reconnectingMedia: "Reconectando mídia…",
+    reconnectWhy: "Por que não conecta?",
+    reconnectHint:
+      "A mídia pode estar bloqueada por NAT. Defina WACALLS_PUBLIC_IP com o IP público do servidor e rode wacalls -doctor para conferir.",
     measuringQuality: "Medindo qualidade…",
     connectedIn: "Conectado em",
     connection: "Conexão",

@@ -8,6 +8,14 @@ export const en: Messages = {
     selectAccountTitle: "Select an account",
     selectAccountDescription: "Choose an account from the sidebar.",
   },
+  onboarding: {
+    title: "Get started",
+    subtitle: "Two steps to your first call.",
+    dismiss: "Dismiss onboarding",
+    link: "Connect your WhatsApp account",
+    createCta: "Create account",
+    call: "Make your first call",
+  },
   header: {
     accounts: "Accounts",
     toggleTheme: "Toggle theme",
@@ -60,6 +68,9 @@ export const en: Messages = {
     },
     direction: { inbound: "inbound", outbound: "outbound" },
     reconnectingMedia: "Reconnecting media…",
+    reconnectWhy: "Why isn't this connecting?",
+    reconnectHint:
+      "Media may be blocked by NAT. Set WACALLS_PUBLIC_IP to the server's public IP, then run wacalls -doctor to verify.",
     measuringQuality: "Measuring quality…",
     connectedIn: "Connected in",
     connection: "Connection",
