@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { filterContacts, contactInitials, avatarColorIndex } from "./contacts";
+import {
+  filterContacts,
+  contactInitials,
+  avatarColorIndex,
+  hasLetters,
+} from "./contacts";
 import type { Contact } from "@/types/contact";
 
 const sample: Contact[] = [
@@ -44,5 +49,17 @@ describe("avatarColorIndex", () => {
     expect(a).toBe(avatarColorIndex("Alice"));
     expect(a).toBeGreaterThanOrEqual(0);
     expect(a).toBeLessThan(6);
+  });
+});
+
+describe("hasLetters", () => {
+  it("true for names", () => {
+    expect(hasLetters("Alice")).toBe(true);
+  });
+  it("false for a pure phone number", () => {
+    expect(hasLetters("558799657022")).toBe(false);
+  });
+  it("false for empty", () => {
+    expect(hasLetters("")).toBe(false);
   });
 });
