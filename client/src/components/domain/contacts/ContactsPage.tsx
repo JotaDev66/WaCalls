@@ -10,12 +10,19 @@ import { useContacts } from "@/hooks/useContacts";
 import { filterContacts } from "@/lib/contacts";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useDevices } from "@/stores/devices";
+import { useNav } from "@/stores/nav";
 import { useT } from "@/hooks/useT";
 
 export const ContactsPage = ({ sid }: { sid: string }) => {
   const t = useT();
   const micId = useDevices((s) => s.micId);
+  const setView = useNav((s) => s.setView);
   const startCall = useStartCall(sid, micId);
+
+  const call = (phone: string) => {
+    startCall.mutate({ phone });
+    setView("console");
+  };
   const { data, isLoading, isError, isFetching, refetch } = useContacts(
     sid,
     true,
@@ -100,7 +107,7 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => startCall.mutate({ phone: c.phone })}
+                    onClick={() => call(c.phone)}
                     disabled={startCall.isPending}
                     aria-label={t.contacts.callAria(c.name)}
                   >
