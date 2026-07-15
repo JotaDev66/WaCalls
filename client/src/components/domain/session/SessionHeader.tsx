@@ -1,21 +1,12 @@
 import { useState } from "react";
 import { Loader2, Power, QrCode } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { logoutSession, pairSession } from "@/services/sessions";
+import { sessionStateTone, sessionStatePulse } from "@/lib/status";
 import { useT } from "@/hooks/useT";
-import type { SessionInfo, SessionState } from "@/types/session";
-
-const statusVariant: Record<
-  SessionState,
-  "success" | "secondary" | "muted" | "destructive"
-> = {
-  open: "success",
-  qr: "secondary",
-  connecting: "muted",
-  logged_out: "destructive",
-};
+import type { SessionInfo } from "@/types/session";
 
 export const SessionHeader = ({ session }: { session: SessionInfo }) => {
   const [busy, setBusy] = useState(false);
@@ -38,9 +29,12 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
         <h1 className="truncate text-xl font-semibold tracking-tight">
           {session.name}
         </h1>
-        <Badge variant={statusVariant[session.state]}>
+        <StatusBadge
+          tone={sessionStateTone(session.state)}
+          pulse={sessionStatePulse(session.state)}
+        >
           {t.sessions.status[session.state]}
-        </Badge>
+        </StatusBadge>
       </div>
       {session.paired ? (
         <Button

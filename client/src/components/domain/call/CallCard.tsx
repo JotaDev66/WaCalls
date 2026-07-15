@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, PhoneOff, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -13,6 +13,7 @@ import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
 import { useT } from "@/hooks/useT";
+import { callStatusTone, callStatusPulse } from "@/lib/status";
 import { formatCallDuration } from "@/utils/format";
 import type {
   CallStatus,
@@ -20,17 +21,6 @@ import type {
   QualitySample,
   SetupMark,
 } from "@/types/call";
-
-const statusVariant: Record<
-  CallStatus,
-  "success" | "secondary" | "muted" | "warning"
-> = {
-  connected: "success",
-  ringing: "secondary",
-  starting: "secondary",
-  reconnecting: "warning",
-  ended: "muted",
-};
 
 const Meter = ({ label, db }: { label: string; db: number }) => {
   const pct = Math.max(0, Math.min(100, Math.round(((db + 60) / 60) * 100)));
@@ -284,14 +274,15 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="truncate font-mono font-medium">{call.peer}</p>
-            <Badge
-              variant={statusVariant[call.status]}
-              className="mt-1 font-mono"
+            <StatusBadge
+              tone={callStatusTone(call.status)}
+              pulse={callStatusPulse(call.status)}
+              className="mt-1"
             >
               {call.status === "connected"
                 ? formatCallDuration(call.startedAt)
                 : t.calls.status[call.status]}
-            </Badge>
+            </StatusBadge>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
