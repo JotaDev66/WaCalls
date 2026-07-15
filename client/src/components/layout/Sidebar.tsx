@@ -60,7 +60,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
               onNavigate?.();
             }}
             className={cn(
-              "group relative flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm",
+              "group relative flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm",
               s.id === activeId
                 ? "bg-accent text-accent-foreground"
                 : "hover:bg-muted",
