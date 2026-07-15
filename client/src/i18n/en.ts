@@ -86,6 +86,7 @@ export const en: Messages = {
     phonePlaceholder: "+55 11 99999 9999",
     call: "Call",
     calling: "Calling…",
+    backspace: "Backspace",
     defaultMic: "Default mic",
     defaultSpeaker: "Default speaker",
   },

@@ -82,6 +82,7 @@ export type Messages = {
     phonePlaceholder: string;
     call: string;
     calling: string;
+    backspace: string;
     defaultMic: string;
     defaultSpeaker: string;
   };
