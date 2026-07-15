@@ -14,10 +14,14 @@ import { Separator } from "@/components/ui/separator";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useHistory } from "@/hooks/useHistory";
 import { exportHistoryCsv } from "@/services/history";
+import { useT } from "@/hooks/useT";
+import { useLocale } from "@/stores/locale";
 
 export const HistoryDrawer = ({ sid }: { sid: string }) => {
   const [open, setOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const t = useT();
+  const locale = useLocale((s) => s.locale);
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage } = useHistory(
     sid,
     open,
@@ -40,12 +44,12 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
       <SheetTrigger asChild>
         <Button variant="outline" size="sm">
           <History className="h-4 w-4" />
-          History
+          {t.history.button}
         </Button>
       </SheetTrigger>
       <SheetContent side="right" className="w-full p-0 sm:max-w-md">
         <SheetHeader className="p-6 pb-4">
-          <SheetTitle>Call history</SheetTitle>
+          <SheetTitle>{t.history.title}</SheetTitle>
         </SheetHeader>
         <Separator />
         <div className="flex justify-end px-6 pt-3">
@@ -56,14 +60,14 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
             onClick={() => void onExport()}
           >
             <Download className="h-4 w-4" />
-            Export CSV
+            {t.history.exportCsv}
           </Button>
         </div>
         <ScrollArea className="h-[calc(100vh-9rem)] px-6 py-4">
           {rows.length === 0 ? (
             <EmptyState
-              title="No past calls"
-              description="Calls you make or receive will appear here."
+              title={t.history.emptyTitle}
+              description={t.history.emptyDescription}
             />
           ) : (
             <>
@@ -72,9 +76,9 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
                   <li key={r.callId} className="rounded-lg border p-3">
                     <p className="font-mono font-medium">{r.peer}</p>
                     <p className="text-xs text-muted-foreground">
-                      {r.direction} ·{" "}
+                      {t.calls.direction[r.direction]} ·{" "}
                       <span className="font-mono">
-                        {new Date(r.startedAt).toLocaleString()}
+                        {new Date(r.startedAt).toLocaleString(locale)}
                       </span>
                     </p>
                   </li>
@@ -88,7 +92,7 @@ export const HistoryDrawer = ({ sid }: { sid: string }) => {
                   disabled={isFetchingNextPage}
                   onClick={() => void fetchNextPage()}
                 >
-                  {isFetchingNextPage ? "Loading…" : "Load more"}
+                  {isFetchingNextPage ? t.history.loading : t.history.loadMore}
                 </Button>
               )}
             </>

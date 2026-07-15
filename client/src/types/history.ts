@@ -1,7 +1,7 @@
 export type HistoryRow = {
   callId: string;
   peer: string;
-  direction: string;
+  direction: "inbound" | "outbound";
   startedAt: number;
   endedAt: number | null;
   endReason: string | null;

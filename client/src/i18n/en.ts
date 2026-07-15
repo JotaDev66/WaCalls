@@ -1,0 +1,98 @@
+import type { Messages } from "./messages";
+
+export const en: Messages = {
+  app: {
+    noAccountsTitle: "No accounts yet",
+    noAccountsDescription:
+      "Create your first WhatsApp account from the sidebar to start calling.",
+    selectAccountTitle: "Select an account",
+    selectAccountDescription: "Choose an account from the sidebar.",
+  },
+  header: {
+    accounts: "Accounts",
+    toggleTheme: "Toggle theme",
+    toggleLanguage: "Switch to Portuguese",
+  },
+  common: {
+    cancel: "Cancel",
+    confirm: "Confirm",
+    delete: "Delete",
+    loading: "Loading…",
+  },
+  auth: {
+    title: "Authentication required",
+    description: "Enter the API token to continue.",
+    tokenPlaceholder: "API token",
+    submit: "Save and reload",
+  },
+  sessions: {
+    accounts: "Accounts",
+    newSession: "New session",
+    noAccounts: "No accounts yet.",
+    deleteAria: (name) => `Delete ${name}`,
+    deleteTitle: "Delete account?",
+    deleteDescription: (name) => `${name} will be logged out and removed.`,
+    disconnect: "Disconnect",
+    reactivate: "Reactivate",
+    status: {
+      open: "Connected",
+      qr: "Scan QR",
+      connecting: "Connecting…",
+      logged_out: "Disconnected",
+    },
+  },
+  pairing: {
+    title: (name) => `Pair ${name}`,
+    description: "Open WhatsApp → Linked devices → Link a device, then scan.",
+    disconnectedBadge: "Disconnected. Use Reactivate above to get a QR",
+    waitingQr: "Waiting for QR…",
+  },
+  calls: {
+    activeLabel: (n) => `active call${n === 1 ? "" : "s"}`,
+    noCallsTitle: "No active calls",
+    noCallsDescription: "Dial a number above to start a call.",
+    otherActive: "Other active calls",
+    status: {
+      ringing: "ringing",
+      starting: "starting",
+      reconnecting: "reconnecting",
+      ended: "ended",
+    },
+    direction: { inbound: "inbound", outbound: "outbound" },
+    reconnectingMedia: "Reconnecting media…",
+    measuringQuality: "Measuring quality…",
+    connectedIn: "Connected in",
+    connection: "Connection",
+    mic: "Mic",
+    peer: "Peer",
+    rtt: "RTT",
+    jitter: "Jitter",
+    loss: "Loss",
+    endCall: "End call",
+  },
+  dialer: {
+    title: "Dialer",
+    phonePlaceholder: "+55 11 99999 9999",
+    call: "Call",
+    calling: "Calling…",
+    defaultMic: "Default mic",
+    defaultSpeaker: "Default speaker",
+  },
+  history: {
+    button: "History",
+    title: "Call history",
+    exportCsv: "Export CSV",
+    emptyTitle: "No past calls",
+    emptyDescription: "Calls you make or receive will appear here.",
+    loadMore: "Load more",
+    loading: "Loading…",
+  },
+  incoming: {
+    title: "Incoming call",
+    accept: "Accept",
+    reject: "Reject",
+  },
+  connection: {
+    reconnecting: "Reconnecting to server…",
+  },
+};

@@ -15,11 +15,13 @@ import { useTheme } from "@/stores/theme";
 import { setOnUnauthorized } from "@/lib/api";
 import { promptForToken } from "@/stores/auth";
 import { AuthGate } from "@/components/domain/auth/AuthGate";
+import { useT } from "@/hooks/useT";
 
 export const App = () => {
   const sessions = useSessions((s) => s.sessions);
   const activeId = useSessions((s) => s.activeId);
   const theme = useTheme((s) => s.theme);
+  const t = useT();
 
   useEffect(() => {
     setOnUnauthorized(promptForToken);
@@ -36,8 +38,8 @@ export const App = () => {
         {sessions.length === 0 ? (
           <EmptyState
             icon={<PlusCircle className="h-6 w-6" />}
-            title="No accounts yet"
-            description="Create your first WhatsApp account from the sidebar to start calling."
+            title={t.app.noAccountsTitle}
+            description={t.app.noAccountsDescription}
           />
         ) : active ? (
           <div className="space-y-6">
@@ -50,8 +52,8 @@ export const App = () => {
           </div>
         ) : (
           <EmptyState
-            title="Select an account"
-            description="Choose an account from the sidebar."
+            title={t.app.selectAccountTitle}
+            description={t.app.selectAccountDescription}
           />
         )}
       </AppShell>

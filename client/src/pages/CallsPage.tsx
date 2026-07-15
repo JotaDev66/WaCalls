@@ -6,14 +6,16 @@ import { OtherCallsList } from "@/components/domain/call/OtherCallsList";
 import { HistoryDrawer } from "@/components/domain/history/HistoryDrawer";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { isMine, useCalls } from "@/stores/calls";
+import { useT } from "@/hooks/useT";
 
 export const CallsPage = ({ sid }: { sid: string }) => {
   const calls = useCalls((s) => s.calls);
   const [, force] = useState(0);
+  const t = useT();
 
   useEffect(() => {
-    const t = setInterval(() => force((n) => n + 1), 1000);
-    return () => clearInterval(t);
+    const timer = setInterval(() => force((n) => n + 1), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   const sessionCalls = calls.filter(
@@ -26,8 +28,8 @@ export const CallsPage = ({ sid }: { sid: string }) => {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-sm font-medium text-muted-foreground">
-          <span className="font-mono">{mine.length}</span> active call
-          {mine.length === 1 ? "" : "s"}
+          <span className="font-mono">{mine.length}</span>{" "}
+          {t.calls.activeLabel(mine.length)}
         </h2>
         <HistoryDrawer sid={sid} />
       </div>
@@ -41,8 +43,8 @@ export const CallsPage = ({ sid }: { sid: string }) => {
       ) : (
         <EmptyState
           icon={<PhoneCall className="h-6 w-6" />}
-          title="No active calls"
-          description="Dial a number above to start a call."
+          title={t.calls.noCallsTitle}
+          description={t.calls.noCallsDescription}
         />
       )}
       <OtherCallsList calls={others} />
