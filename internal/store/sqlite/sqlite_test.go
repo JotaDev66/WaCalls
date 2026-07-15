@@ -30,6 +30,62 @@ func TestOpenConcurrencyConfig(t *testing.T) {
 	}
 }
 
+func TestAuthStore(t *testing.T) {
+	ctx := context.Background()
+	b, err := Open(ctx, filepath.Join(t.TempDir(), "auth.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = b.Close() }()
+	a := b.Auth
+
+	if _, ok, _ := a.GetAdmin(ctx); ok {
+		t.Fatal("no admin expected initially")
+	}
+	if err := a.CreateAdmin(ctx, "root", "hash1"); err != nil {
+		t.Fatal(err)
+	}
+	cred, ok, err := a.GetAdmin(ctx)
+	if err != nil || !ok || cred.Username != "root" || cred.PasswordHash != "hash1" {
+		t.Fatalf("get admin: %+v ok=%v err=%v", cred, ok, err)
+	}
+	if err := a.SetAdminPassword(ctx, "hash2"); err != nil {
+		t.Fatal(err)
+	}
+	if cred, _, _ := a.GetAdmin(ctx); cred.PasswordHash != "hash2" {
+		t.Fatalf("password not updated: %q", cred.PasswordHash)
+	}
+
+	if err := a.CreateSession(ctx, "tokA", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.CreateSession(ctx, "tokB", 1000); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := a.SessionValid(ctx, "tokA", 999); !ok {
+		t.Fatal("tokA should be valid at now<exp")
+	}
+	if ok, _ := a.SessionValid(ctx, "tokA", 1000); ok {
+		t.Fatal("tokA should be invalid at now==exp")
+	}
+	if err := a.DeleteSessionsExcept(ctx, "tokA"); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := a.SessionValid(ctx, "tokB", 999); ok {
+		t.Fatal("tokB should be gone")
+	}
+	if ok, _ := a.SessionValid(ctx, "tokA", 999); !ok {
+		t.Fatal("tokA should remain")
+	}
+	_ = a.CreateSession(ctx, "old", 10)
+	if err := a.PurgeExpiredSessions(ctx, 999); err != nil {
+		t.Fatal(err)
+	}
+	if ok, _ := a.SessionValid(ctx, "old", 5); ok {
+		t.Fatal("expired purged even against past now")
+	}
+}
+
 func TestContactPhotoStore(t *testing.T) {
 	b, err := Open(context.Background(), filepath.Join(t.TempDir(), "photos.db"))
 	if err != nil {
