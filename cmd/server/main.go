@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"wacalls/internal/app"
+	"wacalls/internal/app/config"
 	"wacalls/internal/telemetry"
 )
 
@@ -31,7 +32,7 @@ func main() {
 		return
 	}
 
-	cfg := app.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
+	cfg := config.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
 	cfg.Version = version
 
 	if *doctor {

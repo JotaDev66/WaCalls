@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"wacalls/internal/app/config"
 )
 
 func TestCheckUDPPort(t *testing.T) {
@@ -58,13 +60,13 @@ func TestCheckPublicIP(t *testing.T) {
 
 func TestCheckDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "doctor.db")
-	if got := checkDatabase(context.Background(), storeConfigFor(Config{DBPath: path})); got.status != statusOK {
+	if got := checkDatabase(context.Background(), storeConfigFor(config.Config{DBPath: path})); got.status != statusOK {
 		t.Fatalf("temp sqlite: want ok, got %v (%s)", got.status, got.detail)
 	}
 }
 
 func TestDoctorReport(t *testing.T) {
-	cfg := Config{
+	cfg := config.Config{
 		DBPath:        filepath.Join(t.TempDir(), "doctor.db"),
 		WebRTCUDPPort: 0,
 		PublicIPs:     []string{"1.2.3.4"},

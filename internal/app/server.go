@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/config"
 	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
@@ -63,8 +64,8 @@ func parseOrigins(raw string) map[string]struct{} {
 	return set
 }
 
-func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
-	if err := validateConfig(cfg); err != nil {
+func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	if err := config.Validate(cfg); err != nil {
 		return nil, err
 	}
 	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})

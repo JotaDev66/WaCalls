@@ -1,4 +1,4 @@
-package app
+package config
 
 import (
 	"errors"
@@ -48,7 +48,7 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 	}
 }
 
-func validateConfig(cfg Config) error {
+func Validate(cfg Config) error {
 	if cfg.WebhookURL != "" && cfg.WebhookSecret == "" {
 		return errors.New("WACALLS_WEBHOOK_URL requires WACALLS_WEBHOOK_SECRET")
 	}
