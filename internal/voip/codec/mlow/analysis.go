@@ -53,6 +53,7 @@ type SmplEncoderState struct {
 	hpPitchHist []float32
 	ltpBuf      []float32
 	pitchEst    PitchEstState
+	lpcFFT      *fftScratch
 }
 
 func unvoicedPitch() SmplPitchSynth { return SmplPitchSynth{} }
@@ -197,7 +198,10 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 		var lpcbuf [SmplLPCBufLen]float32
 		copy(lpcbuf[:], hpFull[lpcStart:lpcStart+SmplLPCBufLen])
 		windowed := smplWindowLPC20(&lpcbuf, f < 2)
-		a, f2 := smplLPCAnalyzeWithF2(&windowed)
+		if es.lpcFFT == nil {
+			es.lpcFFT = newLPCFFTScratch()
+		}
+		a, f2 := smplLPCAnalyzeWithF2(&windowed, es.lpcFFT)
 		nlsf := smplA2NLSF16(a[:])
 
 		cs := celpFrameCtx{
