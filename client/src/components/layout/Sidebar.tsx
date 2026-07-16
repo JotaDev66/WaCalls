@@ -77,7 +77,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                 e.stopPropagation();
                 setToDelete(s);
               }}
-              className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              className="text-muted-foreground/60 transition-colors hover:text-destructive"
               aria-label={t.sessions.deleteAria(s.name)}
             >
               <Trash2 className="h-4 w-4" />
