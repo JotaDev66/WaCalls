@@ -113,9 +113,9 @@ services:
 
 On Swarm the media container sits behind the overlay network. WaCalls handles the
 multi-interface case automatically (see WebRTC networking below), so no extra
-config is needed beyond `WACALLS_PUBLIC_IP` and the `host`-mode UDP port. Setting
-`"userland-proxy": false` in `/etc/docker/daemon.json` is recommended so inbound
-UDP preserves the real client IP.
+config is needed beyond `WACALLS_PUBLIC_IP` and the `host`-mode UDP port.
+Host-mode publishing already forwards inbound UDP with iptables DNAT that
+preserves the real client IP, so no Docker daemon changes are required.
 
 ## WebRTC networking
 

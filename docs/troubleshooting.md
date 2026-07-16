@@ -26,8 +26,6 @@ still see this:
 - Confirm inbound UDP on that port is open in every firewall, including any cloud
   firewall in front of the host. Verify packets arrive:
   `tcpdump -i any -n udp port 7881`.
-- On Swarm, set `"userland-proxy": false` in `/etc/docker/daemon.json` and restart
-  Docker, so the inbound DNAT preserves the client source IP.
 
 ## Audio only flows one way
 
