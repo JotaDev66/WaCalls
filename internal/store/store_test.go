@@ -73,6 +73,14 @@ func TestSessionStoreContract(t *testing.T) {
 				t.Fatalf("jid not persisted: %+v", rows[0])
 			}
 
+			if err := st.UpdateName(ctx, "b", "Sales"); err != nil {
+				t.Fatal(err)
+			}
+			rows, _ = st.List(ctx)
+			if rows[1].Name != "Sales" {
+				t.Fatalf("name not persisted: %+v", rows[1])
+			}
+
 			if err := st.Delete(ctx, "a"); err != nil {
 				t.Fatal(err)
 			}

@@ -104,6 +104,29 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
         "429": { $ref: "#/components/responses/RateLimited" }
+    patch:
+      operationId: renameSession
+      summary: Rename an account
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: New display name
+      responses:
+        "204":
+          description: Session renamed
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/sessions/{sid}/logout:
     post:
       operationId: logoutSession

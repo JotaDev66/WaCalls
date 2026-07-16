@@ -204,6 +204,20 @@ func (m *Manager) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+func (m *Manager) Rename(ctx context.Context, id, name string) error {
+	s, ok := m.Get(id)
+	if !ok {
+		return fmt.Errorf("no session %s", id)
+	}
+	if err := m.store.UpdateName(ctx, id, name); err != nil {
+		return err
+	}
+	s.rename(name)
+	m.broker.EmitSessionList(m.Infos())
+	m.log.Info("session renamed", "session", id, "name", name)
+	return nil
+}
+
 func (m *Manager) Logout(ctx context.Context, id string) error {
 	s, ok := m.Get(id)
 	if !ok {
