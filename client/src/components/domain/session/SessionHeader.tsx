@@ -17,11 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
-import {
-  deleteSession,
-  logoutSession,
-  pairSession,
-} from "@/services/sessions";
+import { deleteSession, logoutSession, pairSession } from "@/services/sessions";
 import { openRenameSession } from "@/stores/session-name-dialog";
 import { useNav } from "@/stores/nav";
 import { sessionStateTone, sessionStatePulse } from "@/lib/status";
