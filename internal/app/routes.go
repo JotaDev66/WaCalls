@@ -7,6 +7,7 @@ import (
 	"net/http/pprof"
 	"os"
 
+	"wacalls/internal/app/session"
 	"wacalls/internal/app/webui"
 )
 
@@ -140,7 +141,7 @@ func clientID(r *http.Request) string {
 	return r.URL.Query().Get("clientId")
 }
 
-func (s *Server) sessionByID(w http.ResponseWriter, sid string) *Session {
+func (s *Server) sessionByID(w http.ResponseWriter, sid string) *session.Session {
 	sess, ok := s.sessions.Get(sid)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such session"})

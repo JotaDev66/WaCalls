@@ -1,4 +1,4 @@
-package app
+package session
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	waLog "go.mau.fi/whatsmeow/util/log"
 )
 
-func newTestManager(t *testing.T) *SessionManager {
+func newTestManager(t *testing.T) *Manager {
 	t.Helper()
 	ctx := context.Background()
 	dbPath := filepath.Join(t.TempDir(), "mgr_test.db")
@@ -35,7 +35,7 @@ func TestNewSessionID(t *testing.T) {
 	}
 }
 
-func (m *SessionManager) addUnconnected(t *testing.T, name string) *Session {
+func (m *Manager) addUnconnected(t *testing.T, name string) *Session {
 	t.Helper()
 	id := newSessionID()
 	if err := m.store.Insert(m.appCtx, id, name); err != nil {
@@ -45,7 +45,7 @@ func (m *SessionManager) addUnconnected(t *testing.T, name string) *Session {
 	return m.NewSession(id, name, client)
 }
 
-func TestSessionManagerRegistry(t *testing.T) {
+func TestManagerRegistry(t *testing.T) {
 	m := newTestManager(t)
 
 	if len(m.Infos()) != 0 {

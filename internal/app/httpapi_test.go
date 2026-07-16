@@ -6,13 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"wacalls/internal/app/session"
+
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
 )
 
-func startCallSession(jid *types.JID) *Session {
-	mgr := NewManager(Deps{Log: slog.Default()})
+func startCallSession(jid *types.JID) *session.Session {
+	mgr := session.NewManager(session.Deps{Log: slog.Default()})
 	return mgr.NewSession("s1", "", &whatsmeow.Client{Store: &store.Device{ID: jid}})
 }
 

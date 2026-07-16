@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
 )
@@ -42,7 +43,7 @@ func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doStartCall(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	if !sess.IsPaired() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
 		return
@@ -65,7 +66,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		return
 	}
 	st, err := sess.StartCall(r.Context(), phone)
-	if errors.Is(err, ErrTooManyCalls) {
+	if errors.Is(err, session.ErrTooManyCalls) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}
@@ -82,7 +83,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": st.CallID}})
 }
 
-func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doWebRTC(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	callID := r.PathValue("id")
 	if !sess.HasCall(callID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
@@ -103,7 +104,7 @@ func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"sdp_answer": answer})
 }
 
-func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doAccept(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if !sess.HasCall(id) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
@@ -147,7 +148,7 @@ func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"call": rec})
 }
 
-func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doReject(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var invalid *call.InvalidTransition
 	if err := sess.RejectCall(r.Context(), id); errors.As(err, &invalid) {
@@ -158,7 +159,7 @@ func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
+func (s *Server) doEndCall(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_ = sess.EndCall(r.Context(), id)
 	s.broker.EndCall(id, string(core.EndCallReasonUserEnded))

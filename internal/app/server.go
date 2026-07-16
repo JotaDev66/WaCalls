@@ -12,6 +12,7 @@ import (
 
 	"wacalls/internal/app/config"
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
@@ -38,7 +39,7 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 
 type Server struct {
 	broker         *events.Broker
-	sessions       *SessionManager
+	sessions       *session.Manager
 	log            *slog.Logger
 	staticDir      string
 	version        string
@@ -101,7 +102,7 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 	}
 
 	broker := events.NewBroker(bundle.Calls, log)
-	mgr := NewManager(Deps{
+	mgr := session.NewManager(session.Deps{
 		Ctx: ctx, Container: bundle.Container, WebRTCAPI: api, Broker: broker,
 		Store: bundle.Sessions, WALogger: waLogger, Log: log, MaxCalls: cfg.MaxCalls,
 		NewObserver: obsFactory, Tracer: tracer, Photos: bundle.Photos,

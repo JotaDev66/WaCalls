@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store"
@@ -14,7 +15,7 @@ import (
 
 func callServerWithEmptySession(id string) *Server {
 	b := events.NewBroker(nil, slog.Default())
-	mgr := NewManager(Deps{Broker: b, Log: slog.Default()})
+	mgr := session.NewManager(session.Deps{Broker: b, Log: slog.Default()})
 	mgr.NewSession(id, "", &whatsmeow.Client{Store: &store.Device{}})
 	return &Server{authorize: bearerAuthorizer(""), broker: b, sessions: mgr}
 }

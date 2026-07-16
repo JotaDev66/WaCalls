@@ -1,4 +1,4 @@
-package app
+package session
 
 import (
 	"context"
@@ -26,7 +26,7 @@ import (
 type Session struct {
 	id   string
 	name string
-	mgr  *SessionManager
+	mgr  *Manager
 	log  *slog.Logger
 
 	client *whatsmeow.Client
@@ -39,7 +39,7 @@ type Session struct {
 	auth events.AuthSnapshot
 }
 
-func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) *Session {
+func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Session {
 	s := &Session{
 		id:      id,
 		name:    name,

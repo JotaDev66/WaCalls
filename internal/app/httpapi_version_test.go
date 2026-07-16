@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 )
 
 func TestVersionEndpoint(t *testing.T) {
@@ -14,7 +15,7 @@ func TestVersionEndpoint(t *testing.T) {
 		version:   "v9.9.9",
 		authorize: bearerAuthorizer("secret"),
 		broker:    events.NewBroker(nil, slog.Default()),
-		sessions:  NewManager(Deps{}),
+		sessions:  session.NewManager(session.Deps{}),
 	}
 
 	req := httptest.NewRequest("GET", "/api/version", nil)

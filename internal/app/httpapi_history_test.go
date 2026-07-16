@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 	"wacalls/internal/store"
 	"wacalls/internal/voip/core"
 
@@ -26,7 +27,7 @@ func historyServer(t *testing.T) (*Server, core.CallRecordStore) {
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
 	b := events.NewBroker(bundle.Calls, slog.Default())
-	mgr := NewManager(Deps{Broker: b, Log: slog.Default()})
+	mgr := session.NewManager(session.Deps{Broker: b, Log: slog.Default()})
 	mgr.NewSession("s1", "", &whatsmeow.Client{Store: &wastore.Device{}})
 	s := &Server{
 		authorize: bearerAuthorizer(""),
