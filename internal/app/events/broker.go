@@ -1,6 +1,11 @@
-package app
+// Package events is the worker->front seam: the SSE broker that fans call and
+// session events out to connected operator browsers, the live call registry it
+// tracks, and the outbound webhook dispatcher. It depends only on voip/core;
+// the session worker and the httpapi front both import it.
+package events
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -54,6 +59,17 @@ func NewBroker(records core.CallRecordStore, log *slog.Logger) *Broker {
 	}
 }
 
+// EnableWebhooks starts an outbound webhook dispatcher for the given URL, if non-empty,
+// and reports whether delivery was enabled. The dispatcher runs until ctx is cancelled.
+func (b *Broker) EnableWebhooks(ctx context.Context, url, secret string) bool {
+	if url == "" {
+		return false
+	}
+	b.webhooks = newWebhookDispatcher(url, secret, b.log)
+	go b.webhooks.run(ctx)
+	return true
+}
+
 func (b *Broker) subscribe(clientID string) *subscriber {
 	s := &subscriber{clientID: clientID, ch: make(chan []byte, 32), kick: make(chan struct{})}
 	b.mu.Lock()
@@ -88,22 +104,22 @@ func (b *Broker) broadcast(ev any) {
 	}
 }
 
-func (b *Broker) emitAuthState(sessionID string, a AuthSnapshot) {
+func (b *Broker) EmitAuthState(sessionID string, a AuthSnapshot) {
 	b.broadcast(map[string]any{
 		"type": "auth-state", "sessionId": sessionID,
 		"paired": a.Paired, "state": a.State, "qr": a.QR,
 	})
 }
 
-func (b *Broker) emitSessionList(sessions []SessionInfo) {
+func (b *Broker) EmitSessionList(sessions []SessionInfo) {
 	b.broadcast(map[string]any{"type": "session-list", "sessions": sessions})
 }
 
-func (b *Broker) emitSessionQR(sessionID, qr string) {
+func (b *Broker) EmitSessionQR(sessionID, qr string) {
 	b.broadcast(map[string]any{"type": "session-qr", "sessionId": sessionID, "qr": qr})
 }
 
-func (b *Broker) emitIncoming(sessionID, id, peer, peerName, peerPhotoURL string) {
+func (b *Broker) EmitIncoming(sessionID, id, peer, peerName, peerPhotoURL string) {
 	b.broadcast(map[string]any{
 		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer,
 		"peerName": peerName, "peerPhotoUrl": peerPhotoURL,
@@ -111,31 +127,31 @@ func (b *Broker) emitIncoming(sessionID, id, peer, peerName, peerPhotoURL string
 	})
 }
 
-func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
+func (b *Broker) EmitIncomingClaimed(sessionID, id, owner string) {
 	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
 }
 
-// emitCallQuality broadcasts a live per-call reception-quality sample (RTT, jitter, loss) derived
+// EmitCallQuality broadcasts a live per-call reception-quality sample (RTT, jitter, loss) derived
 // from inbound RTCP. It is a transient live-only signal: it never touches CallRecord, persistence,
 // or webhooks, so the client's call card can render it without polluting the history contract.
-func (b *Broker) emitCallQuality(sessionID, callID string, q core.CallQuality) {
+func (b *Broker) EmitCallQuality(sessionID, callID string, q core.CallQuality) {
 	b.broadcast(map[string]any{
 		"type": "call-quality", "sessionId": sessionID, "id": callID,
 		"rttMs": q.RttMs, "jitterMs": q.JitterMs, "lossFraction": q.LossFraction, "hasRtt": q.HasRtt,
 	})
 }
 
-// emitCallMark broadcasts a connection-setup phase mark (STUN/ICE/DTLS/SCTP/first-packet) with its
+// EmitCallMark broadcasts a connection-setup phase mark (STUN/ICE/DTLS/SCTP/first-packet) with its
 // elapsed time since call start. Like call-quality it is a transient live-only signal, never
 // persisted, feeding the client's connection timeline.
-func (b *Broker) emitCallMark(sessionID, callID, mark string, elapsedMs int64) {
+func (b *Broker) EmitCallMark(sessionID, callID, mark string, elapsedMs int64) {
 	b.broadcast(map[string]any{
 		"type": "call-mark", "sessionId": sessionID, "id": callID,
 		"mark": mark, "elapsedMs": elapsedMs,
 	})
 }
 
-func (b *Broker) serveSSE(w http.ResponseWriter, r *http.Request, clientID string) {
+func (b *Broker) ServeSSE(w http.ResponseWriter, r *http.Request, clientID string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)

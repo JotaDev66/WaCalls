@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/voip/core"
 )
 
@@ -70,7 +71,7 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid cursor"})
 		return
 	}
-	rows, next, err := s.broker.historyRows(r.Context(), sess.id, limit, before)
+	rows, next, err := s.broker.HistoryRows(r.Context(), sess.id, limit, before)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -88,7 +89,7 @@ func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	rows, next, err := s.broker.historyRows(r.Context(), sess.id, historyExportPageSize, core.HistoryCursor{})
+	rows, next, err := s.broker.HistoryRows(r.Context(), sess.id, historyExportPageSize, core.HistoryCursor{})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -104,7 +105,7 @@ func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
 		if next == (core.HistoryCursor{}) {
 			break
 		}
-		rows, next, err = s.broker.historyRows(r.Context(), sess.id, historyExportPageSize, next)
+		rows, next, err = s.broker.HistoryRows(r.Context(), sess.id, historyExportPageSize, next)
 		if err != nil {
 			s.log.Error("history export aborted", "session_id", sess.id, "err", err)
 			break
@@ -113,7 +114,7 @@ func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
 	cw.Flush()
 }
 
-func historyCSVRow(r *CallRecord) []string {
+func historyCSVRow(r *events.CallRecord) []string {
 	owner := ""
 	if r.Owner != nil {
 		owner = *r.Owner

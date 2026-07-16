@@ -1,4 +1,4 @@
-package app
+package events
 
 import (
 	"context"
@@ -17,52 +17,52 @@ func ownerPtr(s string) *string { return &s }
 
 func TestOwnerActiveCall(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Owner: ownerPtr("op-A"), Status: StatusConnected})
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c2", Owner: ownerPtr("op-B"), Status: StatusRinging})
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c1", Owner: ownerPtr("op-A"), Status: StatusConnected})
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c2", Owner: ownerPtr("op-B"), Status: StatusRinging})
 
-	if got := b.ownerActiveCall("op-A"); got != "c1" {
+	if got := b.OwnerActiveCall("op-A"); got != "c1" {
 		t.Fatalf("op-A should own c1, got %q", got)
 	}
-	if got := b.ownerActiveCall("op-C"); got != "" {
+	if got := b.OwnerActiveCall("op-C"); got != "" {
 		t.Fatalf("op-C owns nothing, got %q", got)
 	}
-	if got := b.ownerActiveCall(""); got != "" {
+	if got := b.OwnerActiveCall(""); got != "" {
 		t.Fatalf("empty owner must return empty, got %q", got)
 	}
 
-	b.endCall("c1", "done")
-	if got := b.ownerActiveCall("op-A"); got != "" {
+	b.EndCall("c1", "done")
+	if got := b.OwnerActiveCall("op-A"); got != "" {
 		t.Fatalf("op-A's call ended, expected empty, got %q", got)
 	}
 }
 
 func TestSetOwnerEmptyIsNoClaim(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
-	if !b.setOwner("c1", "") {
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+	if !b.SetOwner("c1", "") {
 		t.Fatal("empty owner accept must proceed")
 	}
-	c, _ := b.getCall("c1")
+	c, _ := b.GetCall("c1")
 	if c.Owner != nil {
 		t.Fatalf("empty owner must not claim, got %q", *c.Owner)
 	}
-	if !b.setOwner("c1", "op-A") {
+	if !b.SetOwner("c1", "op-A") {
 		t.Fatal("real claim after anonymous accept must succeed")
 	}
-	if got := b.ownerActiveCall("op-A"); got != "c1" {
+	if got := b.OwnerActiveCall("op-A"); got != "c1" {
 		t.Fatalf("op-A should own c1, got %q", got)
 	}
 }
 
 func TestOwnerRefEmptyIsNil(t *testing.T) {
-	if ownerRef("") != nil {
-		t.Fatal(`ownerRef("") must be nil`)
+	if OwnerRef("") != nil {
+		t.Fatal(`OwnerRef("") must be nil`)
 	}
-	p := ownerRef("op-A")
+	p := OwnerRef("op-A")
 	if p == nil || *p != "op-A" {
 		t.Fatalf("got %v", p)
 	}
-	data, err := json.Marshal(CallRecord{Owner: ownerRef("")})
+	data, err := json.Marshal(CallRecord{Owner: OwnerRef("")})
 	if err != nil || strings.Contains(string(data), `"owner":""`) {
 		t.Fatalf("owner must never serialize as empty string: %s err %v", data, err)
 	}
@@ -102,15 +102,15 @@ func (f *fakeRecordStore) Prune(ctx context.Context, keep int) error { return ni
 func TestEndCallPersistsRecord(t *testing.T) {
 	fake := &fakeRecordStore{}
 	b := NewBroker(fake, slog.Default())
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Direction: "inbound", Peer: "p", StartedAt: 100, Status: StatusConnected})
-	b.endCall("c1", "user_ended")
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c1", Direction: "inbound", Peer: "p", StartedAt: 100, Status: StatusConnected})
+	b.EndCall("c1", "user_ended")
 
 	recs, _ := fake.List(context.Background(), "s1", 10, core.HistoryCursor{})
 	if len(recs) != 1 || recs[0].CallID != "c1" || recs[0].EndReason != "user_ended" || recs[0].EndedAt == 0 {
 		t.Fatalf("ended call must be persisted, got %+v", recs)
 	}
 
-	rows, _, err := b.historyRows(context.Background(), "s1", 10, core.HistoryCursor{})
+	rows, _, err := b.HistoryRows(context.Background(), "s1", 10, core.HistoryCursor{})
 	if err != nil || len(rows) != 1 || rows[0].Status != StatusEnded || rows[0].CallID != "c1" {
 		t.Fatalf("history must read from the store, got %+v err %v", rows, err)
 	}
@@ -137,7 +137,7 @@ func TestEmitCallQuality(t *testing.T) {
 	sub := b.subscribe("q")
 	defer b.unsubscribe(sub)
 
-	b.emitCallQuality("s1", "c1", core.CallQuality{RttMs: 97, JitterMs: 12, LossFraction: 0.02, HasRtt: true})
+	b.EmitCallQuality("s1", "c1", core.CallQuality{RttMs: 97, JitterMs: 12, LossFraction: 0.02, HasRtt: true})
 
 	select {
 	case data := <-sub.ch:
@@ -161,7 +161,7 @@ func TestEmitCallMark(t *testing.T) {
 	sub := b.subscribe("m")
 	defer b.unsubscribe(sub)
 
-	b.emitCallMark("s1", "c1", "transport.ice", 42)
+	b.EmitCallMark("s1", "c1", "transport.ice", 42)
 
 	select {
 	case data := <-sub.ch:
@@ -185,13 +185,13 @@ func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
 	b.SnapshotFn = func() []any {
 		return []any{map[string]any{"type": "session-list", "sessions": []SessionInfo{}}}
 	}
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	r := httptest.NewRequest("GET", "/api/events", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
-	b.serveSSE(rec, r, "test-client")
+	b.ServeSSE(rec, r, "test-client")
 
 	body := rec.Body.String()
 	if !strings.Contains(body, `"session-list"`) {
@@ -204,9 +204,9 @@ func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
 
 func TestNilRecordStoreIsSafe(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
-	b.endCall("c1", "declined")
-	rows, _, err := b.historyRows(context.Background(), "", 10, core.HistoryCursor{})
+	b.UpsertCall(CallRecord{SessionID: "s1", CallID: "c1", Status: StatusRinging})
+	b.EndCall("c1", "declined")
+	rows, _, err := b.HistoryRows(context.Background(), "", 10, core.HistoryCursor{})
 	if err != nil || len(rows) != 0 {
 		t.Fatalf("nil store must yield empty history without error, got %+v err %v", rows, err)
 	}

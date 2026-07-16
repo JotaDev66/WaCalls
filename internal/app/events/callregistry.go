@@ -1,4 +1,4 @@
-package app
+package events
 
 import (
 	"context"
@@ -34,7 +34,14 @@ type CallRecord struct {
 	EndReason    string     `json:"endReason,omitempty"`
 }
 
-func (b *Broker) upsertCall(r CallRecord) {
+func OwnerRef(owner string) *string {
+	if owner == "" {
+		return nil
+	}
+	return &owner
+}
+
+func (b *Broker) UpsertCall(r CallRecord) {
 	b.mu.Lock()
 	var prev CallStatus
 	if old, ok := b.calls[r.CallID]; ok {
@@ -59,16 +66,16 @@ func (b *Broker) upsertCall(r CallRecord) {
 	})
 }
 
-func (b *Broker) setCallPhoto(callID, url string) {
-	rec, ok := b.getCall(callID)
+func (b *Broker) SetCallPhoto(callID, url string) {
+	rec, ok := b.GetCall(callID)
 	if !ok || url == "" || rec.PeerPhotoURL == url {
 		return
 	}
 	rec.PeerPhotoURL = url
-	b.upsertCall(*rec)
+	b.UpsertCall(*rec)
 }
 
-func (b *Broker) getCall(id string) (*CallRecord, bool) {
+func (b *Broker) GetCall(id string) (*CallRecord, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	c, ok := b.calls[id]
@@ -79,7 +86,7 @@ func (b *Broker) getCall(id string) (*CallRecord, bool) {
 	return &cp, true
 }
 
-func (b *Broker) setOwner(id, owner string) bool {
+func (b *Broker) SetOwner(id, owner string) bool {
 	if owner == "" {
 		return true
 	}
@@ -96,7 +103,7 @@ func (b *Broker) setOwner(id, owner string) bool {
 	return true
 }
 
-func (b *Broker) ownerActiveCall(owner string) string {
+func (b *Broker) OwnerActiveCall(owner string) string {
 	if owner == "" {
 		return ""
 	}
@@ -110,7 +117,7 @@ func (b *Broker) ownerActiveCall(owner string) string {
 	return ""
 }
 
-func (b *Broker) endCall(id, reason string) {
+func (b *Broker) EndCall(id, reason string) {
 	b.mu.Lock()
 	c, ok := b.calls[id]
 	if !ok {
@@ -169,7 +176,7 @@ func (b *Broker) callList() []CallRecord {
 	return list
 }
 
-func (b *Broker) sessionCalls(sid string) []CallRecord {
+func (b *Broker) SessionCalls(sid string) []CallRecord {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	list := []CallRecord{}
@@ -191,7 +198,7 @@ func (b *Broker) broadcastCallList() {
 	b.broadcast(map[string]any{"type": "call-list", "calls": b.callList()})
 }
 
-func (b *Broker) historyRows(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]CallRecord, core.HistoryCursor, error) {
+func (b *Broker) HistoryRows(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]CallRecord, core.HistoryCursor, error) {
 	if b.records == nil {
 		return []CallRecord{}, core.HistoryCursor{}, nil
 	}

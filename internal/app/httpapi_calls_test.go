@@ -5,13 +5,15 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"testing"
+
+	"wacalls/internal/app/events"
 )
 
 func callsServer() *Server {
-	b := NewBroker(nil, slog.Default())
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c-late", Direction: "outbound", Peer: "p1", StartedAt: 200, Status: StatusRinging})
-	b.upsertCall(CallRecord{SessionID: "s1", CallID: "c-early", Direction: "inbound", Peer: "p2", StartedAt: 100, Status: StatusConnected})
-	b.upsertCall(CallRecord{SessionID: "s2", CallID: "c-other", Direction: "inbound", Peer: "p3", StartedAt: 50, Status: StatusRinging})
+	b := events.NewBroker(nil, slog.Default())
+	b.UpsertCall(events.CallRecord{SessionID: "s1", CallID: "c-late", Direction: "outbound", Peer: "p1", StartedAt: 200, Status: events.StatusRinging})
+	b.UpsertCall(events.CallRecord{SessionID: "s1", CallID: "c-early", Direction: "inbound", Peer: "p2", StartedAt: 100, Status: events.StatusConnected})
+	b.UpsertCall(events.CallRecord{SessionID: "s2", CallID: "c-other", Direction: "inbound", Peer: "p3", StartedAt: 50, Status: events.StatusRinging})
 	return &Server{
 		authorize: bearerAuthorizer(""),
 		broker:    b,
@@ -30,7 +32,7 @@ func TestCallListScopedAndSorted(t *testing.T) {
 		t.Fatalf("want 200, got %d %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		Calls []CallRecord `json:"calls"`
+		Calls []events.CallRecord `json:"calls"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -42,8 +44,8 @@ func TestCallListScopedAndSorted(t *testing.T) {
 
 func TestCallListEmptyIsJSONArray(t *testing.T) {
 	s := callsServer()
-	s.broker.endCall("c-late", "declined")
-	s.broker.endCall("c-early", "declined")
+	s.broker.EndCall("c-late", "declined")
+	s.broker.EndCall("c-early", "declined")
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/calls", nil))
 	if rec.Code != 200 || rec.Body.String() != "{\"calls\":[]}\n" {
@@ -69,12 +71,12 @@ func TestCallGetByID(t *testing.T) {
 		t.Fatalf("want 200, got %d %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		Call CallRecord `json:"call"`
+		Call events.CallRecord `json:"call"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if body.Call.CallID != "c-early" || body.Call.Status != StatusConnected {
+	if body.Call.CallID != "c-early" || body.Call.Status != events.StatusConnected {
 		t.Fatalf("unexpected call payload: %+v", body.Call)
 	}
 

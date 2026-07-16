@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
@@ -20,7 +21,7 @@ import (
 type SessionManager struct {
 	appCtx      context.Context
 	container   *sqlstore.Container
-	broker      *Broker
+	broker      *events.Broker
 	store       core.SessionStore
 	waLogger    waLog.Logger
 	log         *slog.Logger
@@ -40,7 +41,7 @@ func newSessionID() string {
 	return hex.EncodeToString(b)
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
+func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *events.Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
 	if newObserver == nil {
 		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}
@@ -88,7 +89,7 @@ func (m *SessionManager) Get(id string) (*Session, bool) {
 	return s, ok
 }
 
-func (m *SessionManager) infos() []SessionInfo {
+func (m *SessionManager) infos() []events.SessionInfo {
 	m.mu.RLock()
 	ordered := make([]*Session, 0, len(m.order))
 	for _, id := range m.order {
@@ -97,7 +98,7 @@ func (m *SessionManager) infos() []SessionInfo {
 		}
 	}
 	m.mu.RUnlock()
-	out := make([]SessionInfo, 0, len(ordered))
+	out := make([]events.SessionInfo, 0, len(ordered))
 	for _, s := range ordered {
 		out = append(out, s.info())
 	}
@@ -137,7 +138,7 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 			m.log.Error("session connect failed", "session", row.ID, "err", err)
 		}
 	}
-	m.broker.emitSessionList(m.infos())
+	m.broker.EmitSessionList(m.infos())
 	m.log.Info("sessions restored", "count", len(m.infos()))
 	return nil
 }
@@ -151,7 +152,7 @@ func (m *SessionManager) Create(name string) (string, error) {
 	client := whatsmeow.NewClient(device, m.waLogger)
 	s := newSession(m, id, name, client)
 	m.register(s)
-	m.broker.emitSessionList(m.infos())
+	m.broker.EmitSessionList(m.infos())
 	if err := s.startPairing(m.appCtx); err != nil {
 		m.log.Error("start pairing failed", "session", id, "err", err)
 		return "", fmt.Errorf("start pairing: %w", err)
@@ -177,7 +178,7 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 	s.teardownAllCalls()
 	m.unregister(id)
 	_ = m.store.Delete(ctx, id)
-	m.broker.emitSessionList(m.infos())
+	m.broker.EmitSessionList(m.infos())
 	m.log.Info("session deleted", "session", id)
 	return nil
 }
@@ -194,7 +195,7 @@ func (m *SessionManager) Logout(ctx context.Context, id string) error {
 	}
 	s.replaceClient(whatsmeow.NewClient(m.container.NewDevice(), m.waLogger))
 	_ = m.store.SetJID(ctx, id, "")
-	s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
+	s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
 	m.log.Info("session disconnected", "session", id)
 	return nil
 }
@@ -211,7 +212,7 @@ func (m *SessionManager) Pair(id string) error {
 	if err := s.startPairing(m.appCtx); err != nil {
 		return fmt.Errorf("start pairing: %w", err)
 	}
-	m.broker.emitSessionList(m.infos())
+	m.broker.EmitSessionList(m.infos())
 	m.log.Info("session re-pairing", "session", id)
 	return nil
 }

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
@@ -214,7 +215,7 @@ func TestContactListWithPhoto(t *testing.T) {
 }
 
 func TestEnrichPeers(t *testing.T) {
-	rows := []CallRecord{{Peer: "5511@s.whatsapp.net"}, {Peer: "9999@s.whatsapp.net"}}
+	rows := []events.CallRecord{{Peer: "5511@s.whatsapp.net"}, {Peer: "9999@s.whatsapp.net"}}
 	names := map[string]string{"5511@s.whatsapp.net": "Alice"}
 	photos := map[string]core.ContactPhoto{"5511@s.whatsapp.net": {URL: "u1"}}
 	enrichPeers(rows, names, photos)

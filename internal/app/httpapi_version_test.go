@@ -5,13 +5,15 @@ import (
 	"log/slog"
 	"net/http/httptest"
 	"testing"
+
+	"wacalls/internal/app/events"
 )
 
 func TestVersionEndpoint(t *testing.T) {
 	s := &Server{
 		version:   "v9.9.9",
 		authorize: bearerAuthorizer("secret"),
-		broker:    NewBroker(nil, slog.Default()),
+		broker:    events.NewBroker(nil, slog.Default()),
 		sessions:  &SessionManager{sessions: map[string]*Session{}},
 	}
 

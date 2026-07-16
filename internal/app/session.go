@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/codec/mlow"
@@ -19,7 +20,7 @@ import (
 	"github.com/mdp/qrterminal/v3"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
+	waevents "go.mau.fi/whatsmeow/types/events"
 )
 
 type Session struct {
@@ -35,7 +36,7 @@ type Session struct {
 	bridges  map[string]*Bridge
 
 	mu   sync.Mutex
-	auth AuthSnapshot
+	auth events.AuthSnapshot
 }
 
 func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) *Session {
@@ -45,7 +46,7 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 		mgr:     mgr,
 		log:     mgr.log.With("session", id),
 		client:  client,
-		auth:    AuthSnapshot{State: "connecting"},
+		auth:    events.AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
 	}
 	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, mgr.newObserver)
@@ -70,12 +71,12 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		peer := pj.String()
 		peerName := resolvePeerName(context.Background(), s.client, pj)
 		photoURL := cachedPhotoURL(context.Background(), s.mgr.photos, s.id, peer)
-		s.mgr.broker.upsertCall(CallRecord{
+		s.mgr.broker.UpsertCall(events.CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: peer,
 			PeerName: peerName, PeerPhotoURL: photoURL,
-			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
+			StartedAt: time.Now().UnixMilli(), Status: events.StatusRinging,
 		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, peer, peerName, photoURL)
+		s.mgr.broker.EmitIncoming(s.id, c.CallID, peer, peerName, photoURL)
 		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound"})
 		go s.fetchPeerPhoto(pj, c.CallID)
 	}
@@ -83,21 +84,21 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		if c.IsEnded() {
 			s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 			s.removeCall(c.CallID)
-			s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
+			s.mgr.broker.EndCall(c.CallID, string(c.StateData.EndReason))
 			return
 		}
 		dir := "outbound"
 		if c.Direction == core.CallDirectionIncoming {
 			dir = "inbound"
 		}
-		existing, _ := s.mgr.broker.getCall(c.CallID)
+		existing, _ := s.mgr.broker.GetCall(c.CallID)
 		if existing == nil {
 			s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: dir})
 		}
-		if mapStatus(c.StateData.State) == StatusConnected && c.StateData.ConnectedAt != nil {
+		if mapStatus(c.StateData.State) == events.StatusConnected && c.StateData.ConnectedAt != nil {
 			s.mgr.tracer.MarkActive(c.CallID, c.StateData.ConnectedAt.Sub(c.CreatedAt))
 		}
-		rec := CallRecord{
+		rec := events.CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: dir, Peer: c.PeerJid,
 			StartedAt: time.Now().UnixMilli(), Status: mapStatus(c.StateData.State),
 		}
@@ -108,12 +109,12 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			rec.PeerName = existing.PeerName
 			rec.PeerPhotoURL = existing.PeerPhotoURL
 		}
-		s.mgr.broker.upsertCall(rec)
+		s.mgr.broker.UpsertCall(rec)
 	}
 	cm.OnEnded = func(c *call.CallInfo) {
 		s.mgr.tracer.EndCall(c.CallID, endResult(c), string(c.StateData.EndReason), endDuration(c))
 		s.removeCall(c.CallID)
-		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
+		s.mgr.broker.EndCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
 		if b := s.getBridge(callID); b != nil {
@@ -121,10 +122,10 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		}
 	}
 	cm.OnQuality = func(callID string, q core.CallQuality) {
-		s.mgr.broker.emitCallQuality(s.id, callID, q)
+		s.mgr.broker.EmitCallQuality(s.id, callID, q)
 	}
 	cm.OnMark = func(callID string, mark string, elapsedMs int64) {
-		s.mgr.broker.emitCallMark(s.id, callID, mark, elapsedMs)
+		s.mgr.broker.EmitCallMark(s.id, callID, mark, elapsedMs)
 	}
 }
 
@@ -143,24 +144,24 @@ func (s *Session) callCount() int {
 func (s *Session) handleEvent(rawEvt any) {
 	ctx := context.Background()
 	switch evt := rawEvt.(type) {
-	case *events.Connected:
+	case *waevents.Connected:
 		if id := s.client.Store.ID; id != nil {
 			_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 		}
-		s.setAuth(AuthSnapshot{State: "open", Paired: true})
-	case *events.LoggedOut:
-		s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
-	case *events.CallOffer:
+		s.setAuth(events.AuthSnapshot{State: "open", Paired: true})
+	case *waevents.LoggedOut:
+		s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
+	case *waevents.CallOffer:
 		s.calls.HandleOffer(ctx, wrapCall(evt.From, evt.Data), evt.From)
-	case *events.CallAccept:
+	case *waevents.CallAccept:
 		s.calls.HandleAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
-	case *events.CallTransport:
+	case *waevents.CallTransport:
 		s.calls.HandleTransport(ctx, wrapCall(evt.From, evt.Data), evt.From)
-	case *events.CallRelayLatency:
+	case *waevents.CallRelayLatency:
 		s.calls.HandleRelayLatency(ctx, wrapCall(evt.From, evt.Data), evt.From)
-	case *events.CallTerminate:
+	case *waevents.CallTerminate:
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
-	case *events.CallReject:
+	case *waevents.CallReject:
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	}
 }
@@ -186,30 +187,30 @@ func (s *Session) startPairing(ctx context.Context) error {
 			case "code":
 				s.log.Info("scan the QR code to pair this session")
 				qrterminal.GenerateHalfBlock(evt.Code, qrterminal.L, os.Stdout)
-				s.setAuth(AuthSnapshot{State: "qr", QR: evt.Code})
-				s.mgr.broker.emitSessionQR(s.id, evt.Code)
+				s.setAuth(events.AuthSnapshot{State: "qr", QR: evt.Code})
+				s.mgr.broker.EmitSessionQR(s.id, evt.Code)
 			case "success":
 				if id := s.client.Store.ID; id != nil {
 					_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 				}
-				s.setAuth(AuthSnapshot{State: "open", Paired: true})
+				s.setAuth(events.AuthSnapshot{State: "open", Paired: true})
 			case "timeout":
-				s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
+				s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
 			}
 		}
 	}()
 	return nil
 }
 
-func (s *Session) setAuth(a AuthSnapshot) {
+func (s *Session) setAuth(a events.AuthSnapshot) {
 	s.mu.Lock()
 	s.auth = a
 	s.mu.Unlock()
-	s.mgr.broker.emitAuthState(s.id, a)
-	s.mgr.broker.emitSessionList(s.mgr.infos())
+	s.mgr.broker.EmitAuthState(s.id, a)
+	s.mgr.broker.EmitSessionList(s.mgr.infos())
 }
 
-func (s *Session) info() SessionInfo {
+func (s *Session) info() events.SessionInfo {
 	s.mu.Lock()
 	a := s.auth
 	s.mu.Unlock()
@@ -217,7 +218,7 @@ func (s *Session) info() SessionInfo {
 	if id := s.client.Store.ID; id != nil {
 		jid = id.String()
 	}
-	return SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
+	return events.SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
 }
 
 func (s *Session) getBridge(callID string) *Bridge {
@@ -297,17 +298,17 @@ func endDuration(c *call.CallInfo) time.Duration {
 	return 0
 }
 
-func mapStatus(state core.CallState) CallStatus {
+func mapStatus(state core.CallState) events.CallStatus {
 	switch state {
 	case core.CallStateActive:
-		return StatusConnected
+		return events.StatusConnected
 	case core.CallStateReconnecting:
-		return StatusReconnecting
+		return events.StatusReconnecting
 	case core.CallStateEnded:
-		return StatusEnded
+		return events.StatusEnded
 	case core.CallStateInitiating:
-		return StatusStarting
+		return events.StatusStarting
 	default:
-		return StatusRinging
+		return events.StatusRinging
 	}
 }

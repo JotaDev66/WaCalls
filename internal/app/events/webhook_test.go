@@ -1,4 +1,4 @@
-package app
+package events
 
 import (
 	"encoding/json"
@@ -142,11 +142,11 @@ func TestBrokerWebhookTransitions(t *testing.T) {
 	go b.webhooks.run(t.Context())
 
 	rec := CallRecord{SessionID: "s1", CallID: "c1", Direction: "outbound", Peer: "p", StartedAt: 1, Status: StatusRinging}
-	b.upsertCall(rec)
-	b.upsertCall(rec)
+	b.UpsertCall(rec)
+	b.UpsertCall(rec)
 	rec.Status = StatusConnected
-	b.upsertCall(rec)
-	b.endCall("c1", "user_ended")
+	b.UpsertCall(rec)
+	b.EndCall("c1", "user_ended")
 
 	want := []string{"call.ringing", "call.active", "call.ended"}
 	for i, w := range want {

@@ -150,7 +150,7 @@ func (s *Server) sessionByID(w http.ResponseWriter, sid string) *Session {
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	s.broker.serveSSE(w, r, clientID(r))
+	s.broker.ServeSSE(w, r, clientID(r))
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {

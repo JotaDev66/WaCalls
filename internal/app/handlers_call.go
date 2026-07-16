@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
 
@@ -68,7 +69,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		return
 	}
 	owner := clientID(r)
-	if other := s.broker.ownerActiveCall(owner); other != "" {
+	if other := s.broker.OwnerActiveCall(owner); other != "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
 		return
 	}
@@ -85,10 +86,10 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 	}
 	peerName := resolvePeerName(r.Context(), sess.client, peer)
 	photoURL := cachedPhotoURL(r.Context(), s.photos, sess.id, peer.String())
-	s.broker.upsertCall(CallRecord{
-		SessionID: sess.id, CallID: callID, Owner: ownerRef(owner), Direction: "outbound", Peer: peer.String(),
+	s.broker.UpsertCall(events.CallRecord{
+		SessionID: sess.id, CallID: callID, Owner: events.OwnerRef(owner), Direction: "outbound", Peer: peer.String(),
 		PeerName: peerName, PeerPhotoURL: photoURL,
-		StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
+		StartedAt: time.Now().UnixMilli(), Status: events.StatusRinging,
 	})
 	go sess.fetchPeerPhoto(peer, callID)
 	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
@@ -132,15 +133,15 @@ func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 		return
 	}
 	owner := clientID(r)
-	if other := s.broker.ownerActiveCall(owner); other != "" && other != id {
+	if other := s.broker.OwnerActiveCall(owner); other != "" && other != id {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
 		return
 	}
-	if !s.broker.setOwner(id, owner) {
+	if !s.broker.SetOwner(id, owner) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "claimed by another client"})
 		return
 	}
-	s.broker.emitIncomingClaimed(sess.id, id, owner)
+	s.broker.EmitIncomingClaimed(sess.id, id, owner)
 	if err := cm.AcceptCall(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -153,7 +154,7 @@ func (s *Server) handleCallList(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"calls": s.broker.sessionCalls(sess.id)})
+	writeJSON(w, http.StatusOK, map[string]any{"calls": s.broker.SessionCalls(sess.id)})
 }
 
 func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +162,7 @@ func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	rec, ok := s.broker.getCall(r.PathValue("id"))
+	rec, ok := s.broker.GetCall(r.PathValue("id"))
 	if !ok || rec.SessionID != sess.id {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
@@ -179,7 +180,7 @@ func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request)
 		}
 	}
 	sess.removeCall(id)
-	s.broker.endCall(id, string(core.EndCallReasonDeclined))
+	s.broker.EndCall(id, string(core.EndCallReasonDeclined))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
@@ -189,7 +190,7 @@ func (s *Server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request
 		_ = cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
 	}
 	sess.removeCall(id)
-	s.broker.endCall(id, string(core.EndCallReasonUserEnded))
+	s.broker.EndCall(id, string(core.EndCallReasonUserEnded))
 	w.WriteHeader(http.StatusNoContent)
 }
 
