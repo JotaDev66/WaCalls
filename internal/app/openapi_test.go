@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 
 	"gopkg.in/yaml.v3"
 )
@@ -52,7 +53,7 @@ func TestOpenAPIServedWithoutAuth(t *testing.T) {
 	s := &Server{
 		authorize: bearerAuthorizer("secret"),
 		broker:    events.NewBroker(nil, slog.Default()),
-		sessions:  &SessionManager{sessions: map[string]*Session{}},
+		sessions:  session.NewManager(session.Deps{}),
 	}
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/openapi.yaml", nil))

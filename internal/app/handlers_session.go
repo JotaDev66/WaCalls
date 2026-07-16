@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) handleSessionList(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.sessions.infos()})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": s.sessions.Infos()})
 }
 
 func (s *Server) handleSessionCreate(w http.ResponseWriter, r *http.Request) {

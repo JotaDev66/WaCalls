@@ -11,8 +11,12 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 	"wacalls/internal/store"
 	"wacalls/internal/voip/core"
+
+	"go.mau.fi/whatsmeow"
+	wastore "go.mau.fi/whatsmeow/store"
 )
 
 func historyServer(t *testing.T) (*Server, core.CallRecordStore) {
@@ -22,11 +26,12 @@ func historyServer(t *testing.T) (*Server, core.CallRecordStore) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
-	mgr := &SessionManager{}
-	mgr.sessions = map[string]*Session{"s1": {id: "s1", mgr: mgr}}
+	b := events.NewBroker(bundle.Calls, slog.Default())
+	mgr := session.NewManager(session.Deps{Broker: b, Log: slog.Default()})
+	mgr.NewSession("s1", "", &whatsmeow.Client{Store: &wastore.Device{}})
 	s := &Server{
 		authorize: bearerAuthorizer(""),
-		broker:    events.NewBroker(bundle.Calls, slog.Default()),
+		broker:    b,
 		sessions:  mgr,
 	}
 	return s, bundle.Calls

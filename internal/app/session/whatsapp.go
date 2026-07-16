@@ -1,4 +1,4 @@
-package app
+package session
 
 import (
 	waBinary "go.mau.fi/whatsmeow/binary"

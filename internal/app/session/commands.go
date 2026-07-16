@@ -1,4 +1,4 @@
-package app
+package session
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-var errTooManyCalls = errors.New("max concurrent calls")
+var ErrTooManyCalls = errors.New("max concurrent calls")
 
 type StartedCall struct{ CallID, Peer, PeerName, PeerPhotoURL string }
 
@@ -26,7 +26,7 @@ func (s *Session) HasCall(callID string) bool {
 
 func (s *Session) StartCall(ctx context.Context, phone string) (StartedCall, error) {
 	if max := s.mgr.maxCalls; max > 0 && s.calls.Count() >= max {
-		return StartedCall{}, errTooManyCalls
+		return StartedCall{}, ErrTooManyCalls
 	}
 	peer := types.NewJID(phone, types.DefaultUserServer)
 	callID, err := s.calls.StartCall(ctx, peer)
