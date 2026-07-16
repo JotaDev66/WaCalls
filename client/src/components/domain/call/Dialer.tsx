@@ -1,67 +1,68 @@
 import { useState } from "react";
-import { Disc3, Phone, Video } from "lucide-react";
+import { Delete, Phone } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DeviceSelector } from "@/components/form/DeviceSelector";
+import { DialPad } from "@/components/domain/call/DialPad";
+import { ContactPicker } from "@/components/domain/contacts/ContactPicker";
 import { useStartCall } from "@/hooks/useStartCall";
 import { useDevices } from "@/stores/devices";
+import { useT } from "@/hooks/useT";
 
 export const Dialer = ({ sid }: { sid: string }) => {
   const [phone, setPhone] = useState("");
-  const [record, setRecord] = useState(false);
-  const [video, setVideo] = useState(false);
   const micId = useDevices((s) => s.micId);
   const startCall = useStartCall(sid, micId);
+  const t = useT();
 
   const submit = () => {
     if (!phone.trim() || startCall.isPending) return;
-    startCall.mutate({ phone: phone.trim(), record, video }, { onSuccess: () => setPhone("") });
+    startCall.mutate(
+      { phone: phone.trim() },
+      { onSuccess: () => setPhone("") },
+    );
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Dialer</CardTitle>
+        <CardTitle>{t.dialer.title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <DeviceSelector />
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <Input
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
-            placeholder="+55 11 99999 9999"
+            placeholder={t.dialer.phonePlaceholder}
             inputMode="tel"
-            className="min-w-[200px] flex-1"
+            className="h-11 flex-1 text-center font-mono text-lg tracking-wide"
           />
           <Button
             type="button"
-            variant={record ? "default" : "outline"}
-            size="sm"
-            onClick={() => setRecord((v) => !v)}
-            aria-pressed={record}
+            variant="ghost"
+            size="icon"
+            onClick={() => setPhone((p) => p.slice(0, -1))}
+            disabled={!phone}
+            aria-label={t.dialer.backspace}
           >
-            <Disc3 className="h-4 w-4" />
-            Record
-          </Button>
-          <Button
-            type="button"
-            variant={video ? "default" : "outline"}
-            size="sm"
-            onClick={() => setVideo((v) => !v)}
-            aria-pressed={video}
-          >
-            <Video className="h-4 w-4" />
-            Video
-          </Button>
-          <Button onClick={submit} disabled={startCall.isPending || !phone.trim()}>
-            <Phone className="h-4 w-4" />
-            {startCall.isPending ? "Calling…" : "Call"}
+            <Delete className="h-4 w-4" />
           </Button>
         </div>
+        <ContactPicker sid={sid} onPick={(p) => setPhone(p)} />
+        <DialPad onKey={(c) => setPhone((p) => p + c)} />
+        <Button
+          className="w-full"
+          onClick={submit}
+          disabled={startCall.isPending || !phone.trim()}
+        >
+          <Phone className="h-4 w-4" />
+          {startCall.isPending ? t.dialer.calling : t.dialer.call}
+        </Button>
       </CardContent>
     </Card>
   );

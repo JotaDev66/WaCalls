@@ -2,40 +2,25 @@ package app
 
 import (
 	"os"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 )
-
-var (
-	browserAPIOnce sync.Once
-	browserAPI     *webrtc.API
-	browserAPIErr  error
-)
-
-// browserWebRTCAPI returns a process-wide *webrtc.API for the browser-facing
-// PeerConnections. When WACALLS_WEBRTC_UDP_PORT is set, all ICE traffic is
-// funneled through a single fixed UDP port and host candidates are published
-// with WACALLS_PUBLIC_IP, so the server is reachable behind a 1:1 NAT such as a
-// Docker bridge. Without the env vars it falls back to pion's default behavior
-// (ephemeral ports, interface IPs) used for local/LAN runs.
-func browserWebRTCAPI() (*webrtc.API, error) {
-	browserAPIOnce.Do(func() {
-		port, _ := strconv.Atoi(strings.TrimSpace(os.Getenv("WACALLS_WEBRTC_UDP_PORT")))
-		browserAPI, browserAPIErr = buildBrowserAPI(port, publicIPs())
-	})
-	return browserAPI, browserAPIErr
-}
 
 func buildBrowserAPI(udpPort int, externalIPs []string) (*webrtc.API, error) {
 	if udpPort <= 0 {
 		return webrtc.NewAPI(), nil
 	}
 
-	mux, err := ice.NewMultiUDPMuxFromPort(udpPort, ice.UDPMuxFromPortWithNetworks(ice.NetworkTypeUDP4))
+	opts := []ice.UDPMuxFromPortOption{ice.UDPMuxFromPortWithNetworks(ice.NetworkTypeUDP4)}
+	if iface := defaultRouteInterface(); iface != "" {
+		opts = append(opts, ice.UDPMuxFromPortWithInterfaceFilter(func(name string) bool {
+			return name == iface
+		}))
+	}
+
+	mux, err := ice.NewMultiUDPMuxFromPort(udpPort, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -53,16 +38,20 @@ func buildBrowserAPI(udpPort int, externalIPs []string) (*webrtc.API, error) {
 	return webrtc.NewAPI(webrtc.WithSettingEngine(se)), nil
 }
 
-func publicIPs() []string {
-	raw := strings.TrimSpace(os.Getenv("WACALLS_PUBLIC_IP"))
-	if raw == "" {
-		return nil
+func defaultRouteInterface() string {
+	data, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return ""
 	}
-	var out []string
-	for _, p := range strings.Split(raw, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
+	return parseDefaultRoute(string(data))
+}
+
+func parseDefaultRoute(table string) string {
+	for _, line := range strings.Split(table, "\n")[1:] {
+		fields := strings.Fields(line)
+		if len(fields) >= 4 && fields[1] == "00000000" && fields[0] != "" {
+			return fields[0]
 		}
 	}
-	return out
+	return ""
 }

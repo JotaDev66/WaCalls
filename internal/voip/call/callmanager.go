@@ -4,6 +4,9 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
@@ -11,8 +14,11 @@ import (
 	"wacalls/internal/voip/transport"
 	"wacalls/internal/voip/wanode"
 
+	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/types"
 )
+
+const signalingSendTimeout = 10 * time.Second
 
 type CallManager struct {
 	sock     core.VoipSocket
@@ -33,8 +39,30 @@ type CallManager struct {
 	firstPacketSent       bool
 	initialTransportSent  bool
 	outgoingPreacceptSent bool
+	observerEnded         bool
 	acceptedByJid         string
 	debeEnabled           bool
+
+	timeouts      Timeouts
+	watchdogTick  time.Duration
+	watchdogStop  chan struct{}
+	lastMediaRecv atomic.Int64
+	lastRedialAt  time.Time
+	srtpDrops     srtpDropTally
+
+	sendSrtcp      *media.SrtcpContext
+	recvSrtcp      *media.SrtcpContext
+	srtcpDrops     srtpDropTally
+	recvStats      *media.RTCPReceiverStats
+	rtcpTxStop     chan struct{}
+	rtcpCName      string
+	srtcpTxIndex   uint32
+	rtpPacketsSent uint32
+	rtpOctetsSent  uint32
+	lastRtpTs      uint32
+	rtcp208Tick    time.Duration
+	rtcpSRTick     time.Duration
+	rtcp209Tick    time.Duration
 
 	extensions   []engine.Extension
 	extMu        sync.Mutex
@@ -46,7 +74,8 @@ type CallManager struct {
 	OnIncoming    func(*CallInfo)
 	OnEnded       func(*CallInfo)
 	OnPeerAudio   func([]float32)
-	OnPeerVideo   func([]byte)
+	OnQuality     func(callID string, q core.CallQuality)
+	OnMark        func(callID string, mark string, elapsedMs int64)
 }
 
 func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
@@ -58,6 +87,11 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 		log:          log,
 		observer:     core.NopObserver{},
 		debeEnabled:  true,
+		timeouts:     DefaultTimeouts,
+		watchdogTick: defaultWatchdogTick,
+		rtcp208Tick:  rtcp208Interval,
+		rtcpSRTick:   rtcpSRInterval,
+		rtcp209Tick:  rtcp209Interval,
 		extensions:   exts,
 		rtpHandlers:  map[uint8]func(*media.RtpPacket){},
 		declaredSelf: map[uint32]bool{},
@@ -65,6 +99,7 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 	relay := transport.NewSctpRelayManager(log)
 	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected() })
 	relay.SetOnReceive(func(data []byte) { m.onRelayData(data) })
+	relay.SetOnUsableChange(func(usable int) { m.onRelayUsableChange(usable) })
 	m.relay = relay
 	return m
 }
@@ -81,7 +116,7 @@ func (m *CallManager) emitState() {
 	}
 }
 
-func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid types.JID, isVideo bool) error {
+func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid types.JID) error {
 	m.mu.Lock()
 	if m.currentCall != nil && !m.currentCall.IsEnded() {
 		m.mu.Unlock()
@@ -89,9 +124,6 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	}
 
 	mediaType := core.CallMediaTypeAudio
-	if isVideo {
-		mediaType = core.CallMediaTypeVideo
-	}
 	creator := m.sock.OwnLID()
 	if creator.IsEmpty() {
 		creator = m.sock.OwnPN()
@@ -111,7 +143,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
-	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved, isVideo)
+	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
 	if err != nil {
 		return err
 	}
@@ -129,6 +161,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 		go m.HandleCallAck(context.Background(), ackNode)
 	}
 
+	m.startWatchdog()
 	m.log.Info("call offer sent", "call_id", callID, "peer", resolved.String())
 	return nil
 }
@@ -149,12 +182,11 @@ func (m *CallManager) AcceptCall(ctx context.Context, callID string) error {
 	key := call.EncryptionKey
 	peer := wanode.MustJID(call.PeerJid)
 	creator := wanode.MustJID(call.CallCreator)
-	isVideo := call.MediaType == core.CallMediaTypeVideo
 	relayData := call.RelayData
 	m.mu.Unlock()
 
 	if key != nil {
-		acceptNode, err := signaling.BuildAcceptStanza(ctx, m.sock, callID, key, peer, creator, isVideo)
+		acceptNode, err := signaling.BuildAcceptStanza(ctx, m.sock, callID, key, peer, creator)
 		if err != nil {
 			m.log.Error("build accept failed", "err", err)
 		} else if err := m.sock.SendNode(ctx, acceptNode); err != nil {
@@ -198,14 +230,25 @@ func (m *CallManager) RejectCall(ctx context.Context, callID string, reason core
 		m.mu.Unlock()
 		return &CallError{"no call with id " + callID}
 	}
-	_ = call.ApplyTransition(Transition{Type: TransitionLocalRejected, Reason: reason})
+	if err := call.ApplyTransition(Transition{Type: TransitionLocalRejected, Reason: reason}); err != nil {
+		m.mu.Unlock()
+		return err
+	}
 	node := signaling.BuildRejectStanza(wanode.MustJID(call.PeerJid), call.CallID, wanode.MustJID(call.CallCreator))
 	m.emitState()
 	m.mu.Unlock()
 
-	go func() { _, _ = m.sock.Query(ctx, node) }()
+	m.sendSignaling(ctx, node)
 	m.cleanupMedia()
 	return nil
+}
+
+func (m *CallManager) sendSignaling(ctx context.Context, node waBinary.Node) {
+	go func() {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), signalingSendTimeout)
+		defer cancel()
+		_, _ = m.sock.Query(sctx, node)
+	}()
 }
 
 func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) error {
@@ -216,12 +259,21 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 		return nil
 	}
 	_ = call.ApplyTransition(Transition{Type: TransitionTerminated, Reason: reason})
-	node := signaling.BuildTerminateStanza(wanode.MustJID(call.PeerJid), call.CallID, wanode.MustJID(call.CallCreator))
+	// Route the terminate to the device that actually answered, like the rest of the in-call
+	// signaling. Sending it to the base JID lets the server deliver it to the peer's primary
+	// device, so a call answered on a companion (e.g. WhatsApp Web) never sees the terminate and
+	// hangs in "reconnecting" until it times out. acceptedByJid is empty for inbound calls, where
+	// call.PeerJid already carries the caller's device.
+	termDest := call.PeerJid
+	if m.acceptedByJid != "" {
+		termDest = m.acceptedByJid
+	}
+	node := signaling.BuildTerminateStanza(wanode.MustJID(termDest), call.CallID, wanode.MustJID(call.CallCreator))
 	ended := call
 	m.emitState()
 	m.mu.Unlock()
 
-	go func() { _, _ = m.sock.Query(ctx, node) }()
+	m.sendSignaling(ctx, node)
 	if m.OnEnded != nil {
 		m.OnEnded(ended)
 	}

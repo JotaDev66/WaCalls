@@ -1,14 +1,15 @@
 module wacalls
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/ice/v4 v4.2.7
+	github.com/pion/opus v0.1.0
 	github.com/pion/webrtc/v4 v4.2.15
 	github.com/rs/zerolog v1.35.1
-	go.mau.fi/whatsmeow v0.0.0-20260622185415-5f04eac6dbbb
+	go.mau.fi/whatsmeow v0.0.0-20260713112832-d8960d9575d2
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.69.0
 	go.opentelemetry.io/otel v1.44.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.44.0
@@ -17,7 +18,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
+	golang.org/x/crypto v0.53.0
+	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.53.0
 )
 
@@ -62,14 +66,12 @@ require (
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.10.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
 	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/term v0.44.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
-	golang.org/x/time v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/grpc v1.81.1 // indirect

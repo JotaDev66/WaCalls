@@ -5,7 +5,11 @@ export const float32ToInt16LE = (pcm: Float32Array): ArrayBuffer => {
     if (Number.isNaN(s)) s = 0;
     else if (s > 1) s = 1;
     else if (s < -1) s = -1;
-    view.setInt16(i * 2, s < 0 ? Math.round(s * 32768) : Math.round(s * 32767), true);
+    view.setInt16(
+      i * 2,
+      s < 0 ? Math.round(s * 32768) : Math.round(s * 32767),
+      true,
+    );
   }
   return view.buffer;
 };

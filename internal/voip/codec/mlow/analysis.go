@@ -53,6 +53,7 @@ type SmplEncoderState struct {
 	hpPitchHist []float32
 	ltpBuf      []float32
 	pitchEst    PitchEstState
+	lpcFFT      *fftScratch
 }
 
 func unvoicedPitch() SmplPitchSynth { return SmplPitchSynth{} }
@@ -108,7 +109,7 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 	synthT := LoadSmplSynthTables()
 
 	pcmI16 := make([]int16, need)
-	for i := 0; i < need; i++ {
+	for i := range need {
 		v := math.Round(float64(pcm[i] * 32768.0))
 		if v > 32767 {
 			v = 32767
@@ -137,7 +138,7 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 	if len(es.hist) >= SmplOrder {
 		copy(x[:SmplOrder], es.hist[len(es.hist)-SmplOrder:])
 	}
-	for i := 0; i < need; i++ {
+	for i := range need {
 		x[SmplOrder+i] = float64(hp[i]) * 32768.0
 	}
 
@@ -161,7 +162,7 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 	resLead := SmplOrder + smplWinnextWbLen
 	xn := make([]float32, resLead+need)
 	if len(es.hist) >= resLead {
-		for i := 0; i < resLead; i++ {
+		for i := range resLead {
 			xn[i] = float32(es.hist[len(es.hist)-resLead+i] / 32768.0)
 		}
 	}
@@ -187,7 +188,7 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 	prevVoiced := es.prevVoiced
 
 	var internal [3]SmplInternalParams
-	for f := 0; f < 3; f++ {
+	for f := range 3 {
 		base := SmplOrder + f*SmplIntfLen
 		win := x[base-SmplOrder : base+SmplIntfLen]
 		nbase := resLead + f*SmplIntfLen
@@ -197,7 +198,10 @@ func smplAnalyzeFrameSt(es *SmplEncoderState, pcm []float32) SmplFrameParams {
 		var lpcbuf [SmplLPCBufLen]float32
 		copy(lpcbuf[:], hpFull[lpcStart:lpcStart+SmplLPCBufLen])
 		windowed := smplWindowLPC20(&lpcbuf, f < 2)
-		a, f2 := smplLPCAnalyzeWithF2(&windowed)
+		if es.lpcFFT == nil {
+			es.lpcFFT = newLPCFFTScratch()
+		}
+		a, f2 := smplLPCAnalyzeWithF2(&windowed, es.lpcFFT)
 		nlsf := smplA2NLSF16(a[:])
 
 		cs := celpFrameCtx{
@@ -266,11 +270,11 @@ func commitCandidate(synthT *SmplSynthTables, st *SmplFrameSynth, cand *candidat
 	if cand.silent {
 		nlsf := SmplReconstructNLSF(synthT, 0, 0, int(cand.ip.Lsf.Grid), &cand.ip.Lsf.Stage2, prevNlsf)
 		pulseVec := make([]int32, SmplIntfLen)
-		var st2 [16]int32 = cand.ip.Lsf.Stage2
+		var st2 = cand.ip.Lsf.Stage2
 		SynthInternalFrame(synthT, st, 0, 0, int(cand.ip.Lsf.Grid), &st2, prevNlsf, pulseVec, &cand.gainQ, &cand.pitch)
 		return nlsf
 	}
-	var qsym [16]int32 = cand.qsym
+	var qsym = cand.qsym
 	_, nlsf := SynthInternalFrame(synthT, st, int(cand.stage1), 0, int(cand.grid), &qsym, prevNlsf, cand.pulseVec, &cand.gainQ, &cand.pitch)
 	return nlsf
 }
@@ -298,7 +302,7 @@ func smplUnvoicedCandidate(synthT *SmplSynthTables, _ *SmplFrameSynth, win []flo
 	pulseVec := make([]int32, SmplIntfLen)
 	var fcbgIdx [4]int32
 	const main = 1
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		out := &celpOut[sf]
 		for _, v := range out.Pulses[main] {
 			sign := int32(1) + 2*(int32(v)>>15)
@@ -311,7 +315,7 @@ func smplUnvoicedCandidate(synthT *SmplSynthTables, _ *SmplFrameSynth, win []flo
 	}
 
 	var nrgres [4]float32
-	for sf := 0; sf < 4; sf++ {
+	for sf := range 4 {
 		res := resLpc[sf*SmplSubfrLen : (sf+1)*SmplSubfrLen]
 		var e float32
 		for _, v := range res {
@@ -326,7 +330,7 @@ func smplUnvoicedCandidate(synthT *SmplSynthTables, _ *SmplFrameSynth, win []flo
 
 	pp := smplBuildPulseParams(pulseVec)
 	gains := SmplGainParams{GainMain: gm, GainDelta: gd, NrgRes: [4]int32{-1, -1, -1, -1}}
-	for sf := 0; sf < 4; sf++ {
+	for sf := range 4 {
 		if pp.Subfr[sf] > 0 {
 			gains.NrgRes[sf] = fcbgIdx[sf]
 		} else {
@@ -355,7 +359,7 @@ func runCelpSubframes(cs *celpFrameCtx, predcoefs *[SmplSubfrCount][17]float32, 
 	outs := make([]CelpSubframeOut, 0, SmplSubfrCount)
 
 	wnrgs := make([]float32, SmplSubfrCount)
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		res := resLpc[sf*SmplSubfrLen : (sf+1)*SmplSubfrLen]
 		const scale = 32768.0
 		var s float32
@@ -370,7 +374,7 @@ func runCelpSubframes(cs *celpFrameCtx, predcoefs *[SmplSubfrCount][17]float32, 
 		Complexity: smplComplexity, UseFecRateCompensation: 0, UseDtx: 0, SubFrameImportanceFactor: 1.0,
 	}
 
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		wnrg := wnrgs[sf]
 		wnrgNext := wnrgs[sf]
 		if sf+1 < SmplSubfrCount {
@@ -408,7 +412,7 @@ func computePercCorrs(cs *celpFrameCtx) [SmplSubfrCount][]float32 {
 		start := cs.intf*SmplIntfLen + (sf-1)*SmplSubfrLen
 		xlen := 2*SmplSubfrLen + shorter
 		xsubfr := make([]float32, xlen)
-		for i := 0; i < xlen; i++ {
+		for i := range xlen {
 			idx := start + i
 			if idx < len(cs.hpN) {
 				xsubfr[i] = cs.hpN[idx]
@@ -420,7 +424,7 @@ func computePercCorrs(cs *celpFrameCtx) [SmplSubfrCount][]float32 {
 		}
 		r := SmplPercModel(cs.perc, xsubfr, xlen, frameMs, isLast, smplPercRLen)
 		even := make([]float32, smplPercRLen)
-		for i := 0; i < smplPercRLen; i++ {
+		for i := range smplPercRLen {
 			var prev float32
 			if i < len(*cs.percPrev) {
 				prev = (*cs.percPrev)[i]
@@ -452,12 +456,12 @@ func smplLsfInterpolSearch(brec, prevLsfq []float32, winN []float32) ([SmplSubfr
 	residualFor := func(idx int) ([SmplSubfrCount][17]float32, []float32, float32) {
 		pc4, _ := smplLPCInterpolIdx(brec, prevLsfq, idx, SmplNLSF2A)
 		var predcoefs [SmplSubfrCount][17]float32
-		for sf := 0; sf < SmplSubfrCount; sf++ {
+		for sf := range SmplSubfrCount {
 			predcoefs[sf] = pc4[sf]
 		}
 		res := make([]float32, SmplIntfLen)
 		var sumRms float32
-		for sf := 0; sf < SmplSubfrCount; sf++ {
+		for sf := range SmplSubfrCount {
 			r := smplAnalysisResidualSubfr(&predcoefs[sf], winN, sf)
 			var nrg float32
 			for _, v := range r {
@@ -479,7 +483,7 @@ func smplLsfInterpolSearch(brec, prevLsfq []float32, winN []float32) ([SmplSubfr
 func smplAnalysisResidualSubfr(aSyn *[17]float32, winN []float32, sf int) [SmplSubfrLen]float32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/analysis.rs#L1451-L1466
 	var res [SmplSubfrLen]float32
-	for n := 0; n < SmplSubfrLen; n++ {
+	for n := range SmplSubfrLen {
 		idx := SmplOrder + sf*SmplSubfrLen + n
 		acc := winN[idx]
 		for j := 1; j <= SmplOrder; j++ {
@@ -493,7 +497,7 @@ func smplAnalysisResidualSubfr(aSyn *[17]float32, winN []float32, sf int) [SmplS
 func smplSilentInternal(synthT *SmplSynthTables) candidate {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/analysis.rs#L1468-L1500
 	var sym [16]int32
-	for k := 0; k < 16; k++ {
+	for k := range 16 {
 		sym[k] = int32(len(synthT.Valtables[0][0][0][k]) / 2)
 	}
 	gm, gd, _ := smplRateControlGains(0.0)
@@ -530,7 +534,7 @@ func smplBuildPulseParams(pulse []int32) SmplPulseParams {
 	const p3 = 4
 	posPer := SmplIntfLen / p3
 	var pp SmplPulseParams
-	for sf := 0; sf < p3; sf++ {
+	for sf := range p3 {
 		var s int32
 		for n := sf * posPer; n < (sf+1)*posPer; n++ {
 			a := pulse[n]
@@ -545,7 +549,7 @@ func smplBuildPulseParams(pulse []int32) SmplPulseParams {
 
 	var magRuns []int32
 	var signs []int32
-	for sf := 0; sf < p3; sf++ {
+	for sf := range p3 {
 		if pp.Subfr[sf] <= 0 {
 			continue
 		}
@@ -588,12 +592,9 @@ func smplBuildPulseParams(pulse []int32) SmplPulseParams {
 	var signSyms []SmplRawSym
 	p := 0
 	for p < numPos {
-		nbits := numPos - p
-		if nbits > 15 {
-			nbits = 15
-		}
+		nbits := min(numPos-p, 15)
 		var sym uint32
-		for q := 0; q < nbits; q++ {
+		for q := range nbits {
 			var bit uint32
 			if signs[p+q] > 0 {
 				bit = 1
@@ -615,9 +616,9 @@ func smplRateControlGains(targetLinear float64) (int32, int32, int32) {
 	gainTabAddr := uint32(0xf35f0)
 	bestD := math.Inf(1)
 	var bgm, bgd, bgq int32
-	for gm := int32(0); gm < 84; gm++ {
+	for gm := range int32(84) {
 		base7 := gm*cb1 - 0x154000
-		for gd := int32(0); gd < 98; gd++ {
+		for gd := range int32(98) {
 			cbv := int32(mem.I16(gainTabAddr + uint32(4*gd)*2))
 			gq := base7 + (cbv << 4)
 			d := math.Abs(SmplGainLin(gq) - targetLinear)
@@ -661,9 +662,9 @@ func buildLtpBuf(cs *celpFrameCtx, percCorrs [][]float32) {
 		return 0.0
 	}
 	wOrigin := maxLen - SmplSubfrCount*SmplSubfrLen - look
-	for i := 0; i < SmplSubfrCount; i++ {
+	for i := range SmplSubfrCount {
 		coef := respPitch[i]
-		for n := 0; n < SmplSubfrLen; n++ {
+		for n := range SmplSubfrLen {
 			pos := i*SmplSubfrLen + n
 			res := sample(pos)
 			for j := 1; j < smplPitchPercRespLen; j++ {
@@ -673,7 +674,7 @@ func buildLtpBuf(cs *celpFrameCtx, percCorrs [][]float32) {
 		}
 	}
 	coef := respPitch[SmplSubfrCount-1]
-	for n := 0; n < look; n++ {
+	for n := range look {
 		pos := framelen + n
 		res := sample(pos)
 		for j := 1; j < smplPitchPercRespLen; j++ {
@@ -736,11 +737,8 @@ func smplAnalyzeInternal(synthT *SmplSynthTables, st *SmplFrameSynth, lstate *Sm
 
 func smplReplayPitchState(st *SmplLsfState, p3 int32, subfrCounts [4]int32, pp *SmplPitchParams) {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/analysis.rs#L1776-L1794
-	take := int(p3)
-	if take > 4 {
-		take = 4
-	}
-	for sf := 0; sf < take; sf++ {
+	take := min(int(p3), 4)
+	for sf := range take {
 		st.PrevGainIdx = pp.GainIdx[sf]
 		if subfrCounts[sf] > 0 {
 			st.PrevFiltIdx = pp.FiltIdx[sf]
@@ -760,7 +758,7 @@ type voicedDecision struct {
 func smplVoicedDecisionForLag(blocksegIdx int, laginds *[8]int32, cs *celpFrameCtx, lags8 *[8]float32) *voicedDecision {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/analysis.rs#L1808-L1838
 	var blockLags8 [8]float32
-	for b := 0; b < 8; b++ {
+	for b := range 8 {
 		v := float32(laginds[b])*0.5 + 32.0
 		if v > 320.0 {
 			v = 320.0
@@ -768,7 +766,7 @@ func smplVoicedDecisionForLag(blocksegIdx int, laginds *[8]int32, cs *celpFrameC
 		blockLags8[b] = v
 	}
 	*lags8 = blockLags8
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		cs.blockLags[sf] = [2]float32{blockLags8[2*sf], blockLags8[2*sf+1]}
 	}
 	var meanLag float32
@@ -793,11 +791,11 @@ func smplVoicedCandidate(synthT *SmplSynthTables, win []float64, prevNlsf []floa
 	bgrid, bsym, brec, _ := fe.quantize(synthT, 1, prevNlsf)
 	pc4, _ := smplLPCInterpol(brec, fe.prevLsfq, SmplNLSF2A)
 	var predcoefs [SmplSubfrCount][17]float32
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		predcoefs[sf] = pc4[sf]
 	}
 	resLpc := make([]float32, SmplIntfLen)
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		r := smplAnalysisResidualSubfr(&predcoefs[sf], winN, sf)
 		copy(resLpc[sf*SmplSubfrLen:(sf+1)*SmplSubfrLen], r[:])
 	}
@@ -809,7 +807,7 @@ func smplVoicedCandidate(synthT *SmplSynthTables, win []float64, prevNlsf []floa
 	const main = 1
 	pulseVec := make([]int32, SmplIntfLen)
 	var acbg, fcbg [4]int32
-	for sf := 0; sf < SmplSubfrCount; sf++ {
+	for sf := range SmplSubfrCount {
 		out := &celpOut[sf]
 		for _, v := range out.Pulses[main] {
 			sign := int32(1) + 2*(int32(v)>>15)
@@ -818,25 +816,16 @@ func smplVoicedCandidate(synthT *SmplSynthTables, win []float64, prevNlsf []floa
 				pulseVec[sf*SmplSubfrLen+int(pos)] += sign
 			}
 		}
-		ai := int32(out.AcbIdx[main])
-		if ai < 0 {
-			ai = 0
-		}
-		if ai > 15 {
-			ai = 15
-		}
+		ai := min(max(int32(out.AcbIdx[main]), 0), 15)
 		acbg[sf] = ai
-		fi := int32(out.GainIdx[main])
-		if fi < 0 {
-			fi = 0
-		}
+		fi := max(int32(out.GainIdx[main]), 0)
 		fcbg[sf] = fi
 	}
 	ppPulses := smplBuildPulseParams(pulseVec)
 	subfr := ppPulses.Subfr
 	pp := vd.pp
 	pp.GainIdx = acbg
-	for sf := 0; sf < 4; sf++ {
+	for sf := range 4 {
 		if subfr[sf] > 0 {
 			pp.FiltIdx[sf] = fcbg[sf]
 		} else {

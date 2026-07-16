@@ -10,11 +10,19 @@ type State = {
   activeId: string | null;
 };
 
-export const useSessions = create<State>(() => ({ sessions: [], qrs: {}, activeId: null }));
+export const useSessions = create<State>(() => ({
+  sessions: [],
+  qrs: {},
+  activeId: null,
+}));
 
-export const setActiveSession = (id: string): void => useSessions.setState({ activeId: id });
+export const setActiveSession = (id: string): void =>
+  useSessions.setState({ activeId: id });
 
-const pickActive = (sessions: SessionInfo[], current: string | null): string | null => {
+const pickActive = (
+  sessions: SessionInfo[],
+  current: string | null,
+): string | null => {
   if (current && sessions.some((s) => s.id === current)) return current;
   return sessions[0]?.id ?? null;
 };
@@ -26,7 +34,12 @@ export const ensureSessionsWired = (): void => {
   eventStream.connect(getClientId());
 
   void listSessions()
-    .then((sessions) => useSessions.setState((s) => ({ sessions, activeId: pickActive(sessions, s.activeId) })))
+    .then((sessions) =>
+      useSessions.setState((s) => ({
+        sessions,
+        activeId: pickActive(sessions, s.activeId),
+      })),
+    )
     .catch(() => {});
 
   eventStream.on((ev: BrokerEvent) => {
@@ -34,15 +47,24 @@ export const ensureSessionsWired = (): void => {
       useSessions.setState((s) => {
         const ids = new Set(ev.sessions.map((x) => x.id));
         const qrs: Record<string, string> = {};
-        for (const [id, qr] of Object.entries(s.qrs)) if (ids.has(id)) qrs[id] = qr;
-        return { sessions: ev.sessions, qrs, activeId: pickActive(ev.sessions, s.activeId) };
+        for (const [id, qr] of Object.entries(s.qrs))
+          if (ids.has(id)) qrs[id] = qr;
+        return {
+          sessions: ev.sessions,
+          qrs,
+          activeId: pickActive(ev.sessions, s.activeId),
+        };
       });
     } else if (ev.type === "session-qr") {
-      useSessions.setState((s) => ({ qrs: { ...s.qrs, [ev.sessionId]: ev.qr } }));
+      useSessions.setState((s) => ({
+        qrs: { ...s.qrs, [ev.sessionId]: ev.qr },
+      }));
     } else if (ev.type === "auth-state") {
       useSessions.setState((s) => {
         const sessions = s.sessions.map((x) =>
-          x.id === ev.sessionId ? { ...x, state: ev.state, paired: ev.paired } : x,
+          x.id === ev.sessionId
+            ? { ...x, state: ev.state, paired: ev.paired }
+            : x,
         );
         const qrs = { ...s.qrs };
         if (ev.paired) delete qrs[ev.sessionId];

@@ -11,7 +11,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
+func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, peerJid types.JID, callKey []byte) {
 	info := signaling.ExtractNodeInfo(node)
 	if info == nil {
 		return
@@ -20,12 +20,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	creator := wanode.AttrString(info.InnerNode.Attrs, "call-creator")
 	if creator == "" {
 		creator = peerJid.String()
-	}
-	isVideo := hasChildTag(info.InnerNode, "video")
-
-	callKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
-	if err != nil {
-		m.log.Error("offer decrypt call key", "err", err)
 	}
 	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
 	var structured *signaling.ParsedRelayAck
@@ -45,9 +39,6 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.log.Debug("offer inner node structure", "call_id", callID, "children", childTagSummary(info.InnerNode))
 
 	mediaType := core.CallMediaTypeAudio
-	if isVideo {
-		mediaType = core.CallMediaTypeVideo
-	}
 
 	m.mu.Lock()
 	call := NewIncomingCall(callID, peerJid.String(), creator, "", mediaType)
@@ -90,7 +81,8 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.mu.Lock()
 	m.emitState()
 	m.mu.Unlock()
-	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "video", isVideo, "relays", len(relays))
+	m.startWatchdog()
+	m.log.Info("incoming call", "call_id", callID, "peer", peerJid.String(), "relays", len(relays))
 }
 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
@@ -106,9 +98,12 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 
 	if signaling.NeedsDecryption(info.Tag) {
-		if peerKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid); err == nil && peerKey != nil {
+		peerKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
+		if err != nil {
+			m.log.Warn("accept call key undecryptable; skipping rekey", "call_id", call.CallID, "err", err)
+		} else if peerKey != nil {
 			m.mu.Lock()
-			if call.EncryptionKey != nil && !equalBytes(call.EncryptionKey, peerKey) {
+			if !call.IsEnded() && call.EncryptionKey != nil && !equalBytes(call.EncryptionKey, peerKey) {
 				m.reinitSrtpLocked(peerKey, peerJid)
 			}
 			m.mu.Unlock()
@@ -116,6 +111,13 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 
 	m.mu.Lock()
+	// The call can be torn down (EndCall/terminate) during the unlocked decrypt window above;
+	// re-arming SRTP/SRTCP and relays on an ended call would leak contexts and connections and
+	// let stale keying bleed into the next call.
+	if call.IsEnded() {
+		m.mu.Unlock()
+		return
+	}
 	_ = call.ApplyTransition(Transition{Type: TransitionRemoteAccepted})
 	m.emitState()
 	m.acceptedByJid = peerJid.String()
@@ -136,19 +138,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 
 	callID := call.CallID
 	creator := wanode.MustJID(call.CallCreator)
-	transport := waBinary.Node{
-		Tag:   "call",
-		Attrs: waBinary.Attrs{"to": peerJid, "id": signaling.GenerateCallStanzaID()},
-		Content: []waBinary.Node{{
-			Tag: "transport",
-			Attrs: waBinary.Attrs{
-				"call-id": callID, "call-creator": creator,
-				"transport-message-type": "1", "p2p-cand-round": "1",
-			},
-			Content: []waBinary.Node{{Tag: "net", Attrs: waBinary.Attrs{"medium": "2", "protocol": "0"}}},
-		}},
-	}
-	_ = m.sock.SendNode(ctx, transport)
+	m.sendTransportUpdate(ctx, peerJid, creator, callID)
 	_ = m.sock.SendNode(ctx, signaling.BuildMuteV2Stanza(peerJid, callID, creator, 0))
 	if acceptMsgID := wanode.AttrString(node.Attrs, "id"); acceptMsgID != "" {
 		ourJid := m.sock.OwnLID()
@@ -162,12 +152,29 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 		m.mu.Lock()
 		if err := call.ApplyTransition(Transition{Type: TransitionMediaConnected}); err == nil {
 			m.emitState()
+			m.maybeStartRtcpTxLocked()
 			m.log.Info("call ACTIVE (media path established)", "call_id", call.CallID)
 		}
 		m.mu.Unlock()
 	} else if relayData != nil {
 		m.connectRelays(relayData.Endpoints)
 	}
+}
+
+func (m *CallManager) sendTransportUpdate(ctx context.Context, peer, creator types.JID, callID string) {
+	transport := waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"to": peer, "id": signaling.GenerateCallStanzaID()},
+		Content: []waBinary.Node{{
+			Tag: "transport",
+			Attrs: waBinary.Attrs{
+				"call-id": callID, "call-creator": creator,
+				"transport-message-type": "1", "p2p-cand-round": "1",
+			},
+			Content: []waBinary.Node{{Tag: "net", Attrs: waBinary.Attrs{"medium": "2", "protocol": "0"}}},
+		}},
+	}
+	_ = m.sock.SendNode(ctx, transport)
 }
 
 func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
@@ -182,16 +189,103 @@ func (m *CallManager) HandleCallTransport(ctx context.Context, node *waBinary.No
 		return
 	}
 	relays := signaling.ExtractRelayEndpoints(info.InnerNode)
-	m.log.Info("call transport received", "call_id", call.CallID,
-		"relays", len(relays), "already_connected", m.relay.HasConnection())
-	if len(relays) > 0 && !m.relay.HasConnection() {
-		m.mu.Lock()
-		if call.RelayData == nil {
-			call.RelayData = &core.RelayData{}
+	var structured *signaling.ParsedRelayAck
+	if len(relays) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			relays = parsed.Relays
+			structured = &parsed
+			m.log.Info("transport relays parsed via structured (te2) format", "call_id", call.CallID, "relays", len(relays))
 		}
-		call.RelayData.Endpoints = relays
-		m.mu.Unlock()
-		m.connectRelays(relays)
+	}
+	m.log.Info("call transport received", "call_id", call.CallID,
+		"relays", len(relays), "already_connected", m.relay.HasConnection(),
+		"type", wanode.AttrString(info.InnerNode.Attrs, "transport-message-type"),
+		"children", childTagSummary(info.InnerNode))
+	if len(relays) == 0 || m.relay.HasConnection() {
+		return
+	}
+	if len(buildRelayConfigs(relays)) == 0 {
+		m.log.Warn("transport relays not dialable; keeping stored endpoints", "call_id", call.CallID)
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil {
+		call.RelayData = &core.RelayData{}
+	}
+	call.RelayData.Endpoints = relays
+	if structured != nil {
+		if call.RelayData.HbhKey == nil {
+			call.RelayData.HbhKey = structured.HbhKey
+		}
+		if len(call.RelayData.ParticipantJids) == 0 {
+			call.RelayData.ParticipantJids = structured.ParticipantJids
+		}
+		if call.RelayData.UUID == "" {
+			call.RelayData.UUID = structured.UUID
+		}
+		if call.RelayData.SelfPid == nil {
+			call.RelayData.SelfPid = structured.SelfPid
+		}
+		if call.RelayData.PeerPid == nil {
+			call.RelayData.PeerPid = structured.PeerPid
+		}
+	}
+	m.mu.Unlock()
+	m.connectRelays(relays)
+}
+
+func (m *CallManager) HandleCallRelayLatency(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
+	m.mu.Lock()
+	call := m.currentCall
+	m.mu.Unlock()
+	if call == nil {
+		return
+	}
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	m.mu.Lock()
+	if call.RelayData == nil || len(call.RelayData.Endpoints) == 0 {
+		if parsed := signaling.ParseRelayFromNode(info.InnerNode); len(parsed.Relays) > 0 {
+			call.RelayData = &core.RelayData{
+				Endpoints: parsed.Relays, ParticipantJids: parsed.ParticipantJids,
+				UUID: parsed.UUID, SelfPid: parsed.SelfPid, PeerPid: parsed.PeerPid, HbhKey: parsed.HbhKey,
+			}
+			m.log.Info("relay data harvested from relaylatency", "call_id", call.CallID, "relays", len(parsed.Relays))
+		}
+	}
+	incoming := call.Direction == core.CallDirectionIncoming
+	creator := call.CallCreator
+	callID := call.CallID
+	m.mu.Unlock()
+	if !incoming {
+		return
+	}
+	creatorJid := wanode.MustJID(creator)
+	echoed := 0
+	for _, te := range wanode.NodeChildren(info.InnerNode) {
+		if te.Tag != "te" {
+			continue
+		}
+		relayName := wanode.AttrString(te.Attrs, "relay_name")
+		if relayName == "" {
+			continue
+		}
+		entry := signaling.RelayLatencyEntry{
+			RelayName:    relayName,
+			Latency:      signaling.DecodeLatency(wanode.AttrString(te.Attrs, "latency")),
+			AddressBytes: wanode.NodeBytes(&te),
+		}
+		echo := signaling.BuildRelayLatencyStanza(peerJid, callID, creatorJid, []signaling.RelayLatencyEntry{entry}, nil)
+		if err := m.sock.SendNode(ctx, echo); err != nil {
+			m.log.Debug("relaylatency echo send failed", "call_id", callID, "err", err)
+			return
+		}
+		echoed++
+	}
+	if echoed > 0 {
+		m.log.Info("relaylatency probes echoed", "call_id", callID, "probes", echoed)
 	}
 }
 

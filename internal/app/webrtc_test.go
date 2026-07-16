@@ -9,25 +9,6 @@ import (
 	"github.com/pion/webrtc/v4"
 )
 
-func TestPublicIPs(t *testing.T) {
-	t.Setenv("WACALLS_PUBLIC_IP", "  203.0.113.10 , , 198.51.100.7 ")
-	got := publicIPs()
-	want := []string{"203.0.113.10", "198.51.100.7"}
-	if len(got) != len(want) {
-		t.Fatalf("got %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("got %v, want %v", got, want)
-		}
-	}
-
-	t.Setenv("WACALLS_PUBLIC_IP", "")
-	if ips := publicIPs(); ips != nil {
-		t.Fatalf("expected nil for empty env, got %v", ips)
-	}
-}
-
 func TestBuildBrowserAPIDefault(t *testing.T) {
 	api, err := buildBrowserAPI(0, nil)
 	if err != nil || api == nil {
@@ -37,7 +18,7 @@ func TestBuildBrowserAPIDefault(t *testing.T) {
 
 // TestBuildBrowserAPIMux proves the core Docker requirement: with a fixed UDP
 // port and a public IP, the gathered SDP advertises a host candidate carrying
-// that exact IP and port — i.e. what the browser will dial through the 1:1 NAT.
+// that exact IP and port, i.e. what the browser will dial through the 1:1 NAT.
 func TestBuildBrowserAPIMux(t *testing.T) {
 	port := freeUDPPort(t)
 	const publicIP = "203.0.113.10"
@@ -51,7 +32,7 @@ func TestBuildBrowserAPIMux(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPeerConnection: %v", err)
 	}
-	defer pc.Close()
+	defer func() { _ = pc.Close() }()
 
 	if _, err := pc.CreateDataChannel("pcm", nil); err != nil {
 		t.Fatalf("CreateDataChannel: %v", err)
@@ -72,6 +53,22 @@ func TestBuildBrowserAPIMux(t *testing.T) {
 	}
 	if !strings.Contains(sdp, " "+strconv.Itoa(port)+" typ host") {
 		t.Fatalf("SDP missing host candidate on port %d:\n%s", port, sdp)
+	}
+}
+
+func TestParseDefaultRoute(t *testing.T) {
+	const table = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth2\t00000000\t010012AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n" +
+		"eth1\t0001000A\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n" +
+		"eth0\t0008000A\t00000000\t0001\t0\t0\t0\t00FFFFFF\t0\t0\t0\n"
+	if got := parseDefaultRoute(table); got != "eth2" {
+		t.Fatalf("parseDefaultRoute = %q, want eth2", got)
+	}
+	if got := parseDefaultRoute("Iface\tDestination\tGateway\n"); got != "" {
+		t.Fatalf("no default route: parseDefaultRoute = %q, want empty", got)
+	}
+	if got := parseDefaultRoute(""); got != "" {
+		t.Fatalf("empty table: parseDefaultRoute = %q, want empty", got)
 	}
 }
 

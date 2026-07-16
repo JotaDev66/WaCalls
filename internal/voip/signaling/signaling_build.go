@@ -3,6 +3,7 @@ package signaling
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/wanode"
 
@@ -15,7 +16,7 @@ var (
 	capabilityPreaccept = []byte{0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07}
 )
 
-func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid types.JID, isVideo bool) (waBinary.Node, error) {
+func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid types.JID) (waBinary.Node, error) {
 	creator := sock.OwnLID()
 	if creator.IsEmpty() {
 		creator = sock.OwnPN()
@@ -44,16 +45,9 @@ func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, 
 		waBinary.Node{Tag: "audio", Attrs: waBinary.Attrs{"enc": "opus", "rate": "8000"}},
 		waBinary.Node{Tag: "audio", Attrs: waBinary.Attrs{"enc": "opus", "rate": "16000"}},
 	)
-	capability := capabilityOffer
-	if isVideo {
-		offerContent = append(offerContent, waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
-			"enc": "h264", "dec": "h264", "orientation": "0",
-			"screen_width": "1920", "screen_height": "1080", "device_orientation": "0",
-		}})
-	}
 	offerContent = append(offerContent,
 		waBinary.Node{Tag: "net", Attrs: waBinary.Attrs{"medium": "3"}},
-		waBinary.Node{Tag: "capability", Attrs: waBinary.Attrs{"ver": "1"}, Content: capability},
+		waBinary.Node{Tag: "capability", Attrs: waBinary.Attrs{"ver": "1"}, Content: capabilityOffer},
 		waBinary.Node{Tag: "destination", Content: destinations},
 		waBinary.Node{Tag: "encopt", Attrs: waBinary.Attrs{"keygen": "2"}},
 	)
@@ -74,7 +68,7 @@ func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, 
 	}, nil
 }
 
-func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid, callCreator types.JID, isVideo bool) (waBinary.Node, error) {
+func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid, callCreator types.JID) (waBinary.Node, error) {
 	if err := sock.AssertSessions(ctx, []types.JID{callCreator}, true); err != nil {
 		return waBinary.Node{}, fmt.Errorf("assert creator session: %w", err)
 	}
@@ -100,10 +94,6 @@ func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string,
 			acceptContent = append(acceptContent, di)
 		}
 	}
-	if isVideo {
-		acceptContent = append(acceptContent, waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{"enc": "h264"}})
-	}
-
 	return waBinary.Node{
 		Tag:   "call",
 		Attrs: waBinary.Attrs{"to": wanode.MustJID(wanode.CleanJID(peerJid.String())), "id": GenerateCallStanzaID()},
@@ -117,12 +107,10 @@ func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string,
 
 func extractEncFromParticipant(nodes []waBinary.Node) *waBinary.Node {
 	for _, n := range nodes {
-		n := n
 		if n.Tag == "enc" {
 			return &n
 		}
 		for _, c := range wanode.NodeChildren(&n) {
-			c := c
 			if c.Tag == "enc" {
 				return &c
 			}
@@ -172,6 +160,14 @@ type RelayLatencyEntry struct {
 	RelayName    string
 	Latency      int
 	AddressBytes []byte
+}
+
+func DecodeLatency(enc string) int {
+	v, err := strconv.ParseUint(enc, 10, 32)
+	if err != nil || v < 0x2000000 {
+		return 0
+	}
+	return int(v - 0x2000000)
 }
 
 func BuildRelayLatencyStanza(peerJid types.JID, callID string, callCreator types.JID, relays []RelayLatencyEntry, destinationJids []types.JID) waBinary.Node {

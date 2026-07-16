@@ -1,4 +1,4 @@
-/docs
+/docs/superpowers
 /wacalls-server.exe
 /wacalls.exe
 *.exe
@@ -6,6 +6,7 @@
 *.out
 /dist/
 /bin/
+/tmp/
 wacalls.db
 run-mlow.ps1
 *.db
@@ -35,3 +36,4 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+DesignSystem-Wacalls

@@ -1,0 +1,23 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - modernize
+  exclusions:
+    paths:
+      - client/node_modules
+    rules:
+      - linters:
+          - staticcheck
+        text: SA1019
+      - linters:
+          - modernize
+        text: newexpr
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - client/node_modules

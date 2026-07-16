@@ -5,11 +5,78 @@ import (
 	"testing"
 	"time"
 
+	"wacalls/internal/voip/core"
+
+	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
+
+type recTracer struct {
+	starts, actives, ends []string
+}
+
+func (r *recTracer) StartCall(id string, a CallAttrs) {
+	r.starts = append(r.starts, id+"/"+a.Session)
+}
+func (r *recTracer) MarkActive(id string, tta time.Duration) {
+	r.actives = append(r.actives, id)
+}
+func (r *recTracer) EndCall(id, result, reason string, dur time.Duration) {
+	r.ends = append(r.ends, id+"/"+result+"/"+reason)
+}
+
+func TestMultiTracerFansOut(t *testing.T) {
+	a, b := &recTracer{}, &recTracer{}
+	m := MultiTracer(a, b)
+	m.StartCall("C1", CallAttrs{Session: "s1"})
+	m.MarkActive("C1", time.Second)
+	m.EndCall("C1", "completed", "user_ended", 2*time.Second)
+	for _, r := range []*recTracer{a, b} {
+		if len(r.starts) != 1 || r.starts[0] != "C1/s1" || len(r.actives) != 1 || len(r.ends) != 1 || r.ends[0] != "C1/completed/user_ended" {
+			t.Fatalf("tracer not fanned out: %+v", r)
+		}
+	}
+}
+
+func TestMultiTracerDegenerate(t *testing.T) {
+	if _, ok := MultiTracer().(nopTracer); !ok {
+		t.Fatal("zero tracers must collapse to nopTracer")
+	}
+	a := &recTracer{}
+	if got := MultiTracer(a); got != CallTracer(a) {
+		t.Fatal("single tracer must be returned as-is")
+	}
+}
+
+func resourceAttrs(t *testing.T, cfg Config) map[attribute.Key]string {
+	t.Helper()
+	res, err := newResource(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("resource: %v", err)
+	}
+	attrs := map[attribute.Key]string{}
+	for _, kv := range res.Attributes() {
+		attrs[kv.Key] = kv.Value.AsString()
+	}
+	return attrs
+}
+
+func TestResourceCarriesServiceVersion(t *testing.T) {
+	attrs := resourceAttrs(t, Config{ServiceName: "wacalls", ServiceVersion: "v0.1.0"})
+	if attrs["service.name"] != "wacalls" || attrs["service.version"] != "v0.1.0" {
+		t.Fatalf("unexpected resource attrs: %v", attrs)
+	}
+}
+
+func TestResourceOmitsEmptyServiceVersion(t *testing.T) {
+	attrs := resourceAttrs(t, Config{ServiceName: "wacalls"})
+	if _, ok := attrs["service.version"]; ok {
+		t.Fatalf("service.version must be absent when unset: %v", attrs)
+	}
+}
 
 func TestNoEndpointIsNoop(t *testing.T) {
 	shutdown, factory, tracer, err := Init(context.Background(), Config{})
@@ -45,7 +112,8 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 	tracer.StartCall("c1", CallAttrs{Session: "s1", Peer: "p", Direction: "outbound"})
 	obs.AddMem(1000)
 	done := obs.TrackGoroutine()
-	obs.Mark("transport.ice")
+	obs.Mark(core.MarkTransportICE)
+	obs.SrtpRecvDrop("replay")
 	tracer.MarkActive("c1", 250*time.Millisecond)
 	done()
 	obs.ReleaseMem(1000)
@@ -70,7 +138,7 @@ func TestCallTracerAndObserverRecord(t *testing.T) {
 			names[m.Name] = true
 		}
 	}
-	for _, want := range []string{"call.tracked_alloc.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration"} {
+	for _, want := range []string{"call.tracked_alloc.bytes", "call.goroutines", "call.phase.duration", "call.time_to_active", "calls.total", "calls.active", "call.duration", "call.srtp.recv_drops"} {
 		if !names[want] {
 			t.Errorf("missing instrument %q in collected metrics", want)
 		}

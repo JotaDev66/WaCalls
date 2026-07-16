@@ -143,7 +143,7 @@ func DecodeSmplLsf(
 
 	// Read 3 — 16 stage-2 residuals, each coeff k from LsfStage2[stage1][config][grid][k].
 	st2 := t.LsfStage2[int(stage1)][config][int(grid)]
-	for k := 0; k < 16; k++ {
+	for k := range 16 {
 		c := st2[k]
 		idx.Stage2[k] = dec.DecodeCDF(c)
 		idx.StageNraw[k] = int32(len(c)) - 2

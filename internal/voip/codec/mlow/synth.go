@@ -90,7 +90,7 @@ func smplNLSFLaroiaWeights(nlsf, out []float32) {
 		prev = nlsf[k]
 	}
 	inv[SmplOrder] = clamp(smplPiF32 - nlsf[SmplOrder-1])
-	for k := 0; k < SmplOrder; k++ {
+	for k := range SmplOrder {
 		out[k] = inv[k] + inv[k+1]
 	}
 }
@@ -99,13 +99,13 @@ func smplNLSFLaroiaWeights(nlsf, out []float32) {
 func smplNLSFDecorr(mat, vec, out []float32) {
 	var scr [SmplOrder]float32
 	v0 := vec[0]
-	for r := 0; r < SmplOrder; r++ {
+	for r := range SmplOrder {
 		scr[r] = v0 * mat[r]
 	}
 	for c := 1; c < SmplOrder; c++ {
 		v := vec[c]
 		base := c * SmplOrder
-		for r := 0; r < SmplOrder; r++ {
+		for r := range SmplOrder {
 			scr[r] += mat[base+r] * v
 		}
 	}
@@ -136,13 +136,14 @@ func smplStabilizeNLSF(nlsf, minSpacing []float32) {
 	loopN := 0
 	for min < 0.0 {
 		d := float32(loopN)*smplStabilizeEps - min
-		if sel == 0 {
+		switch sel {
+		case 0:
 			marg[0] += d
 			marg[1] -= d
-		} else if sel == L {
+		case L:
 			marg[L] += d
 			marg[L-1] -= d
-		} else {
+		default:
 			marg[sel] += d
 			half := d * 0.5
 			marg[sel-1] -= half
@@ -172,7 +173,7 @@ func SmplReconstructNLSF(t *SmplSynthTables, stage1, config, grid int, stage2 *[
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_synth.rs#L176-L234
 	val := t.Valtables[stage1][config][grid]
 	var resid [SmplOrder]float32
-	for k := 0; k < SmplOrder; k++ {
+	for k := range SmplOrder {
 		sym := stage2[k]
 		if sym >= 0 && int(sym) < len(val[k]) {
 			resid[k] = val[k][sym]
@@ -185,7 +186,7 @@ func SmplReconstructNLSF(t *SmplSynthTables, stage1, config, grid int, stage2 *[
 		var base [SmplOrder]float32
 		baseTbl := t.Grid16W[1-stage1]
 		alpha := t.Grid16Alpha[stage1]
-		for k := 0; k < SmplOrder; k++ {
+		for k := range SmplOrder {
 			var pv float32
 			if k < len(prevNLSF) {
 				pv = prevNLSF[k]
@@ -199,7 +200,7 @@ func SmplReconstructNLSF(t *SmplSynthTables, stage1, config, grid int, stage2 *[
 		}
 		var decorr [SmplOrder]float32
 		smplNLSFDecorr(t.Grid16Matrices[stage1][config], resid[:], decorr[:])
-		for k := 0; k < SmplOrder; k++ {
+		for k := range SmplOrder {
 			out[k] = base[k] + decorr[k]/w[k]
 		}
 		smplStabilizeNLSF(out, t.MinSpacing[stage1])
@@ -209,9 +210,9 @@ func SmplReconstructNLSF(t *SmplSynthTables, stage1, config, grid int, stage2 *[
 	// matrix case (grid < 16): NLSF[r] = 2*centroid[r] + sum_c mat[c][r]*resid[c].
 	cent := t.Centroids[stage1][grid]
 	mat := t.Matrices[stage1][grid]
-	for r := 0; r < SmplOrder; r++ {
+	for r := range SmplOrder {
 		acc := 2.0 * cent[r]
-		for c := 0; c < SmplOrder; c++ {
+		for c := range SmplOrder {
 			acc += mat[c][r] * resid[c]
 		}
 		out[r] = acc
@@ -239,7 +240,7 @@ func SmplNLSF2A(nlsf []float32) []float32 {
 
 	a := make([]float32, order+1)
 	a[0] = 1.0
-	for k := 0; k < half; k++ {
+	for k := range half {
 		pt := p[k+1] + p[k]
 		qt := q[k+1] - q[k]
 		a[k+1] = float32(0.5 * (pt + qt))
@@ -265,7 +266,7 @@ func smplNLSFPoly(out, cosv []float64, half, parity int) {
 // previous order outputs, carried across subframes/frames, updated in place.
 func smplLPCSynthesis(ex, a, out, state []float32) {
 	order := SmplOrder
-	for n := 0; n < len(ex); n++ {
+	for n := range ex {
 		acc := float64(ex[n])
 		for j := 1; j <= order; j++ {
 			var prev float64
@@ -323,9 +324,9 @@ func SmplLTPFracGain(normGain float64) float32 {
 // smplFir8: 8-tap symmetric FIR16 application, in-place over sig (in==out overlap;
 // f32 accumulation order matches the WASM).
 func smplFir8(sig []float32, inBase, outBase, cnt int32) {
-	for jj := int32(0); jj < cnt; jj++ {
+	for jj := range cnt {
 		var acc float32
-		for i := int32(0); i < 8; i++ {
+		for i := range int32(8) {
 			acc += (sig[inBase+jj+i] + sig[inBase+jj+15-i]) * smplFIR16[i]
 		}
 		sig[outBase+jj] = acc
@@ -336,36 +337,36 @@ func smplFir8(sig []float32, inBase, outBase, cnt int32) {
 // sigEnd, writes two regions per subframe into out (len 2*numSubfr*40); mutates sig.
 func smplFracLTP(lag []float32, numSubfr int32, sig []float32, sigEnd, stateLen int32, out []float32) {
 	lb := sigEnd - (40*numSubfr - stateLen)
-	for sf := int32(0); sf < numSubfr; sf++ {
+	for sf := range numSubfr {
 		fl := smplFloorF32(lag[sf])
 		intLag := int32(fl)
 		if float32(intLag) == lag[sf] {
-			for k := int32(0); k < 40; k++ {
+			for k := range int32(40) {
 				sig[lb+k] = sig[lb+k-intLag]
 			}
-			for k := int32(0); k < 40; k++ {
+			for k := range int32(40) {
 				out[sf*40+k] = sig[lb+k]
 				out[(numSubfr+sf)*40+k] = sig[lb+k-intLag-1] + sig[lb+k-intLag+1]
 			}
 		} else {
 			b := (numSubfr + sf) * 40
-			for k := int32(0); k < 40; k++ {
+			for k := range int32(40) {
 				out[b+k] = sig[lb-intLag-1+k] + sig[lb-intLag+1+k]
 			}
 			var l10 float32
-			for j := int32(0); j < 16; j++ {
+			for j := range int32(16) {
 				l10 += sig[lb-9-intLag+j] * smplFIR16[j]
 			}
 			smplFir8(sig, lb-intLag-8, lb, 40)
 			var l11 float32
-			for j := int32(0); j < 16; j++ {
+			for j := range int32(16) {
 				l11 += sig[lb+32-intLag+j] * smplFIR16[j]
 			}
-			for k := int32(0); k < 40; k++ {
+			for k := range int32(40) {
 				out[sf*40+k] = sig[lb+k]
 			}
 			out[b] = l10 + sig[lb+1]
-			for k := int32(0); k < 38; k++ {
+			for k := range int32(38) {
 				out[b+1+k] = sig[lb+k] + sig[lb+2+k]
 			}
 			out[b+39] = l11 + sig[lb+38]
@@ -394,11 +395,11 @@ func smplExcGainApply(subLen int, input []float32, st *SmplExcGainState, out []f
 		return
 	}
 	s0 := st.S0
-	for n := 0; n < subLen; n++ {
+	for n := range subLen {
 		out[n] = s0 * input[n]
 	}
 	s1 := st.S1
-	for n := 0; n < subLen; n++ {
+	for n := range subLen {
 		out[n] += s1 * input[subLen+n]
 	}
 }
@@ -482,7 +483,7 @@ func SynthInternalFrame(
 	}
 
 	ex := make([]float32, SmplIntfLen)
-	for n := 0; n < SmplIntfLen; n++ {
+	for n := range SmplIntfLen {
 		ex[n] = float32(float64(pulses[n]) * subGain(n/SmplSubfrLen))
 	}
 	hist := st.ltpHist
@@ -491,7 +492,7 @@ func SynthInternalFrame(
 		gainFrac := SmplLTPFracGain(pitch.NormGain)
 		predOut := make([]float32, SmplSubfrLen)
 		st.gst = SmplExcGainState{}
-		for sf := 0; sf < SmplSubfrCount; sf++ {
+		for sf := range SmplSubfrCount {
 			lagF := float32(pitch.LagSubfr[sf])
 			intLag := int32(lagF)
 			if intLag <= 0 {
@@ -508,7 +509,7 @@ func SynthInternalFrame(
 				}
 			}
 			SmplLTPSubframePred(hist, histPos, lagF, gainFrac, &st.gst, predOut)
-			for n := 0; n < SmplSubfrLen; n++ {
+			for n := range SmplSubfrLen {
 				ex[exBase+n] += predOut[n]
 			}
 			copy(hist[int(histPos):int(histPos)+SmplSubfrLen], ex[exBase:exBase+SmplSubfrLen])
@@ -585,7 +586,7 @@ func QuantNrgRes4(nrgres *[4]float32) NrgResQuant {
 	// the per-subframe residual energy through this). Correlation-bounded e2e.
 	var nrgresDB [4]float32
 	var frameDB float32
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		v := 10.0 * float32(math.Log10(float64(nrgres[i]+smplResNrgBias)))
 		if v > smplResNrgMaxDB {
 			v = smplResNrgMaxDB
@@ -598,15 +599,15 @@ func QuantNrgRes4(nrgres *[4]float32) NrgResQuant {
 	frameQi := int32(math.Round(float64((frameDB - smplResNrgMinDB) / (scQ14 * float32(smplNrgStepDBQ14_4)))))
 	frameDbqQ14 := frameQi * smplNrgStepDBQ14_4
 	frameDbqQ14 += int32(smplResNrgMinDB) * (1 << 14)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		nrgresDB[i] -= float32(frameDbqQ14) * scQ14
 	}
 	scQ10 := float32(1.0) / float32(int32(1)<<10)
 	bestRD := float32(1e30)
 	qi := 0
-	for n := 0; n < smplResNrgShapeCBN4; n++ {
+	for n := range smplResNrgShapeCBN4 {
 		var rd float32
-		for i := 0; i < 4; i++ {
+		for i := range 4 {
 			d := nrgresDB[i] - float32(nrgresShapeCB4Q10[n*4+i])*scQ10
 			rd += d * d
 		}
@@ -616,7 +617,7 @@ func QuantNrgRes4(nrgres *[4]float32) NrgResQuant {
 		}
 	}
 	var dbqQ14 [4]int32
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		dbqQ14[i] = frameDbqQ14 + int32(nrgresShapeCB4Q10[qi*4+i])*16
 	}
 	return NrgResQuant{FrameQi: frameQi, ShapeQi: int32(qi), DbqQ14: dbqQ14}

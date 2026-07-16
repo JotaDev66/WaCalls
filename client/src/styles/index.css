@@ -4,51 +4,54 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 240 10% 3.9%;
+  --background: 204 21.7% 95.5%;
+  --foreground: 208 23.3% 14.3%;
   --card: 0 0% 100%;
-  --card-foreground: 240 10% 3.9%;
+  --card-foreground: 208 23.3% 14.3%;
   --popover: 0 0% 100%;
-  --popover-foreground: 240 10% 3.9%;
-  --primary: 152 60% 40%;
+  --popover-foreground: 208 23.3% 14.3%;
+  --primary: 175 82.7% 31.8%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 240 4.8% 95.9%;
-  --secondary-foreground: 240 5.9% 10%;
-  --muted: 240 4.8% 95.9%;
-  --muted-foreground: 240 3.8% 46.1%;
-  --accent: 152 45% 94%;
-  --accent-foreground: 152 45% 20%;
-  --destructive: 0 72% 51%;
+  --secondary: 200 23.1% 92.4%;
+  --secondary-foreground: 208 20.7% 22.7%;
+  --muted: 200 23.1% 92.4%;
+  --muted-foreground: 208 12.3% 41.6%;
+  --accent: 173 39.1% 91%;
+  --accent-foreground: 175 80.4% 20%;
+  --destructive: 4 64.6% 53.5%;
   --destructive-foreground: 0 0% 100%;
-  --border: 240 5.9% 90%;
-  --input: 240 5.9% 90%;
-  --ring: 152 60% 40%;
-  --radius: 0.625rem;
+  --border: 205 20.7% 88.6%;
+  --input: 205 20.7% 88.6%;
+  --ring: 175 82.7% 31.8%;
+  --radius: 0.5rem;
 }
 
 .dark {
-  --background: 240 10% 4%;
-  --foreground: 0 0% 98%;
-  --card: 240 9% 7%;
-  --card-foreground: 0 0% 98%;
-  --popover: 240 9% 7%;
-  --popover-foreground: 0 0% 98%;
-  --primary: 152 52% 46%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 240 3.7% 15.9%;
-  --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 152 28% 18%;
-  --accent-foreground: 152 40% 85%;
-  --destructive: 0 62% 47%;
-  --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 18%;
-  --ring: 152 52% 46%;
+  --background: 208 23.3% 14.3%;
+  --foreground: 204 21.7% 95.5%;
+  --card: 209 23.1% 17.8%;
+  --card-foreground: 204 21.7% 95.5%;
+  --popover: 209 23.1% 17.8%;
+  --popover-foreground: 204 21.7% 95.5%;
+  --primary: 175 78.1% 39.4%;
+  --primary-foreground: 173 61.9% 8.2%;
+  --secondary: 208 20.7% 22.7%;
+  --secondary-foreground: 204 21.7% 95.5%;
+  --muted: 208 20.7% 22.7%;
+  --muted-foreground: 209 12% 59%;
+  --accent: 175 35% 16%;
+  --accent-foreground: 174 57.8% 60%;
+  --destructive: 4 64.6% 53.5%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 207 15.9% 27.1%;
+  --input: 207 15.9% 27.1%;
+  --ring: 175 78.1% 39.4%;
 }
 
 @theme inline {
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-card: hsl(var(--card));
@@ -78,10 +81,63 @@
 @layer base {
   * {
     border-color: hsl(var(--border));
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.4) transparent;
   }
   body {
     background-color: hsl(var(--background));
     color: hsl(var(--foreground));
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.55);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@keyframes tom-pulse {
+  0% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 5px hsl(var(--primary) / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 hsl(var(--primary) / 0);
+  }
+}
+
+.tom-pulse {
+  animation: tom-pulse 2s infinite;
+}
+
+@keyframes tom-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.tom-wave {
+  animation: tom-wave 1.1s ease-in-out infinite;
 }

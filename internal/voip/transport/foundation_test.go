@@ -63,6 +63,7 @@ func TestStunBindingFingerprint(t *testing.T) {
 	info := ParseStunResponse(msg)
 	if info == nil {
 		t.Fatal("could not parse the binding request we built")
+		return
 	}
 	if info.Method != "binding" {
 		t.Fatalf("expected method binding, got %s", info.Method)

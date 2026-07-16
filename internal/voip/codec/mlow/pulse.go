@@ -33,10 +33,7 @@ type SmplPulseResult struct {
 // s1 = LSF stage-1 selector.
 func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) SmplPulseResult {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_pulse.rs#L29-L206
-	n := p2
-	if n < 0 {
-		n = 0
-	}
+	n := max(p2, 0)
 	res := SmplPulseResult{Pulses: make([]int32, n)}
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/smpl_pulse.rs#L26-L185 (seed cc-table rewire: count/split/runlen from CcTables)
 	cc := LoadCcTables()
@@ -71,10 +68,8 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 		limit := uint32(frameLen4k) + 1
 		var prevCum uint32
 		var k uint32
-		for {
-			if k == limit {
-				break
-			}
+		for k != limit {
+
 			cum := triT(k)
 			// found when prevCum <= val < cum (the cumulative-triangular interval).
 			if prevCum <= val && val < cum {
@@ -90,14 +85,8 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 	// --- recursive binary SPLIT (p3==4 path) ---
 	var split [8]int32
 	if total != 0 {
-		sum := total - subfrLen16*2
-		if sum < 0 {
-			sum = 0
-		}
-		lo := total - 80
-		if lo < 0 {
-			lo = 0
-		}
+		sum := max(total-subfrLen16*2, 0)
+		lo := max(total-80, 0)
 		if sum < lo {
 			// min_split2 >= min_split assert path; treat as parse error (zeroed subframes).
 			return res
@@ -125,13 +114,7 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 		}
 	}
 
-	take := p3
-	if take < 0 {
-		take = 0
-	}
-	if take > 4 {
-		take = 4
-	}
+	take := min(max(p3, 0), 4)
 	copy(res.Subfr[:take], split[:take])
 
 	// --- MAGNITUDE block: per-subframe run-length pulse positions ---
@@ -139,7 +122,7 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 	var posList []int32
 	var magList []int32
 	pulseIdx := int32(-1)
-	for subfr := int32(0); subfr < p3; subfr++ {
+	for subfr := range p3 {
 		cnt := split[subfr]
 		if cnt <= 0 {
 			continue
@@ -179,10 +162,7 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 	if numPos > 0 {
 		p := int32(0)
 		for p <= pulseIdx {
-			nbits := numPos - p
-			if nbits >= 15 {
-				nbits = 15
-			}
+			nbits := min(numPos-p, 15)
 			if nbits <= 0 {
 				break
 			}
@@ -200,7 +180,7 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 	}
 
 	// scatter signed magnitudes into the pulse vector at their absolute positions.
-	for i := int32(0); i < numPos; i++ {
+	for i := range numPos {
 		pp := posList[i]
 		if pp >= 0 && int(pp) < len(res.Pulses) {
 			res.Pulses[pp] = magList[i]
@@ -214,14 +194,8 @@ func DecodeSmplPulses(dec *RangeDecoder, _ *SmplMem, p2, p3, p4, p6, s1 int32) S
 func smplSplit3537(dec *RangeDecoder, cc *CcTables, count, granularity int32) int32 {
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/ed12f359a086b28e807ba236f0977af1000859fe/wacore/src/voip/mlow/smpl_pulse.rs#L208-L230
 	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/924eb2c15aa9ffc7362293c74b2888e171831434/wacore/src/voip/mlow/smpl_pulse.rs#L188-L201 (seed cc-table rewire: SplitCmf)
-	lo := count
-	if granularity < lo {
-		lo = granularity
-	}
-	minSplit := count - granularity
-	if minSplit < 0 {
-		minSplit = 0
-	}
+	lo := min(granularity, count)
+	minSplit := max(count-granularity, 0)
 	if lo < minSplit {
 		return -1
 	}

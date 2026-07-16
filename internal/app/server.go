@@ -1,29 +1,97 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"log/slog"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 
+	"wacalls/internal/app/config"
+	"wacalls/internal/app/events"
+	"wacalls/internal/app/session"
 	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
 	waLog "go.mau.fi/whatsmeow/util/log"
+	"golang.org/x/crypto/bcrypt"
 )
 
-type Server struct {
-	broker    *Broker
-	sessions  *SessionManager
-	log       *slog.Logger
-	staticDir string
-	debug     bool
+const (
+	readHeaderTimeout = 10 * time.Second
+	readTimeout       = 15 * time.Second
+	idleTimeout       = 120 * time.Second
+)
+
+func newHTTPServer(addr string, h http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: readHeaderTimeout,
+		ReadTimeout:       readTimeout,
+		IdleTimeout:       idleTimeout,
+	}
 }
 
-func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, maxCalls int, debug bool, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
-	bundle, err := store.Open(ctx, storeCfg)
+type Server struct {
+	broker         *events.Broker
+	sessions       *session.Manager
+	log            *slog.Logger
+	staticDir      string
+	version        string
+	debug          bool
+	authorize      func(*http.Request) bool
+	allowedOrigins map[string]struct{}
+	rateLimiter    *ipRateLimiter
+	trustedProxies []netip.Prefix
+	photos         core.ContactPhotoStore
+	auth           core.AuthStore
+	apiToken       string
+	loginLimiter   *ipRateLimiter
+}
+
+func parseOrigins(raw string) map[string]struct{} {
+	set := map[string]struct{}{}
+	for o := range strings.SplitSeq(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			set[o] = struct{}{}
+		}
+	}
+	return set
+}
+
+func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	if err := config.Validate(cfg); err != nil {
+		return nil, err
+	}
+	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
+	if err != nil {
+		return nil, err
+	}
+
+	_, hasAdmin, err := bundle.Auth.GetAdmin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !hasAdmin && cfg.AdminUser != "" && cfg.AdminPassword != "" {
+		hash, herr := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+		if herr != nil {
+			return nil, herr
+		}
+		if err := bundle.Auth.CreateAdmin(ctx, cfg.AdminUser, string(hash)); err != nil {
+			return nil, err
+		}
+		hasAdmin = true
+	}
+	if !hasAdmin {
+		return nil, errors.New("no admin configured: set WACALLS_ADMIN_USER and WACALLS_ADMIN_PASSWORD to create the initial admin")
+	}
+
+	api, err := buildBrowserAPI(cfg.WebRTCUDPPort, cfg.PublicIPs)
 	if err != nil {
 		return nil, err
 	}
@@ -33,19 +101,55 @@ func NewServer(ctx context.Context, storeCfg store.Config, staticDir string, max
 		waLogger = waLog.Stdout("WA", "INFO", true)
 	}
 
-	broker := NewBroker()
-	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, maxCalls, obsFactory, tracer)
-	broker.SnapshotFn = mgr.snapshotEvents
+	broker := events.NewBroker(bundle.Calls, log)
+	mgr := session.NewManager(session.Deps{
+		Ctx: ctx, Container: bundle.Container, WebRTCAPI: api, Broker: broker,
+		Store: bundle.Sessions, WALogger: waLogger, Log: log, MaxCalls: cfg.MaxCalls,
+		NewObserver: obsFactory, Tracer: tracer, Photos: bundle.Photos,
+	})
+	broker.SnapshotFn = mgr.SnapshotEvents
 
-	return &Server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, debug: debug}, nil
+	if broker.EnableWebhooks(ctx, cfg.WebhookURL, cfg.WebhookSecret) {
+		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
+	}
+
+	var limiter *ipRateLimiter
+	if cfg.RateLimit > 0 {
+		limiter = newIPRateLimiter(cfg.RateLimit)
+		go limiter.janitor(ctx)
+	}
+
+	trustedProxies, err := parseTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+
+	srv := &Server{
+		broker:         broker,
+		sessions:       mgr,
+		log:            log,
+		staticDir:      cfg.StaticDir,
+		version:        cmp.Or(cfg.Version, "dev"),
+		debug:          cfg.Debug,
+		allowedOrigins: parseOrigins(cfg.CORSOrigins),
+		rateLimiter:    limiter,
+		trustedProxies: trustedProxies,
+		photos:         bundle.Photos,
+		auth:           bundle.Auth,
+		apiToken:       cfg.APIToken,
+		loginLimiter:   newIPRateLimiterWithBurst(loginRateRPS, loginRateBurst),
+	}
+	go srv.loginLimiter.janitor(ctx)
+	srv.authorize = srv.authorizeRequest
+	return srv, nil
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
-	defer s.sessions.disconnectAll()
+	defer s.sessions.DisconnectAll()
 	if err := s.sessions.Restore(ctx); err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Addr: addr, Handler: s.routes()}
+	httpSrv := newHTTPServer(addr, s.routes())
 	go func() {
 		s.log.Info("HTTP server listening", "addr", addr)
 		if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

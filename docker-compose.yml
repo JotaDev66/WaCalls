@@ -4,7 +4,8 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-docker}
-    image: ghcr.io/jotadev66/wacalls:latest
+    # :latest = production, :develop = beta. Override with WACALLS_IMAGE.
+    image: ${WACALLS_IMAGE:-ghcr.io/jotadev66/wacalls:latest}
     container_name: wacalls
     restart: unless-stopped
     ports:
@@ -13,6 +14,17 @@ services:
     environment:
       WACALLS_PUBLIC_IP: ${WACALLS_PUBLIC_IP:-}
       WACALLS_WEBRTC_UDP_PORT: ${WEBRTC_UDP_PORT:-7881}
+      WACALLS_API_TOKEN: ${WACALLS_API_TOKEN:-}
+      WACALLS_ADMIN_USER: ${WACALLS_ADMIN_USER:-}
+      WACALLS_ADMIN_PASSWORD: ${WACALLS_ADMIN_PASSWORD:-}
+      WACALLS_CORS_ORIGINS: ${WACALLS_CORS_ORIGINS:-}
+      WACALLS_RATE_LIMIT: ${WACALLS_RATE_LIMIT:-}
+      WACALLS_TRUSTED_PROXIES: ${WACALLS_TRUSTED_PROXIES:-}
+      WACALLS_WEBHOOK_URL: ${WACALLS_WEBHOOK_URL:-}
+      WACALLS_WEBHOOK_SECRET: ${WACALLS_WEBHOOK_SECRET:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-}
+      OTEL_METRIC_EXPORT_INTERVAL: ${OTEL_METRIC_EXPORT_INTERVAL:-}
     volumes:
       - wacalls-data:/data
 

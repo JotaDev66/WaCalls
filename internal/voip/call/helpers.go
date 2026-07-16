@@ -1,21 +1,13 @@
 package call
 
 import (
+	"slices"
 	"strings"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/wanode"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
 )
-
-func hasChildTag(n *waBinary.Node, tag string) bool {
-	for _, c := range wanode.NodeChildren(n) {
-		if c.Tag == tag {
-			return true
-		}
-	}
-	return false
-}
 
 func ensureDeviceJid(jid string) string {
 	if strings.Contains(jid, ":") {
@@ -82,12 +74,7 @@ func relayEndpointCount(rd *core.RelayData) int {
 }
 
 func containsSsrc(s []uint32, v uint32) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, v)
 }
 
 func equalBytes(a, b []byte) bool {

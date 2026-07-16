@@ -11,6 +11,7 @@ type CallStateData struct {
 	ConnectedAt  *time.Time
 	AcceptedAt   *time.Time
 	EndedAt      *time.Time
+	MediaLostAt  *time.Time
 	AudioMuted   bool
 	VideoOff     bool
 	Silenced     bool
@@ -45,7 +46,7 @@ func NewOutgoingCall(callID, peerJid, ourJid string, mediaType core.CallMediaTyp
 		StateData: CallStateData{
 			State:      core.CallStateInitiating,
 			AudioMuted: false,
-			VideoOff:   mediaType != core.CallMediaTypeVideo,
+			VideoOff:   true,
 		},
 	}
 }
@@ -62,7 +63,7 @@ func NewIncomingCall(callID, peerJid, callCreator, callerPn string, mediaType co
 		StateData: CallStateData{
 			State:      core.CallStateIncomingRinging,
 			AudioMuted: false,
-			VideoOff:   mediaType != core.CallMediaTypeVideo,
+			VideoOff:   true,
 		},
 	}
 }
@@ -93,25 +94,25 @@ func (e *InvalidTransition) Error() string {
 }
 
 const (
-	TransitionOfferSent         = "offer_sent"
-	TransitionOfferReceived     = "offer_received"
-	TransitionLocalAccepted     = "local_accepted"
-	TransitionRemoteAccepted    = "remote_accepted"
-	TransitionLocalRejected     = "local_rejected"
-	TransitionRemoteRejected    = "remote_rejected"
-	TransitionMediaConnected    = "media_connected"
-	TransitionTerminated        = "terminated"
-	TransitionHold              = "hold"
-	TransitionResume            = "resume"
-	TransitionAudioMuteChanged  = "audio_mute_changed"
-	TransitionVideoStateChanged = "video_state_changed"
+	TransitionOfferSent        = "offer_sent"
+	TransitionOfferReceived    = "offer_received"
+	TransitionLocalAccepted    = "local_accepted"
+	TransitionRemoteAccepted   = "remote_accepted"
+	TransitionLocalRejected    = "local_rejected"
+	TransitionRemoteRejected   = "remote_rejected"
+	TransitionMediaConnected   = "media_connected"
+	TransitionMediaLost        = "media_lost"
+	TransitionMediaRestored    = "media_restored"
+	TransitionTerminated       = "terminated"
+	TransitionHold             = "hold"
+	TransitionResume           = "resume"
+	TransitionAudioMuteChanged = "audio_mute_changed"
 )
 
 type Transition struct {
 	Type     string
 	Reason   core.EndCallReason
 	Muted    bool
-	Off      bool
 	Silenced bool
 }
 
@@ -169,13 +170,27 @@ func (c *CallInfo) ApplyTransition(t Transition) error {
 		}
 		s.State = core.CallStateActive
 		s.ConnectedAt = &now
-		s.VideoOff = c.MediaType != core.CallMediaTypeVideo
+		s.VideoOff = true
+
+	case TransitionMediaLost:
+		if s.State != core.CallStateActive {
+			return &InvalidTransition{string(s.State), t.Type}
+		}
+		s.State = core.CallStateReconnecting
+		s.MediaLostAt = &now
+
+	case TransitionMediaRestored:
+		if s.State != core.CallStateReconnecting {
+			return &InvalidTransition{string(s.State), t.Type}
+		}
+		s.State = core.CallStateActive
+		s.MediaLostAt = nil
 
 	case TransitionTerminated:
 		if s.State == core.CallStateEnded {
 			return &InvalidTransition{string(s.State), t.Type}
 		}
-		if (s.State == core.CallStateActive || s.State == core.CallStateOnHold) && s.ConnectedAt != nil {
+		if (s.State == core.CallStateActive || s.State == core.CallStateOnHold || s.State == core.CallStateReconnecting) && s.ConnectedAt != nil {
 			s.DurationSecs = int(now.Sub(*s.ConnectedAt).Seconds())
 		}
 		s.State = core.CallStateEnded
@@ -199,12 +214,6 @@ func (c *CallInfo) ApplyTransition(t Transition) error {
 			return &InvalidTransition{string(s.State), t.Type}
 		}
 		s.AudioMuted = t.Muted
-
-	case TransitionVideoStateChanged:
-		if s.State != core.CallStateActive {
-			return &InvalidTransition{string(s.State), t.Type}
-		}
-		s.VideoOff = t.Off
 
 	default:
 		return &InvalidTransition{string(s.State), t.Type}

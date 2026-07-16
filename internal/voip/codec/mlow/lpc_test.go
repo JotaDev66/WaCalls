@@ -74,7 +74,7 @@ func TestFrontEndAMatchesC(t *testing.T) {
 				worstWin = d
 			}
 		}
-		a, _ := smplLPCAnalyzeWithF2(&win)
+		a, _ := smplLPCAnalyzeWithF2(&win, newLPCFFTScratch())
 		var rd float32
 		for k := 0; k <= SmplLPCOrder; k++ {
 			if d := float32(math.Abs(float64(a[k] - r.A[k]))); d > rd {
@@ -131,7 +131,7 @@ func TestDecoderReconstructsCQlsf(t *testing.T) {
 		rec := SmplReconstructNLSF(st, r.Voiced, 0, grid, &stage2, prevNLSF)
 
 		var rd float32
-		for k := 0; k < SmplOrder; k++ {
+		for k := range SmplOrder {
 			d := rec[k] - r.Qlsf[k]
 			if d < 0 {
 				d = -d

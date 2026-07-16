@@ -1,6 +1,10 @@
 package call
 
 import (
+	"errors"
+	"sync"
+	"time"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/media"
@@ -47,10 +51,8 @@ func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid
 		CallID:          m.currentCall.CallID,
 		OwnDeviceJID:    ourDeviceJid,
 		PeerDeviceJID:   peerDeviceJid,
-		IsVideo:         m.currentCall.MediaType == core.CallMediaTypeVideo,
 		Relay:           m.relay,
 		SendAudioFrame:  m.sendAudioFrame,
-		SendRTP:         m.sendRTP,
 		OnRTP:           m.registerRTPHandler,
 		DeclareSelfSSRC: m.declareSelfSSRC,
 		Observer:        m.observer,
@@ -67,13 +69,6 @@ func (m *CallManager) ensureExtensionsAttachedLocked(ourDeviceJid, peerDeviceJid
 			}
 		})
 	}
-	if v, ok := engine.Capability[core.VideoSink](m.extensions); ok {
-		v.OnPeerAU(func(au []byte) {
-			if m.OnPeerVideo != nil {
-				m.OnPeerVideo(au)
-			}
-		})
-	}
 }
 
 func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
@@ -84,7 +79,7 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	}
 	marker := !m.firstPacketSent
 	if marker {
-		m.observer.Mark("media.first_packet")
+		m.observer.Mark(core.MarkMediaFirstPacket)
 	}
 	pkt := m.rtpSession.CreatePacketWithDuration(encoded, frameSamples, marker)
 	if m.debeEnabled {
@@ -93,6 +88,9 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 		pkt.Header.ExtensionData = nil
 	}
 	m.firstPacketSent = true
+	m.rtpPacketsSent++
+	m.rtpOctetsSent += uint32(len(pkt.Payload))
+	m.lastRtpTs = pkt.Header.Timestamp
 	protected, err := m.srtp.Protect(pkt)
 	if err != nil {
 		m.log.Debug("srtp protect error", "err", err)
@@ -102,23 +100,76 @@ func (m *CallManager) sendAudioFrame(encoded []byte, frameSamples int) error {
 	return nil
 }
 
-func (m *CallManager) sendRTP(pkt *media.RtpPacket) error {
+func (m *CallManager) notePeerMedia(ssrc uint32) {
 	m.mu.Lock()
-	srtp := m.srtp
-	m.mu.Unlock()
-	if srtp == nil {
-		return nil
+	defer m.mu.Unlock()
+	if ssrc == m.selfSsrc {
+		return
 	}
-	protected, err := srtp.Protect(pkt)
-	if err != nil {
-		return err
+	m.notePeerMediaLocked()
+}
+
+func (m *CallManager) notePeerMediaLocked() {
+	m.lastMediaRecv.Store(time.Now().UnixMilli())
+	if m.currentCall != nil && m.currentCall.StateData.State == core.CallStateReconnecting {
+		if err := m.currentCall.ApplyTransition(Transition{Type: TransitionMediaRestored}); err == nil {
+			m.emitState()
+			m.log.Info("media path restored", "call_id", m.currentCall.CallID)
+		}
 	}
-	m.relay.Broadcast(protected)
-	return nil
 }
 
 func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsStunPacket(data) {
+		return
+	}
+	if transport.IsRtcpPacket(data) {
+		senderSsrc, _ := media.ParseRTCPSenderSSRC(data)
+		m.notePeerMedia(senderSsrc)
+
+		m.mu.Lock()
+		recvSrtcp := m.recvSrtcp
+		recvStats := m.recvStats
+		selfSsrc := m.selfSsrc
+		obs := m.observer
+		callID := ""
+		if m.currentCall != nil {
+			callID = m.currentCall.CallID
+		}
+		m.mu.Unlock()
+		if recvSrtcp == nil || recvStats == nil {
+			return
+		}
+		plain, err := recvSrtcp.Unprotect(data)
+		if err != nil {
+			// SRTCP decode failures are control-plane telemetry drops, kept apart from the
+			// media-plane SrtpRecvDrop counter/tally so an RTCP fault cannot mask or conflate a
+			// genuine audio-decode fault under the same reason label.
+			reason := "other"
+			var se *media.SrtpError
+			if errors.As(err, &se) {
+				reason = string(se.Type)
+			}
+			if m.srtcpDrops.add(reason) {
+				m.log.Warn("srtcp recv packet dropped", "reason", reason, "err", err)
+			}
+			return
+		}
+		now := uint64(time.Now().UnixMilli())
+		in := media.ParseRTCPCompound(plain)
+		if in.HasSR {
+			recvStats.NoteSenderReport(in.SRNtpMid, now)
+		}
+		for _, b := range in.Blocks {
+			if b.SSRC == selfSsrc && b.LSR != 0 {
+				recvStats.NotePeerReportBlock(b.LSR, b.DLSR, b.FractionLost, now)
+			}
+		}
+		q := recvStats.QualitySnapshot(now)
+		obs.NoteQuality(q)
+		if m.OnQuality != nil && callID != "" {
+			m.OnQuality(callID, q)
+		}
 		return
 	}
 	if !transport.IsRtpPacket(data) {
@@ -135,6 +186,7 @@ func (m *CallManager) onRelayData(data []byte) {
 		m.mu.Unlock()
 		return
 	}
+	m.notePeerMediaLocked()
 	if pt == core.PayloadTypeWhatsAppOpus && !m.actualPeerSet {
 		m.actualPeerSet = true
 		if !containsSsrc(m.peerSsrcs, ssrc) {
@@ -144,6 +196,8 @@ func (m *CallManager) onRelayData(data []byte) {
 		}
 	}
 	srtp := m.srtp
+	obs := m.observer
+	recvStats := m.recvStats
 	m.mu.Unlock()
 
 	m.extMu.Lock()
@@ -156,11 +210,47 @@ func (m *CallManager) onRelayData(data []byte) {
 
 	pkt, err := srtp.Unprotect(data)
 	if err != nil {
-		m.log.Debug("srtp unprotect error", "err", err)
+		reason := "other"
+		var se *media.SrtpError
+		if errors.As(err, &se) {
+			reason = string(se.Type)
+		}
+		obs.SrtpRecvDrop(reason)
+		if m.srtpDrops.add(reason) {
+			m.log.Warn("srtp recv packet dropped", "reason", reason, "err", err)
+		} else {
+			m.log.Debug("srtp recv packet dropped", "reason", reason, "err", err)
+		}
 		return
 	}
 	if len(pkt.Payload) == 0 {
 		return
 	}
+	if recvStats != nil {
+		recvStats.NoteRTP(pkt.Header.SequenceNumber, pkt.Header.Timestamp, uint64(time.Now().UnixMilli()))
+	}
 	handler(pkt)
+}
+
+type srtpDropTally struct {
+	mu     sync.Mutex
+	counts map[string]int64
+}
+
+func (t *srtpDropTally) add(reason string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.counts == nil {
+		t.counts = map[string]int64{}
+	}
+	t.counts[reason]++
+	return t.counts[reason] == 1
+}
+
+func (t *srtpDropTally) snapshotAndReset() map[string]int64 {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	out := t.counts
+	t.counts = nil
+	return out
 }

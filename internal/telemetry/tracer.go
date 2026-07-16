@@ -13,7 +13,6 @@ type CallAttrs struct {
 	Session   string
 	Peer      string
 	Direction string
-	Video     bool
 }
 
 type CallTracer interface {
@@ -29,6 +28,36 @@ func (nopTracer) MarkActive(string, time.Duration)              {}
 func (nopTracer) EndCall(string, string, string, time.Duration) {}
 
 func NopTracer() CallTracer { return nopTracer{} }
+
+func MultiTracer(tracers ...CallTracer) CallTracer {
+	switch len(tracers) {
+	case 0:
+		return nopTracer{}
+	case 1:
+		return tracers[0]
+	}
+	return multiTracer(tracers)
+}
+
+type multiTracer []CallTracer
+
+func (m multiTracer) StartCall(callID string, attrs CallAttrs) {
+	for _, t := range m {
+		t.StartCall(callID, attrs)
+	}
+}
+
+func (m multiTracer) MarkActive(callID string, tta time.Duration) {
+	for _, t := range m {
+		t.MarkActive(callID, tta)
+	}
+}
+
+func (m multiTracer) EndCall(callID, result, reason string, dur time.Duration) {
+	for _, t := range m {
+		t.EndCall(callID, result, reason, dur)
+	}
+}
 
 type otelTracer struct {
 	tracer trace.Tracer
@@ -48,7 +77,6 @@ func (t *otelTracer) StartCall(callID string, a CallAttrs) {
 		attribute.String("session", a.Session),
 		attribute.String("peer", a.Peer),
 		attribute.String("direction", a.Direction),
-		attribute.Bool("video", a.Video),
 	))
 	t.mu.Lock()
 	if _, exists := t.spans[callID]; exists {

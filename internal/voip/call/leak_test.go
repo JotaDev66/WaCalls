@@ -18,6 +18,7 @@ type countingObserver struct {
 	mu           sync.Mutex
 	mem, memPeak int64
 	gor, gorPeak int64
+	quality      int64
 }
 
 func (o *countingObserver) AddMem(b int64) {
@@ -38,10 +39,13 @@ func (o *countingObserver) TrackGoroutine() func() {
 	o.mu.Unlock()
 	return func() { o.mu.Lock(); o.gor--; o.mu.Unlock() }
 }
-func (o *countingObserver) Mark(string)        {}
-func (o *countingObserver) End(string, string) {}
-func (o *countingObserver) memNow() int64      { o.mu.Lock(); defer o.mu.Unlock(); return o.mem }
-func (o *countingObserver) gorNow() int64      { o.mu.Lock(); defer o.mu.Unlock(); return o.gor }
+func (o *countingObserver) Mark(string)                  {}
+func (o *countingObserver) SrtpRecvDrop(string)          {}
+func (o *countingObserver) NoteQuality(core.CallQuality) { o.mu.Lock(); o.quality++; o.mu.Unlock() }
+func (o *countingObserver) End(string, string)           {}
+func (o *countingObserver) memNow() int64                { o.mu.Lock(); defer o.mu.Unlock(); return o.mem }
+func (o *countingObserver) gorNow() int64                { o.mu.Lock(); defer o.mu.Unlock(); return o.gor }
+func (o *countingObserver) qualityNow() int64            { o.mu.Lock(); defer o.mu.Unlock(); return o.quality }
 func (o *countingObserver) goroutinePeak() int64 {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -87,12 +91,17 @@ func TestCallLifecycleNoLeak(t *testing.T) {
 	}
 
 	memBeforeSend := obs.memNow()
-	frame := make([]float32, codec.FrameSize())
-	enc, err := codec.Encode(frame)
+	encCodec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
+	if err != nil {
+		t.Fatalf("enc codec: %v", err)
+	}
+	frameSize := encCodec.FrameSize()
+	enc, err := encCodec.Encode(make([]float32, frameSize))
+	encCodec.Close()
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	if err := cm.sendAudioFrame(enc, codec.FrameSize()); err != nil {
+	if err := cm.sendAudioFrame(enc, frameSize); err != nil {
 		t.Fatalf("sendAudioFrame: %v", err)
 	}
 	if obs.memNow() <= memBeforeSend {

@@ -55,7 +55,7 @@ func TestSmplMemAccessors(t *testing.T) {
 	if len(cdf) != 4 {
 		t.Fatalf("CDFAt len: got %d want 4", len(cdf))
 	}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if cdf[i] != m.U16(addr+uint32(i)*2) {
 			t.Errorf("CDFAt[%d] %#x != U16(addr+%d) %#x", i, cdf[i], i*2, m.U16(addr+uint32(i)*2))
 		}

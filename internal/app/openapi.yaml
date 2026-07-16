@@ -1,0 +1,956 @@
+openapi: 3.1.0
+info:
+  title: WaCalls API
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: >-
+    HTTP API for WaCalls, a self-hosted WhatsApp calling bridge. All /api/*
+    endpoints require the bearer token configured via WACALLS_API_TOKEN
+    (when unset, authentication is disabled). The SSE stream also accepts the
+    token as the access_token query parameter. This document is the canonical
+    contract: a test gate fails the build when routes and spec drift apart.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - queryToken: []
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Server is up
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+  /api/openapi.yaml:
+    get:
+      operationId: getOpenAPISpec
+      summary: This document
+      security: []
+      responses:
+        "200":
+          description: OpenAPI 3.1 specification
+          content:
+            application/yaml:
+              schema:
+                type: string
+  /api/sessions:
+    get:
+      operationId: listSessions
+      summary: List WhatsApp accounts
+      responses:
+        "200":
+          description: All configured sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessions]
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SessionInfo"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    post:
+      operationId: createSession
+      summary: Create an account and begin QR pairing
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  description: Display name, defaults to "Session"
+      responses:
+        "200":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}:
+    delete:
+      operationId: deleteSession
+      summary: Log out and remove an account
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "204":
+          description: Session removed
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/logout:
+    post:
+      operationId: logoutSession
+      summary: Disconnect an account, keeping it for re-pairing
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "204":
+          description: Session disconnected
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/pair:
+    post:
+      operationId: pairSession
+      summary: Re-pair an account, emitting a fresh QR over SSE
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "204":
+          description: Pairing restarted
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/calls:
+    post:
+      operationId: startCall
+      summary: Start an outgoing call
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/ClientId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone:
+                  type: string
+                  description: E.164-ish phone number; non-digits are stripped
+      responses:
+        "200": { $ref: "#/components/responses/CallRef" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Operator identified by X-Client-Id is already on a call
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Per-session concurrent call cap reached, or rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503":
+          description: Session is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listCalls
+      summary: Live calls of the session, same shape as the SSE call-list
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "200":
+          description: Live calls ordered by startedAt then callId
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [calls]
+                properties:
+                  calls:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CallRecord"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/calls/{id}:
+    get:
+      operationId: getCall
+      summary: One live call
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          description: The live call; 404 once it ends or if it belongs to another session
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [call]
+                properties:
+                  call:
+                    $ref: "#/components/schemas/CallRecord"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+    delete:
+      operationId: endCall
+      summary: End an active call
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "204":
+          description: Call ended (idempotent)
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/calls/{id}/webrtc:
+    post:
+      operationId: exchangeWebRTC
+      summary: Exchange the browser WebRTC SDP for the call audio bridge
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp_offer]
+              properties:
+                sdp_offer:
+                  type: string
+      responses:
+        "200":
+          description: SDP answer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sdp_answer]
+                properties:
+                  sdp_answer:
+                    type: string
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}/calls/{id}/accept:
+    post:
+      operationId: acceptCall
+      summary: Accept an incoming call, claiming it for the X-Client-Id operator
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+        - $ref: "#/components/parameters/ClientId"
+      responses:
+        "200": { $ref: "#/components/responses/CallRef" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Claimed by another client, or operator already on a call
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}/calls/{id}/reject:
+    post:
+      operationId: rejectCall
+      summary: Reject an incoming call
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+      responses:
+        "200":
+          description: Rejected (idempotent when the call is already gone)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Call is in a state that cannot be rejected
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/history:
+    get:
+      operationId: listHistory
+      summary: Ended calls, newest first, keyset-paginated
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+          description: Page size; values above 200 are clamped to 200
+        - name: cursor
+          in: query
+          schema:
+            type: string
+          description: Opaque cursor from the previous page's nextCursor
+      responses:
+        "200":
+          description: One page of ended calls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistoryPage"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}/history/export:
+    get:
+      operationId: exportHistory
+      summary: Full call history as CSV
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "200":
+          description: >-
+            CSV with header callId,direction,peer,owner,startedAt,endedAt,endReason;
+            timestamps are RFC 3339 UTC and owner is empty when unclaimed
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+  /api/sessions/{sid}/contacts:
+    get:
+      operationId: listContacts
+      summary: Dialable contacts from the paired session store
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "200":
+          description: Dialable contacts sorted by name then phone
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contacts]
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Contact"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503":
+          description: Session is not paired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: saveContact
+      summary: Create or edit a contact, propagated to WhatsApp via app state
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, name]
+              properties:
+                phone:
+                  type: string
+                  description: E.164-ish phone number; non-digits are stripped
+                name:
+                  type: string
+                  description: Display name; the first word becomes the WhatsApp first name
+      responses:
+        "200":
+          description: The saved contact
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [contact]
+                properties:
+                  contact:
+                    $ref: "#/components/schemas/Contact"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: The number is not on WhatsApp
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
+        "503":
+          description: Session not paired, or app state not synced yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/auth/status:
+    get:
+      operationId: authStatus
+      summary: Whether the caller is already authenticated (session cookie or bearer token)
+      responses:
+        "200":
+          description: Auth status
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [authenticated]
+                properties:
+                  authenticated:
+                    type: boolean
+  /api/login:
+    post:
+      operationId: login
+      summary: Admin login; sets an httpOnly session cookie
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Logged in; sets the wacalls_session cookie
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/logout:
+    post:
+      operationId: logout
+      summary: Invalidate the current session and clear the cookie
+      responses:
+        "204":
+          description: Logged out
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/auth/password:
+    post:
+      operationId: changePassword
+      summary: Change the admin password (kills other sessions)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        "204":
+          description: Password changed
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/version:
+    get:
+      operationId: getVersion
+      summary: Server build version
+      responses:
+        "200":
+          description: The running server version (the ldflags-injected build tag, or "dev")
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version]
+                properties:
+                  version:
+                    type: string
+                    examples: ["v0.1.0", "dev"]
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+  /api/events:
+    get:
+      operationId: streamEvents
+      summary: Server-sent events for sessions, auth and call lifecycle
+      parameters:
+        - name: clientId
+          in: query
+          schema:
+            type: string
+          description: Operator identity; the X-Client-Id header is also accepted
+      responses:
+        "200":
+          description: >-
+            SSE stream; each frame is "data: <json>" where the payload is one
+            of the event schemas below. A snapshot (session-list, auth-state,
+            call-list) is sent on connect and a ping event every 10 seconds.
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/SessionListEvent"
+                  - $ref: "#/components/schemas/SessionQREvent"
+                  - $ref: "#/components/schemas/AuthStateEvent"
+                  - $ref: "#/components/schemas/CallStatusEvent"
+                  - $ref: "#/components/schemas/CallListEvent"
+                  - $ref: "#/components/schemas/CallEndedEvent"
+                  - $ref: "#/components/schemas/IncomingEvent"
+                  - $ref: "#/components/schemas/IncomingClaimedEvent"
+                  - $ref: "#/components/schemas/CallQualityEvent"
+                  - $ref: "#/components/schemas/CallMarkEvent"
+                  - $ref: "#/components/schemas/PingEvent"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+webhooks:
+  call.ringing:
+    post:
+      operationId: webhookCallRinging
+      summary: Sent when a call transitions to ringing
+      description: >-
+        Delivered to WACALLS_WEBHOOK_URL. Signed with X-Wacalls-Timestamp (unix
+        seconds) and X-Wacalls-Signature "v1=<hex>" where hex is
+        hmac-sha256(secret, timestamp + "." + raw body). Failures are retried
+        twice (waits of 1s and 5s); the id is stable across retries.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
+  call.active:
+    post:
+      operationId: webhookCallActive
+      summary: Sent when a call transitions to connected (reconnections may re-emit)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
+  call.ended:
+    post:
+      operationId: webhookCallEnded
+      summary: Sent when a call ends, with endReason and endedAt populated
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookEnvelope"
+      responses:
+        "200":
+          description: Any 2xx acknowledges the delivery
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    queryToken:
+      type: apiKey
+      in: query
+      name: access_token
+  parameters:
+    Sid:
+      name: sid
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Session id
+    CallId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Call id
+    ClientId:
+      name: X-Client-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Operator identity; omitted means no ownership is recorded
+  responses:
+    Unauthorized:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: Per-IP rate limit exceeded
+      headers:
+        Retry-After:
+          schema:
+            type: string
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: No such session or call
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    BadRequest:
+      description: Invalid request parameter or body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: Unexpected failure
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    CallRef:
+      description: Reference to the affected call
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [call]
+            properties:
+              call:
+                type: object
+                required: [callId]
+                properties:
+                  callId:
+                    type: string
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    SessionInfo:
+      type: object
+      required: [id, name, jid, state, paired]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        jid:
+          type: string
+        state:
+          type: string
+        paired:
+          type: boolean
+    CallStatus:
+      type: string
+      enum: [starting, ringing, connected, reconnecting, ended]
+    Contact:
+      type: object
+      required: [jid, name, phone]
+      properties:
+        jid:
+          type: string
+          description: Full JID (always @s.whatsapp.net for dialable contacts)
+        name:
+          type: string
+          description: FullName, else FirstName, PushName, BusinessName, else phone
+        phone:
+          type: string
+          description: Digits only (JID user part)
+        photoUrl:
+          type: string
+          description: Cached WhatsApp profile-picture URL (present only if fetched on a prior call)
+    CallRecord:
+      type: object
+      required: [sessionId, callId, owner, direction, peer, startedAt, status]
+      properties:
+        sessionId:
+          type: string
+        callId:
+          type: string
+        owner:
+          type: [string, "null"]
+          description: Claiming operator's client id; null when unclaimed, never ""
+        direction:
+          type: string
+          enum: [outbound, inbound]
+        peer:
+          type: string
+        peerName:
+          type: string
+          description: Resolved contact name for the peer, when known
+        peerPhotoUrl:
+          type: string
+          description: Cached WhatsApp profile-picture URL for the peer, when known
+        startedAt:
+          type: integer
+          format: int64
+          description: Unix milliseconds
+        status:
+          $ref: "#/components/schemas/CallStatus"
+        endedAt:
+          type: integer
+          format: int64
+          description: Unix milliseconds; absent while the call is live
+        endReason:
+          type: string
+          description: Absent while the call is live
+    HistoryPage:
+      type: object
+      required: [calls]
+      properties:
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallRecord"
+        nextCursor:
+          type: string
+          description: Opaque cursor for the next page; absent on the last page
+    WebhookEnvelope:
+      type: object
+      required: [id, event, sentAt, call]
+      properties:
+        id:
+          type: string
+          description: Delivery id, stable across retries
+        event:
+          type: string
+          enum: [call.ringing, call.active, call.ended]
+        sentAt:
+          type: integer
+          format: int64
+          description: Unix milliseconds
+        call:
+          $ref: "#/components/schemas/CallRecord"
+    SessionListEvent:
+      type: object
+      required: [type, sessions]
+      properties:
+        type:
+          type: string
+          const: session-list
+        sessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionInfo"
+    SessionQREvent:
+      type: object
+      required: [type, sessionId, qr]
+      properties:
+        type:
+          type: string
+          const: session-qr
+        sessionId:
+          type: string
+        qr:
+          type: string
+    AuthStateEvent:
+      type: object
+      required: [type, sessionId, paired, state]
+      properties:
+        type:
+          type: string
+          const: auth-state
+        sessionId:
+          type: string
+        paired:
+          type: boolean
+        state:
+          type: string
+        qr:
+          type: string
+    CallStatusEvent:
+      type: object
+      required: [type, sessionId, id, owner, status, peer, startedAt]
+      properties:
+        type:
+          type: string
+          const: call-status
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: [string, "null"]
+        status:
+          $ref: "#/components/schemas/CallStatus"
+        peer:
+          type: string
+        startedAt:
+          type: integer
+          format: int64
+    CallListEvent:
+      type: object
+      required: [type, calls]
+      properties:
+        type:
+          type: string
+          const: call-list
+        calls:
+          type: array
+          items:
+            $ref: "#/components/schemas/CallRecord"
+    CallEndedEvent:
+      type: object
+      required: [type, sessionId, id, owner, reason, endedAt]
+      properties:
+        type:
+          type: string
+          const: call-ended
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: [string, "null"]
+        reason:
+          type: string
+        endedAt:
+          type: integer
+          format: int64
+    IncomingEvent:
+      type: object
+      required: [type, sessionId, id, peer, offeredAt]
+      properties:
+        type:
+          type: string
+          const: incoming
+        sessionId:
+          type: string
+        id:
+          type: string
+        peer:
+          type: string
+        offeredAt:
+          type: integer
+          format: int64
+    IncomingClaimedEvent:
+      type: object
+      required: [type, sessionId, id, owner]
+      properties:
+        type:
+          type: string
+          const: incoming-claimed
+        sessionId:
+          type: string
+        id:
+          type: string
+        owner:
+          type: string
+          description: Empty when the accept carried no client id
+    CallQualityEvent:
+      type: object
+      description: >-
+        Live per-call reception quality derived from inbound RTCP, emitted at the peer's
+        report cadence (~1.5s). Transient and live-only: not persisted, never in history.
+      required: [type, sessionId, id, rttMs, jitterMs, lossFraction, hasRtt]
+      properties:
+        type:
+          type: string
+          const: call-quality
+        sessionId:
+          type: string
+        id:
+          type: string
+        rttMs:
+          type: number
+          description: Round-trip time in ms; meaningful only when hasRtt is true.
+        jitterMs:
+          type: number
+          description: Interarrival jitter of the inbound peer stream, in ms.
+        lossFraction:
+          type: number
+          description: Cumulative fraction (0..1) of inbound peer packets lost.
+        hasRtt:
+          type: boolean
+          description: False until the peer echoes our SR (no RTT yet).
+    CallMarkEvent:
+      type: object
+      description: >-
+        A connection-setup phase mark reached, with elapsed ms since call start. Emitted live as
+        the call sets up (STUN/ICE/DTLS/SCTP and media first-packet). Transient, not persisted.
+      required: [type, sessionId, id, mark, elapsedMs]
+      properties:
+        type:
+          type: string
+          const: call-mark
+        sessionId:
+          type: string
+        id:
+          type: string
+        mark:
+          type: string
+          description: Phase id (transport.stun/ice/dtls/sctp_open, media.first_packet).
+        elapsedMs:
+          type: integer
+          format: int64
+          description: Milliseconds since the call started.
+    PingEvent:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          const: ping

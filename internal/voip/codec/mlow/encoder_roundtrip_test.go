@@ -21,7 +21,7 @@ func captureUnvoicedFrame(fb []byte) *SmplFrameParams {
 	dec := NewRangeDecoder(fb[1:])
 	var st SmplLsfState
 	fp := &SmplFrameParams{TOC: fb[0], Config: config}
-	for f := 0; f < 3; f++ {
+	for f := range 3 {
 		lsf := DecodeSmplLsf(dec, tbl, &st, config, f)
 		pul := DecodeSmplPulses(dec, mem, SmplIntfLen, 4, 1, int32(config), lsf.Stage1)
 		ip := &fp.Internal[f]
@@ -84,7 +84,7 @@ func sameFrameParams(a, b *SmplFrameParams) bool {
 	if a.TOC != b.TOC || a.Config != b.Config {
 		return false
 	}
-	for f := 0; f < 3; f++ {
+	for f := range 3 {
 		x, y := &a.Internal[f], &b.Internal[f]
 		if x.Lsf != y.Lsf || x.Gains != y.Gains {
 			return false

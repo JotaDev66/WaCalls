@@ -51,6 +51,20 @@ func TestSrtpManager_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSrtpManager_RejectsDuplicatePacket(t *testing.T) {
+	k1, k2 := testKM(1), testKM(9)
+	sender := NewSrtpManager(k1, k2, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	receiver := NewSrtpManager(k2, k1, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+
+	wire := mustProtect(t, sender, rtpPkt(7, 42, []byte{0xAA, 0xBB}))
+	if _, err := receiver.Unprotect(wire); err != nil {
+		t.Fatalf("first delivery: %v", err)
+	}
+	if _, err := receiver.Unprotect(wire); err == nil {
+		t.Fatal("duplicate packet must not be decoded twice")
+	}
+}
+
 func TestSrtpManager_PerSsrcRocIsolation(t *testing.T) {
 	k1, k2 := testKM(1), testKM(9)
 	sender := NewSrtpManager(k1, k2, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)

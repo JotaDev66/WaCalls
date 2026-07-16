@@ -7,6 +7,8 @@ type CallListRow = {
   owner: string | null;
   direction: "outbound" | "inbound";
   peer: string;
+  peerName?: string;
+  peerPhotoUrl?: string;
   startedAt: number;
   status: CallStatus;
   endedAt?: number;
@@ -16,29 +18,143 @@ type CallListRow = {
 export type BrokerEvent =
   | { type: "session-list"; sessions: SessionInfo[] }
   | { type: "session-qr"; sessionId: string; qr: string }
-  | { type: "auth-state"; sessionId: string; paired: boolean; state: SessionState; qr?: string }
+  | {
+      type: "auth-state";
+      sessionId: string;
+      paired: boolean;
+      state: SessionState;
+      qr?: string;
+    }
   | { type: "call-list"; calls: CallListRow[] }
-  | { type: "call-status"; sessionId: string; id: string; owner: string | null; status: CallStatus; peer: string; startedAt: number }
-  | { type: "call-ended"; sessionId: string; id: string; owner: string | null; reason: string; endedAt: number }
-  | { type: "incoming"; sessionId: string; id: string; peer: string; video: boolean; offeredAt: number }
-  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };
+  | {
+      type: "call-status";
+      sessionId: string;
+      id: string;
+      owner: string | null;
+      status: CallStatus;
+      peer: string;
+      peerName?: string;
+      peerPhotoUrl?: string;
+      startedAt: number;
+    }
+  | {
+      type: "call-ended";
+      sessionId: string;
+      id: string;
+      owner: string | null;
+      reason: string;
+      endedAt: number;
+    }
+  | {
+      type: "incoming";
+      sessionId: string;
+      id: string;
+      peer: string;
+      peerName?: string;
+      peerPhotoUrl?: string;
+      offeredAt: number;
+    }
+  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string }
+  | {
+      type: "call-quality";
+      sessionId: string;
+      id: string;
+      rttMs: number;
+      jitterMs: number;
+      lossFraction: number;
+      hasRtt: boolean;
+    }
+  | {
+      type: "call-mark";
+      sessionId: string;
+      id: string;
+      mark: string;
+      elapsedMs: number;
+    };
 
 type Listener = (ev: BrokerEvent) => void;
+type StatusListener = (connected: boolean) => void;
+
+const reconnectDelayMs = 3_000;
+const livenessCheckMs = 10_000;
+// The server emits a ping event every 10s; two missed pings mean the socket is dead
+// even if the browser (or a proxy in between) still thinks it is open.
+const staleAfterMs = 25_000;
 
 class EventStream {
   #es: EventSource | null = null;
+  #clientId = "";
   #listeners = new Set<Listener>();
+  #statusListeners = new Set<StatusListener>();
+  #retry: number | null = null;
+  #watchdog: number | null = null;
+  #lastActivity = 0;
 
   connect(clientId: string): void {
+    this.#clientId = clientId;
+    this.#open();
+  }
+
+  #open(): void {
     if (this.#es) return;
-    this.#es = new EventSource(`/api/events?clientId=${encodeURIComponent(clientId)}`);
-    this.#es.onmessage = (ev) => {
-      try {
-        const parsed: BrokerEvent = JSON.parse(ev.data);
-        for (const l of this.#listeners) l(parsed);
-      } catch {}
+    const es = new EventSource(
+      `/api/events?clientId=${encodeURIComponent(this.#clientId)}`,
+    );
+    this.#es = es;
+    this.#lastActivity = Date.now();
+    es.onopen = () => {
+      this.#lastActivity = Date.now();
+      this.#emitStatus(true);
     };
-    this.#es.onerror = () => {};
+    es.onmessage = (ev) => {
+      this.#lastActivity = Date.now();
+      let parsed: BrokerEvent | { type: "ping" };
+      try {
+        parsed = JSON.parse(ev.data);
+      } catch {
+        return;
+      }
+      if (parsed.type === "ping") return;
+      for (const l of this.#listeners) {
+        try {
+          l(parsed);
+        } catch (err) {
+          console.error("event listener failed", err);
+        }
+      }
+    };
+    es.onerror = () => {
+      this.#emitStatus(false);
+      // EventSource retries network failures on its own but gives up for good
+      // on an HTTP error response (e.g. a 502 from a reverse proxy while the
+      // backend restarts), so reconnection has to be handled here.
+      if (es.readyState === EventSource.CLOSED) this.#scheduleReconnect();
+    };
+    this.#startWatchdog();
+  }
+
+  #scheduleReconnect(): void {
+    this.#es?.close();
+    this.#es = null;
+    if (this.#retry !== null) return;
+    this.#retry = window.setTimeout(() => {
+      this.#retry = null;
+      this.#open();
+    }, reconnectDelayMs);
+  }
+
+  #startWatchdog(): void {
+    if (this.#watchdog !== null) return;
+    this.#watchdog = window.setInterval(() => {
+      if (this.#es && Date.now() - this.#lastActivity > staleAfterMs) {
+        this.#emitStatus(false);
+        this.#scheduleReconnect();
+      }
+    }, livenessCheckMs);
+  }
+
+  #emitStatus(connected: boolean): void {
+    for (const l of this.#statusListeners) l(connected);
   }
 
   on(l: Listener): () => void {
@@ -46,7 +162,20 @@ class EventStream {
     return () => this.#listeners.delete(l);
   }
 
+  onStatus(l: StatusListener): () => void {
+    this.#statusListeners.add(l);
+    return () => this.#statusListeners.delete(l);
+  }
+
   close(): void {
+    if (this.#retry !== null) {
+      window.clearTimeout(this.#retry);
+      this.#retry = null;
+    }
+    if (this.#watchdog !== null) {
+      window.clearInterval(this.#watchdog);
+      this.#watchdog = null;
+    }
     this.#es?.close();
     this.#es = null;
   }

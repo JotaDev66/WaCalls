@@ -38,7 +38,7 @@ func TestVadGroundTruth(t *testing.T) {
 		if r.CodedAsActiveVoice {
 			cav = 1
 		}
-		for f := 0; f < 3; f++ {
+		for f := range 3 {
 			results = append(results, res{r.VadResults[f], cav})
 		}
 	}

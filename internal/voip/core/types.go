@@ -9,6 +9,7 @@ const (
 	CallStateConnecting      CallState = "connecting"
 	CallStateActive          CallState = "active"
 	CallStateOnHold          CallState = "on_hold"
+	CallStateReconnecting    CallState = "reconnecting"
 	CallStateEnded           CallState = "ended"
 )
 
@@ -23,7 +24,6 @@ type CallMediaType string
 
 const (
 	CallMediaTypeAudio CallMediaType = "audio"
-	CallMediaTypeVideo CallMediaType = "video"
 )
 
 type EndCallReason string
@@ -41,7 +41,6 @@ const (
 
 const (
 	PayloadTypeWhatsAppOpus = 120
-	PayloadTypeWhatsAppH264 = 97
 )
 
 const (
