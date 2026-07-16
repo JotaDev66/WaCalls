@@ -1,6 +1,9 @@
 package app
 
 import (
+	"os"
+	"strings"
+
 	"github.com/pion/ice/v4"
 	"github.com/pion/webrtc/v4"
 )
@@ -10,7 +13,14 @@ func buildBrowserAPI(udpPort int, externalIPs []string) (*webrtc.API, error) {
 		return webrtc.NewAPI(), nil
 	}
 
-	mux, err := ice.NewMultiUDPMuxFromPort(udpPort, ice.UDPMuxFromPortWithNetworks(ice.NetworkTypeUDP4))
+	opts := []ice.UDPMuxFromPortOption{ice.UDPMuxFromPortWithNetworks(ice.NetworkTypeUDP4)}
+	if iface := defaultRouteInterface(); iface != "" {
+		opts = append(opts, ice.UDPMuxFromPortWithInterfaceFilter(func(name string) bool {
+			return name == iface
+		}))
+	}
+
+	mux, err := ice.NewMultiUDPMuxFromPort(udpPort, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -26,4 +36,22 @@ func buildBrowserAPI(udpPort int, externalIPs []string) (*webrtc.API, error) {
 		}
 	}
 	return webrtc.NewAPI(webrtc.WithSettingEngine(se)), nil
+}
+
+func defaultRouteInterface() string {
+	data, err := os.ReadFile("/proc/net/route")
+	if err != nil {
+		return ""
+	}
+	return parseDefaultRoute(string(data))
+}
+
+func parseDefaultRoute(table string) string {
+	for _, line := range strings.Split(table, "\n")[1:] {
+		fields := strings.Fields(line)
+		if len(fields) >= 4 && fields[1] == "00000000" && fields[0] != "" {
+			return fields[0]
+		}
+	}
+	return ""
 }
