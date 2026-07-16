@@ -71,12 +71,12 @@ func (s *Server) handleHistory(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid cursor"})
 		return
 	}
-	rows, next, err := s.broker.HistoryRows(r.Context(), sess.id, limit, before)
+	rows, next, err := s.broker.HistoryRows(r.Context(), sess.ID(), limit, before)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	s.enrichHistoryPeers(r.Context(), sess, rows)
+	sess.EnrichHistoryPeers(r.Context(), rows)
 	resp := map[string]any{"calls": rows}
 	if next != (core.HistoryCursor{}) {
 		resp["nextCursor"] = encodeHistoryCursor(next)
@@ -89,13 +89,13 @@ func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	rows, next, err := s.broker.HistoryRows(r.Context(), sess.id, historyExportPageSize, core.HistoryCursor{})
+	rows, next, err := s.broker.HistoryRows(r.Context(), sess.ID(), historyExportPageSize, core.HistoryCursor{})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="history-`+sess.id+`.csv"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="history-`+sess.ID()+`.csv"`)
 	cw := csv.NewWriter(w)
 	_ = cw.Write([]string{"callId", "direction", "peer", "owner", "startedAt", "endedAt", "endReason"})
 	for {
@@ -105,9 +105,9 @@ func (s *Server) handleHistoryExport(w http.ResponseWriter, r *http.Request) {
 		if next == (core.HistoryCursor{}) {
 			break
 		}
-		rows, next, err = s.broker.HistoryRows(r.Context(), sess.id, historyExportPageSize, next)
+		rows, next, err = s.broker.HistoryRows(r.Context(), sess.ID(), historyExportPageSize, next)
 		if err != nil {
-			s.log.Error("history export aborted", "session_id", sess.id, "err", err)
+			s.log.Error("history export aborted", "session_id", sess.ID(), "err", err)
 			break
 		}
 	}

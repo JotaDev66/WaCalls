@@ -99,31 +99,39 @@ func (s *Session) fetchPeerPhoto(jid types.JID, callID string) {
 	s.mgr.broker.SetCallPhoto(callID, info.URL)
 }
 
+func (s *Session) ContactList(ctx context.Context) ([]contactDTO, error) {
+	raw, err := s.client.Store.Contacts.GetAllContacts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := contactsFromStore(raw)
+	if s.mgr.photos != nil && len(out) > 0 {
+		jids := make([]string, len(out))
+		for i := range out {
+			jids[i] = out[i].JID
+		}
+		if photos, err := s.mgr.photos.GetMany(ctx, s.id, jids); err == nil {
+			for i := range out {
+				out[i].PhotoURL = photos[out[i].JID].URL
+			}
+		}
+	}
+	return out, nil
+}
+
 func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessionByID(w, r.PathValue("sid"))
 	if sess == nil {
 		return
 	}
-	if sess.client.Store.ID == nil {
+	if !sess.IsPaired() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
 		return
 	}
-	raw, err := sess.client.Store.Contacts.GetAllContacts(r.Context())
+	out, err := sess.ContactList(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
-	}
-	out := contactsFromStore(raw)
-	if s.photos != nil && len(out) > 0 {
-		jids := make([]string, len(out))
-		for i := range out {
-			jids[i] = out[i].JID
-		}
-		if photos, err := s.photos.GetMany(r.Context(), sess.id, jids); err == nil {
-			for i := range out {
-				out[i].PhotoURL = photos[out[i].JID].URL
-			}
-		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": out})
 }
@@ -201,12 +209,16 @@ func statusForContactErr(err error) int {
 	}
 }
 
+func (s *Session) SaveContact(ctx context.Context, phone, name string) (contactDTO, error) {
+	return upsertContact(ctx, s.client, phone, name)
+}
+
 func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessionByID(w, r.PathValue("sid"))
 	if sess == nil {
 		return
 	}
-	if sess.client.Store.ID == nil {
+	if !sess.IsPaired() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
 		return
 	}
@@ -221,7 +233,7 @@ func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "phone and name required"})
 		return
 	}
-	dto, err := upsertContact(r.Context(), sess.client, phone, name)
+	dto, err := sess.SaveContact(r.Context(), phone, name)
 	if err != nil {
 		writeJSON(w, statusForContactErr(err), map[string]string{"error": err.Error()})
 		return
@@ -229,25 +241,25 @@ func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"contact": dto})
 }
 
-func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []events.CallRecord) {
+func (s *Session) EnrichHistoryPeers(ctx context.Context, rows []events.CallRecord) {
 	if len(rows) == 0 {
 		return
 	}
 	names := map[string]string{}
-	if sess.client != nil && sess.client.Store != nil && sess.client.Store.Contacts != nil {
-		if all, err := sess.client.Store.Contacts.GetAllContacts(ctx); err == nil {
+	if s.client != nil && s.client.Store != nil && s.client.Store.Contacts != nil {
+		if all, err := s.client.Store.Contacts.GetAllContacts(ctx); err == nil {
 			for jid, info := range all {
 				names[jid.String()] = cmp.Or(info.FullName, info.FirstName, info.PushName, info.BusinessName)
 			}
 		}
 	}
 	photos := map[string]core.ContactPhoto{}
-	if s.photos != nil {
+	if s.mgr.photos != nil {
 		peers := make([]string, len(rows))
 		for i := range rows {
 			peers[i] = rows[i].Peer
 		}
-		if m, err := s.photos.GetMany(ctx, sess.id, peers); err == nil {
+		if m, err := s.mgr.photos.GetMany(ctx, s.id, peers); err == nil {
 			photos = m
 		}
 	}

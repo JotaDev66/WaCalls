@@ -22,10 +22,12 @@ func historyServer(t *testing.T) (*Server, core.CallRecordStore) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
+	mgr := &SessionManager{}
+	mgr.sessions = map[string]*Session{"s1": {id: "s1", mgr: mgr}}
 	s := &Server{
 		authorize: bearerAuthorizer(""),
 		broker:    events.NewBroker(bundle.Calls, slog.Default()),
-		sessions:  &SessionManager{sessions: map[string]*Session{"s1": {id: "s1"}}},
+		sessions:  mgr,
 	}
 	return s, bundle.Calls
 }

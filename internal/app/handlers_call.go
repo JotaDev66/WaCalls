@@ -147,7 +147,7 @@ func (s *Server) handleCallList(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"calls": s.broker.SessionCalls(sess.id)})
+	writeJSON(w, http.StatusOK, map[string]any{"calls": s.broker.SessionCalls(sess.ID())})
 }
 
 func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
@@ -156,7 +156,7 @@ func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec, ok := s.broker.GetCall(r.PathValue("id"))
-	if !ok || rec.SessionID != sess.id {
+	if !ok || rec.SessionID != sess.ID() {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
 	}
