@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
@@ -66,4 +67,19 @@ func (s *Session) EndCall(ctx context.Context, callID string) error {
 	err := s.calls.EndCall(ctx, callID, core.EndCallReasonUserEnded)
 	s.removeCall(callID)
 	return err
+}
+
+func (s *Session) AttachBrowser(callID, offerSDP string) (string, error) {
+	cm, ok := s.calls.Get(callID)
+	if !ok {
+		return "", fmt.Errorf("no such call %s", callID)
+	}
+	bridge, answer, err := NewBridge(s.mgr.webrtcAPI, offerSDP, s.log)
+	if err != nil {
+		return "", err
+	}
+	bridge.OnBrowserPCM = func(pcm []float32) { cm.FeedCapturedPCM(pcm) }
+	bridge.OnTerminalICE = func() { go s.terminateCall(callID, core.EndCallReasonUserEnded) }
+	s.setBridge(callID, bridge)
+	return answer, nil
 }

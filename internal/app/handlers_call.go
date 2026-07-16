@@ -84,8 +84,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 
 func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
 	callID := r.PathValue("id")
-	cm, ok := sess.callFor(callID)
-	if !ok {
+	if !sess.HasCall(callID) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
 	}
@@ -96,19 +95,11 @@ func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "sdp_offer required"})
 		return
 	}
-	bridge, answer, err := NewBridge(s.webrtcAPI, body.SDPOffer, s.log)
+	answer, err := sess.AttachBrowser(callID, body.SDPOffer)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	bridge.OnBrowserPCM = func(pcm []float32) {
-		cm.FeedCapturedPCM(pcm)
-	}
-	bridge.OnTerminalICE = func() {
-		go sess.terminateCall(callID, core.EndCallReasonUserEnded)
-	}
-	sess.setBridge(callID, bridge)
 	writeJSON(w, http.StatusOK, map[string]string{"sdp_answer": answer})
 }
 

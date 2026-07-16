@@ -16,7 +16,6 @@ import (
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
-	"github.com/pion/webrtc/v4"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -46,7 +45,6 @@ type Server struct {
 	debug          bool
 	authorize      func(*http.Request) bool
 	allowedOrigins map[string]struct{}
-	webrtcAPI      *webrtc.API
 	rateLimiter    *ipRateLimiter
 	trustedProxies []netip.Prefix
 	photos         core.ContactPhotoStore
@@ -103,7 +101,7 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 	}
 
 	broker := events.NewBroker(bundle.Calls, log)
-	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer, bundle.Photos)
+	mgr := newSessionManager(ctx, bundle.Container, api, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer, bundle.Photos)
 	broker.SnapshotFn = mgr.snapshotEvents
 
 	if broker.EnableWebhooks(ctx, cfg.WebhookURL, cfg.WebhookSecret) {
@@ -129,7 +127,6 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 		version:        cmp.Or(cfg.Version, "dev"),
 		debug:          cfg.Debug,
 		allowedOrigins: parseOrigins(cfg.CORSOrigins),
-		webrtcAPI:      api,
 		rateLimiter:    limiter,
 		trustedProxies: trustedProxies,
 		photos:         bundle.Photos,

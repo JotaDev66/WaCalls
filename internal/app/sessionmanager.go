@@ -12,6 +12,7 @@ import (
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
 
+	"github.com/pion/webrtc/v4"
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -21,6 +22,7 @@ import (
 type SessionManager struct {
 	appCtx      context.Context
 	container   *sqlstore.Container
+	webrtcAPI   *webrtc.API
 	broker      *events.Broker
 	store       core.SessionStore
 	waLogger    waLog.Logger
@@ -41,7 +43,7 @@ func newSessionID() string {
 	return hex.EncodeToString(b)
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, broker *events.Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
+func newSessionManager(ctx context.Context, container *sqlstore.Container, webrtcAPI *webrtc.API, broker *events.Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
 	if newObserver == nil {
 		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}
@@ -51,6 +53,7 @@ func newSessionManager(ctx context.Context, container *sqlstore.Container, broke
 	return &SessionManager{
 		appCtx:      ctx,
 		container:   container,
+		webrtcAPI:   webrtcAPI,
 		broker:      broker,
 		store:       store,
 		waLogger:    waLogger,
