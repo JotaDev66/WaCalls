@@ -223,8 +223,9 @@ in two variants:
 | `:latest`, `:develop`, `:vX.Y.Z` | native MLow encoder (`nativemlow` tag, static CGO build) |
 | `:latest-pure`, `:develop-pure`, `:vX.Y.Z-pure` | pure-Go build (`CGO_ENABLED=0`, today's default source build) |
 
-Self-builders pick the variant with the `NATIVE` build arg
-(`docker build --build-arg NATIVE=1 .`; default `0` = pure Go).
+Self-builders pick the variant with the `VARIANT` build arg
+(`docker build --build-arg VARIANT=native .`; default `pure` = pure Go, which
+never clones or compiles the native toolchain).
 
 ### Run with Docker Compose
 

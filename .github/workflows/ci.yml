@@ -100,6 +100,13 @@ jobs:
           CGO_LDFLAGS: -L${{ github.workspace }}/opus_mlow/build
         run: go test -tags nativemlow -count=1 ./internal/voip/codec/...
 
+      - name: Race test
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: -I${{ github.workspace }}/opus_mlow/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/opus_mlow/build
+        run: go test -race -tags nativemlow -count=1 ./internal/voip/codec/nativemlow/...
+
   race:
     name: race
     runs-on: ubuntu-latest

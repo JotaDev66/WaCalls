@@ -144,7 +144,10 @@ func TestCompositeCloseClosesNative(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := WrapEncoder(inner)
+	c, mode := WrapEncoder(inner)
+	if mode != "native" {
+		t.Fatalf("mode=%q, want native", mode)
+	}
 	if LiveEncoders() != base+1 {
 		t.Fatalf("live=%d after wrap, want %d", LiveEncoders(), base+1)
 	}
@@ -154,5 +157,31 @@ func TestCompositeCloseClosesNative(t *testing.T) {
 	c.Close()
 	if LiveEncoders() != base {
 		t.Fatalf("live=%d after composite close, want %d", LiveEncoders(), base)
+	}
+}
+
+// TestConcurrentEncodeClose gives the race detector the real production shape:
+// audio.Detach can Close while the send loop's last Encode is in flight.
+func TestConcurrentEncodeClose(t *testing.T) {
+	for range 50 {
+		enc, err := NewEncoder()
+		if err != nil {
+			t.Fatal(err)
+		}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			pcm := make([]float32, frameSamples)
+			for range 4 {
+				if _, err := enc.Encode(pcm); err != nil {
+					return
+				}
+			}
+		}()
+		enc.Close()
+		<-done
+	}
+	if n := LiveEncoders(); n != 0 {
+		t.Fatalf("live=%d after concurrent close loop", n)
 	}
 }

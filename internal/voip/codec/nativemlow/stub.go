@@ -7,11 +7,9 @@ package nativemlow
 
 import "wacalls/internal/voip/core"
 
-// WrapEncoder returns inner unchanged in the pure-Go build.
-func WrapEncoder(inner core.AudioCodec) core.AudioCodec { return inner }
+// WrapEncoder returns inner unchanged in the pure-Go build, reporting the "go"
+// encode path.
+func WrapEncoder(inner core.AudioCodec) (core.AudioCodec, string) { return inner, "go" }
 
 // Available reports whether the native encoder is compiled in.
 func Available() bool { return false }
-
-// Mode names the active encode path for operator logs.
-func Mode() string { return "go" }

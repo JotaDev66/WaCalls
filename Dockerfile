@@ -1,5 +1,11 @@
 # syntax=docker/dockerfile:1
 
+# VARIANT selects the server build: "pure" (default, CGO_ENABLED=0, today's
+# build) or "native" (links the opus_mlow SMPL encoder via the nativemlow build
+# tag, static CGO). Stage selection happens at FROM level, so a pure build never
+# clones or compiles the native toolchain.
+ARG VARIANT=pure
+
 FROM node:22-alpine AS web
 WORKDIR /web
 COPY client/package.json client/package-lock.json ./
@@ -18,29 +24,32 @@ RUN apk add --no-cache git cmake samurai gcc musl-dev \
     && cmake --build build \
     && mkdir -p /opus/lib && cp build/libopus.a /opus/lib/ && cp -r include /opus/include
 
-FROM golang:1.26-alpine AS build
-# NATIVE=1 links the opus_mlow SMPL encoder (nativemlow build tag, CGO + static);
-# NATIVE=0 is the default pure-Go build.
-ARG NATIVE=0
-RUN if [ "$NATIVE" = "1" ]; then apk add --no-cache gcc musl-dev; fi
+FROM golang:1.26-alpine AS srcbase
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web /web/dist ./internal/app/webui/dist
+
+FROM srcbase AS build-pure
+ARG VERSION=docker
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/wacalls ./cmd/server
+
+FROM srcbase AS build-native
+RUN apk add --no-cache gcc musl-dev
 COPY --from=libopusmlow /opus /opus
 ARG VERSION=docker
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    if [ "$NATIVE" = "1" ]; then \
-        CGO_ENABLED=1 CGO_CFLAGS="-I/opus/include" CGO_LDFLAGS="-L/opus/lib" \
-        go build -trimpath -tags nativemlow \
-            -ldflags "-s -w -X main.version=${VERSION} -extldflags '-static'" \
-            -o /out/wacalls ./cmd/server; \
-    else \
-        CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/wacalls ./cmd/server; \
-    fi
+    CGO_ENABLED=1 CGO_CFLAGS="-I/opus/include" CGO_LDFLAGS="-L/opus/lib" \
+    go build -trimpath -tags nativemlow \
+        -ldflags "-s -w -X main.version=${VERSION} -extldflags '-static'" \
+        -o /out/wacalls ./cmd/server
+
+FROM build-${VARIANT} AS build
 
 FROM alpine:3.21
 ARG VERSION=docker

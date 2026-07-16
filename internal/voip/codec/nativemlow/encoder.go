@@ -112,6 +112,9 @@ func (e *Encoder) Encode(pcm []float32) ([]byte, error) {
 	n := C.opus_encode_float(e.st,
 		(*C.float)(unsafe.Pointer(&clean[0])), frameSamples,
 		(*C.uchar)(unsafe.Pointer(&buf[0])), maxPacket)
+	// Keeps e (and so the AddCleanup backstop) provably live across the C call,
+	// independent of how the surrounding code is refactored.
+	runtime.KeepAlive(e)
 	if n < 0 {
 		return nil, fmt.Errorf("nativemlow: opus_encode_float: %d", int(n))
 	}
@@ -129,6 +132,7 @@ func (e *Encoder) Close() {
 	}
 	e.cleanup.Stop()
 	C.opus_encoder_destroy(e.st)
+	runtime.KeepAlive(e)
 	e.st = nil
 	liveEncoders.Add(-1)
 }
