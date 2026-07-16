@@ -11,12 +11,14 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
+func startCallSession(jid *types.JID) *Session {
+	mgr := NewManager(Deps{Log: slog.Default()})
+	return mgr.NewSession("s1", "", &whatsmeow.Client{Store: &store.Device{ID: jid}})
+}
+
 func TestStartCallRejectsPhoneWithoutDigits(t *testing.T) {
 	jid := types.NewJID("5511888880000", types.DefaultUserServer)
-	sess := &Session{
-		log:    slog.Default(),
-		client: &whatsmeow.Client{Store: &store.Device{ID: &jid}},
-	}
+	sess := startCallSession(&jid)
 	s := &Server{}
 
 	rec := httptest.NewRecorder()
@@ -33,10 +35,7 @@ func TestStartCallRejectsPhoneWithoutDigits(t *testing.T) {
 
 func TestStartCallToleratesLegacyFields(t *testing.T) {
 	jid := types.NewJID("5511888880000", types.DefaultUserServer)
-	sess := &Session{
-		log:    slog.Default(),
-		client: &whatsmeow.Client{Store: &store.Device{ID: &jid}},
-	}
+	sess := startCallSession(&jid)
 	s := &Server{}
 
 	rec := httptest.NewRecorder()

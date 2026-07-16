@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"wacalls/internal/app/events"
+
+	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/store"
 )
 
 func callsServer() *Server {
@@ -14,13 +17,13 @@ func callsServer() *Server {
 	b.UpsertCall(events.CallRecord{SessionID: "s1", CallID: "c-late", Direction: "outbound", Peer: "p1", StartedAt: 200, Status: events.StatusRinging})
 	b.UpsertCall(events.CallRecord{SessionID: "s1", CallID: "c-early", Direction: "inbound", Peer: "p2", StartedAt: 100, Status: events.StatusConnected})
 	b.UpsertCall(events.CallRecord{SessionID: "s2", CallID: "c-other", Direction: "inbound", Peer: "p3", StartedAt: 50, Status: events.StatusRinging})
+	mgr := NewManager(Deps{Broker: b, Log: slog.Default()})
+	mgr.NewSession("s1", "", &whatsmeow.Client{Store: &store.Device{}})
+	mgr.NewSession("s2", "", &whatsmeow.Client{Store: &store.Device{}})
 	return &Server{
 		authorize: bearerAuthorizer(""),
 		broker:    b,
-		sessions: &SessionManager{sessions: map[string]*Session{
-			"s1": {id: "s1"},
-			"s2": {id: "s2"},
-		}},
+		sessions:  mgr,
 	}
 }
 

@@ -14,7 +14,7 @@ func TestVersionEndpoint(t *testing.T) {
 		version:   "v9.9.9",
 		authorize: bearerAuthorizer("secret"),
 		broker:    events.NewBroker(nil, slog.Default()),
-		sessions:  &SessionManager{sessions: map[string]*Session{}},
+		sessions:  NewManager(Deps{}),
 	}
 
 	req := httptest.NewRequest("GET", "/api/version", nil)

@@ -52,7 +52,7 @@ func TestOpenAPIServedWithoutAuth(t *testing.T) {
 	s := &Server{
 		authorize: bearerAuthorizer("secret"),
 		broker:    events.NewBroker(nil, slog.Default()),
-		sessions:  &SessionManager{sessions: map[string]*Session{}},
+		sessions:  NewManager(Deps{}),
 	}
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/openapi.yaml", nil))
