@@ -129,18 +129,6 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	}
 }
 
-func (s *Session) startOutgoing(ctx context.Context, peer types.JID) (string, error) {
-	return s.calls.StartCall(ctx, peer)
-}
-
-func (s *Session) callFor(callID string) (*call.CallManager, bool) {
-	return s.calls.Get(callID)
-}
-
-func (s *Session) callCount() int {
-	return s.calls.Count()
-}
-
 func (s *Session) handleEvent(rawEvt any) {
 	ctx := context.Background()
 	switch evt := rawEvt.(type) {
