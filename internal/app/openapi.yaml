@@ -726,6 +726,9 @@ components:
           type: string
         paired:
           type: boolean
+        photoUrl:
+          type: string
+          description: Profile picture URL of the connected WhatsApp account, when available
     CallStatus:
       type: string
       enum: [starting, ringing, connected, reconnecting, ended]

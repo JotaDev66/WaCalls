@@ -6,4 +6,5 @@ export type SessionInfo = {
   jid: string;
   state: SessionState;
   paired: boolean;
+  photoUrl?: string;
 };
