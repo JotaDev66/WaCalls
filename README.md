@@ -22,20 +22,20 @@ Built for native VoIP media, multi-account (multi-session) operation, and a mode
 WaCalls pairs one or more WhatsApp accounts via **QR code** and lets you **place and
 receive 1:1 voice calls** from any browser on the LAN. The browser microphone is sent
 as **raw 16 kHz PCM over a WebRTC data channel** to the Go server, which encodes it with
-Meta's **MLow** codec and injects the media into WhatsApp's **SRTP relay** mesh — and the
+Meta's **MLow** codec and injects the media into WhatsApp's **SRTP relay** mesh - and the
 reverse path brings the peer's audio back to the browser.
 
 The entire VoIP stack runs **natively in pure Go**: the MLow voice codec, **RTP/SRTP**
 packetization, **STUN**, the **WebRTC/SCTP relay** transport and the `<call>` signaling,
 integrated with [**whatsmeow**](https://github.com/tulir/whatsmeow) and served to a
-**React 19** client. There is **no cgo and no native DLL** — the MLow codec is a vendored
+**React 19** client. There is **no cgo and no native DLL** - the MLow codec is a vendored
 pure-Go package, so a plain `go build` produces a self-contained binary with live audio.
 Peers whose clients lack MLow fall back to standard Opus on the receive path, decoded in
 pure Go via [pion/opus](https://github.com/pion/opus).
 
 Multiple WhatsApp accounts can be paired and operated side by side, each with its own
 pairing QR, connection status, and history. A single account can also run **several
-concurrent 1:1 calls** at once — one per browser operator — routed independently by call ID.
+concurrent 1:1 calls** at once - one per browser operator - routed independently by call ID.
 
 > **Status:** stable. Outgoing and incoming 1:1 calls reach `ACTIVE` with bidirectional
 > audio, and a single account can hold several of them concurrently. Sessions persist in
@@ -74,14 +74,14 @@ concurrent 1:1 calls** at once — one per browser operator — routed independe
 | Path | Responsibility |
 |---|---|
 | `cmd/server` | HTTP/SSE broker, session manager + store, WebRTC bridge, process lifecycle |
-| `internal/wa` | `VoipSocket` — sends/receives `<call>` stanzas via whatsmeow |
+| `internal/wa` | `VoipSocket` - sends/receives `<call>` stanzas via whatsmeow |
 | `internal/voip/core` | Domain types, constants, the `VoipSocket` interface |
 | `internal/voip/wanode` | Shared WhatsApp-node and JID helpers |
 | `internal/voip/codec` | Audio codecs: vendored pure-Go MLow (`mlow/`) and the standard-Opus recv fallback (`opus/`) |
 | `internal/voip/media` | RTP, SRTP, SSRC, PCM helpers, key derivation |
 | `internal/voip/transport` | SCTP relay, STUN, subscription encoding |
 | `internal/voip/signaling` | `<call>` stanza build/parse, call-key crypto, relay-ack parsing |
-| `internal/voip/call` | `CallManager` — orchestrates a single call end to end |
+| `internal/voip/call` | `CallManager` - orchestrates a single call end to end |
 | `client/` | React 19 + Vite + Tailwind v4 + shadcn/ui (dialer, call cards, sessions, history) |
 
 ---
@@ -123,7 +123,7 @@ by tests in `internal/voip` (`go test ./...`).
 - **Go 1.26+**
 - **Node 22+** and **npm** (only to build/run the React client)
 
-No C compiler, cgo, or native libraries are required — the MLow codec is vendored
+No C compiler, cgo, or native libraries are required - the MLow codec is vendored
 pure Go (`internal/voip/codec/mlow`).
 
 ---
@@ -148,7 +148,7 @@ cd client && npm install && cd ..
 go run ./cmd/server -addr :8080          # add -debug for verbose logs
 ```
 
-Live audio works out of the box — the MLow codec is pure Go, so a plain build
+Live audio works out of the box - the MLow codec is pure Go, so a plain build
 includes it. No build tags, no `CGO_ENABLED`, no DLLs.
 
 Open `http://localhost:8080`, click **New session**, and scan the QR shown in the browser
@@ -197,7 +197,7 @@ SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unse
 
 ## Docker
 
-The server and the React client ship as a single self-contained image — a static
+The server and the React client ship as a single self-contained image - a static
 (`CGO_ENABLED=0`) Go binary plus the built `client/dist` on Alpine, ~30 MB. Images
 are published to **[ghcr.io/jotadev66/wacalls](https://github.com/JotaDev66?tab=packages&repo_name=WaCalls)**.
 
@@ -242,9 +242,16 @@ candidate the browser can actually reach. Configure it in `.env`:
 
 On bridge networking set **both** `WACALLS_PUBLIC_IP` and `WEBRTC_UDP_PORT`. The
 UDP port is published 1:1 (`7881:7881/udp`) so the advertised candidate matches the
-reachable port — keep the two sides identical. Leaving the env vars unset falls back
+reachable port - keep the two sides identical. Inside a container the media socket binds
+only the default-route interface, so private overlay/bridge addresses are never offered
+as candidates; the same image works on plain bridge, on a Swarm overlay, and on bare
+metal, with only `WACALLS_PUBLIC_IP` varying. Leaving the env vars unset falls back
 to ephemeral ports with interface-IP candidates, which only works on host networking
 or a flat LAN. The WhatsApp relay leg is outbound and needs no inbound ports.
+
+For production deploys (Traefik + TLS, or an existing Swarm) and fixes for no-audio or
+one-way-audio issues, see [`docs/deploy.md`](docs/deploy.md) and
+[`docs/troubleshooting.md`](docs/troubleshooting.md).
 
 ### Build locally
 
@@ -410,12 +417,12 @@ This project builds on the work of:
 
 ## Acknowledgements
 
-- [**whatsmeow**](https://github.com/tulir/whatsmeow) — Go WhatsApp Web protocol library
-- [**pion/webrtc**](https://github.com/pion/webrtc) — pure-Go WebRTC stack (ICE + DTLS + SCTP)
-- [**pion/opus**](https://github.com/pion/opus) — pure-Go Opus decoder (standard-Opus receive fallback)
-- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) — reference MLow codec implementation (ported to the vendored pure-Go `internal/voip/codec/mlow`)
-- [**meowcaller**](https://github.com/purpshell/meowcaller) — WhatsApp VoIP calling engine reference
-- [**zapo**](https://github.com/w3nder/zapo) — VoIP media-stack reference
+- [**whatsmeow**](https://github.com/tulir/whatsmeow) - Go WhatsApp Web protocol library
+- [**pion/webrtc**](https://github.com/pion/webrtc) - pure-Go WebRTC stack (ICE + DTLS + SCTP)
+- [**pion/opus**](https://github.com/pion/opus) - pure-Go Opus decoder (standard-Opus receive fallback)
+- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) - reference MLow codec implementation (ported to the vendored pure-Go `internal/voip/codec/mlow`)
+- [**meowcaller**](https://github.com/purpshell/meowcaller) - WhatsApp VoIP calling engine reference
+- [**zapo**](https://github.com/w3nder/zapo) - VoIP media-stack reference
 
 ---
 

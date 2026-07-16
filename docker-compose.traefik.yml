@@ -1,0 +1,87 @@
+services:
+  traefik:
+    image: traefik:v3.6.5
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL:?set ACME_EMAIL in .env}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    networks:
+      - wacalls-web
+
+  wacalls:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-docker}
+    image: ghcr.io/jotadev66/wacalls:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      # WebRTC media, published 1:1 so the advertised ICE candidate matches the
+      # reachable port. This bypasses Traefik (media is UDP, not HTTP). The pion
+      # mux binds only the default-route interface, so it works on plain bridge.
+      - "${WEBRTC_UDP_PORT:-7881}:${WEBRTC_UDP_PORT:-7881}/udp"
+    environment:
+      WACALLS_PUBLIC_IP: ${WACALLS_PUBLIC_IP:?set WACALLS_PUBLIC_IP in .env}
+      WACALLS_WEBRTC_UDP_PORT: ${WEBRTC_UDP_PORT:-7881}
+      WACALLS_ADMIN_USER: ${WACALLS_ADMIN_USER:?set WACALLS_ADMIN_USER in .env}
+      WACALLS_ADMIN_PASSWORD: ${WACALLS_ADMIN_PASSWORD:?set WACALLS_ADMIN_PASSWORD in .env}
+      WACALLS_API_TOKEN: ${WACALLS_API_TOKEN:-}
+      # Traefik fronts the app on the internal docker network; trust it so the
+      # per-IP rate limit keys by the real client in X-Forwarded-For.
+      WACALLS_TRUSTED_PROXIES: ${WACALLS_TRUSTED_PROXIES:-172.16.0.0/12}
+      DATABASE_URL: postgres://${POSTGRES_USER:-wacalls}:${POSTGRES_PASSWORD:-wacalls}@postgres:5432/${POSTGRES_DB:-wacalls}?sslmode=disable
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=wacalls-web"
+      - "traefik.http.routers.wacalls.rule=Host(`${WACALLS_DOMAIN:?set WACALLS_DOMAIN in .env}`)"
+      - "traefik.http.routers.wacalls.entrypoints=websecure"
+      - "traefik.http.routers.wacalls.tls.certresolver=le"
+      - "traefik.http.services.wacalls.loadbalancer.server.port=8080"
+    networks:
+      - wacalls-web
+      - wacalls-internal
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wacalls}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wacalls}
+      POSTGRES_DB: ${POSTGRES_DB:-wacalls}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wacalls} -d ${POSTGRES_DB:-wacalls}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - wacalls-pg:/var/lib/postgresql/data
+    networks:
+      - wacalls-internal
+
+volumes:
+  traefik-certs:
+  wacalls-pg:
+
+networks:
+  wacalls-web:
+    name: wacalls-web
+  wacalls-internal:
+    name: wacalls-internal
+    internal: true
