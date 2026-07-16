@@ -51,9 +51,13 @@ export const en: Messages = {
     },
   },
   pairing: {
-    title: (name) => `Pair ${name}`,
-    description: "Open WhatsApp → Linked devices → Link a device, then scan.",
-    disconnectedBadge: "Disconnected. Use Reactivate above to get a QR",
+    stepsTitle: "How to pair",
+    step1: "Open WhatsApp on your phone",
+    step2: "Tap Linked devices, then Link a device",
+    step3: "Point the camera at the code",
+    autoRenews: "The code refreshes on its own while this page is open.",
+    disconnectedBody:
+      "This account was logged out. Generate a fresh code to pair it again.",
     waitingQr: "Waiting for QR…",
   },
   calls: {

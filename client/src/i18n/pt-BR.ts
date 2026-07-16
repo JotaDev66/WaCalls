@@ -51,10 +51,13 @@ export const ptBR: Messages = {
     },
   },
   pairing: {
-    title: (name) => `Parear ${name}`,
-    description:
-      "Abra o WhatsApp → Aparelhos conectados → Conectar um aparelho e escaneie.",
-    disconnectedBadge: "Desconectado. Use Reativar acima para obter um QR",
+    stepsTitle: "Como parear",
+    step1: "Abra o WhatsApp no celular",
+    step2: "Toque em Aparelhos conectados e depois em Conectar um aparelho",
+    step3: "Aponte a câmera para o código",
+    autoRenews: "O código renova sozinho enquanto esta página estiver aberta.",
+    disconnectedBody:
+      "Esta conta foi desconectada. Gere um novo código para parear de novo.",
     waitingQr: "Aguardando QR…",
   },
   calls: {

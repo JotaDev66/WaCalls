@@ -48,9 +48,12 @@ export type Messages = {
     };
   };
   pairing: {
-    title: (name: string) => string;
-    description: string;
-    disconnectedBadge: string;
+    stepsTitle: string;
+    step1: string;
+    step2: string;
+    step3: string;
+    autoRenews: string;
+    disconnectedBody: string;
     waitingQr: string;
   };
   calls: {
