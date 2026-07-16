@@ -65,7 +65,7 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		return
 	}
 	st, err := sess.StartCall(r.Context(), phone)
-	if errors.Is(err, errTooManyCalls) {
+	if errors.Is(err, ErrTooManyCalls) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}

@@ -195,7 +195,7 @@ func (s *Session) setAuth(a events.AuthSnapshot) {
 	s.auth = a
 	s.mu.Unlock()
 	s.mgr.broker.EmitAuthState(s.id, a)
-	s.mgr.broker.EmitSessionList(s.mgr.infos())
+	s.mgr.broker.EmitSessionList(s.mgr.Infos())
 }
 
 func (s *Session) info() events.SessionInfo {

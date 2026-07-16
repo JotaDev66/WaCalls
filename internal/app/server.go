@@ -101,8 +101,12 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 	}
 
 	broker := events.NewBroker(bundle.Calls, log)
-	mgr := newSessionManager(ctx, bundle.Container, api, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer, bundle.Photos)
-	broker.SnapshotFn = mgr.snapshotEvents
+	mgr := NewManager(Deps{
+		Ctx: ctx, Container: bundle.Container, WebRTCAPI: api, Broker: broker,
+		Store: bundle.Sessions, WALogger: waLogger, Log: log, MaxCalls: cfg.MaxCalls,
+		NewObserver: obsFactory, Tracer: tracer, Photos: bundle.Photos,
+	})
+	broker.SnapshotFn = mgr.SnapshotEvents
 
 	if broker.EnableWebhooks(ctx, cfg.WebhookURL, cfg.WebhookSecret) {
 		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
@@ -140,7 +144,7 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 }
 
 func (s *Server) Run(ctx context.Context, addr string) error {
-	defer s.sessions.disconnectAll()
+	defer s.sessions.DisconnectAll()
 	if err := s.sessions.Restore(ctx); err != nil {
 		return err
 	}

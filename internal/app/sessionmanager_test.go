@@ -22,7 +22,10 @@ func newTestManager(t *testing.T) *SessionManager {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
-	return newSessionManager(ctx, bundle.Container, nil, events.NewBroker(bundle.Calls, slog.Default()), bundle.Sessions, waLog.Noop, slog.Default(), 0, nil, nil, bundle.Photos)
+	return NewManager(Deps{
+		Ctx: ctx, Container: bundle.Container, Broker: events.NewBroker(bundle.Calls, slog.Default()),
+		Store: bundle.Sessions, WALogger: waLog.Noop, Log: slog.Default(), Photos: bundle.Photos,
+	})
 }
 
 func TestNewSessionID(t *testing.T) {
@@ -39,22 +42,20 @@ func (m *SessionManager) addUnconnected(t *testing.T, name string) *Session {
 		t.Fatal(err)
 	}
 	client := whatsmeow.NewClient(m.container.NewDevice(), waLog.Noop)
-	s := newSession(m, id, name, client)
-	m.register(s)
-	return s
+	return m.NewSession(id, name, client)
 }
 
 func TestSessionManagerRegistry(t *testing.T) {
 	m := newTestManager(t)
 
-	if len(m.infos()) != 0 {
+	if len(m.Infos()) != 0 {
 		t.Fatal("expected no sessions when empty")
 	}
 
 	a := m.addUnconnected(t, "Account A")
 	b := m.addUnconnected(t, "Account B")
 
-	infos := m.infos()
+	infos := m.Infos()
 	if len(infos) != 2 {
 		t.Fatalf("expected 2 sessions, got %d", len(infos))
 	}
@@ -73,7 +74,7 @@ func TestSessionManagerRegistry(t *testing.T) {
 	if _, ok := m.Get(b.id); ok {
 		t.Fatal("session b should be gone after unregister")
 	}
-	if len(m.infos()) != 1 {
+	if len(m.Infos()) != 1 {
 		t.Fatal("expected 1 session after unregister")
 	}
 }

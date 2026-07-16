@@ -43,25 +43,39 @@ func newSessionID() string {
 	return hex.EncodeToString(b)
 }
 
-func newSessionManager(ctx context.Context, container *sqlstore.Container, webrtcAPI *webrtc.API, broker *events.Broker, store core.SessionStore, waLogger waLog.Logger, log *slog.Logger, maxCalls int, newObserver func(string) core.CallObserver, tracer telemetry.CallTracer, photos core.ContactPhotoStore) *SessionManager {
-	if newObserver == nil {
-		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
+type Deps struct {
+	Ctx         context.Context
+	Container   *sqlstore.Container
+	WebRTCAPI   *webrtc.API
+	Broker      *events.Broker
+	Store       core.SessionStore
+	WALogger    waLog.Logger
+	Log         *slog.Logger
+	MaxCalls    int
+	NewObserver func(string) core.CallObserver
+	Tracer      telemetry.CallTracer
+	Photos      core.ContactPhotoStore
+}
+
+func NewManager(d Deps) *SessionManager {
+	if d.NewObserver == nil {
+		d.NewObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}
-	if tracer == nil {
-		tracer = telemetry.NopTracer()
+	if d.Tracer == nil {
+		d.Tracer = telemetry.NopTracer()
 	}
 	return &SessionManager{
-		appCtx:      ctx,
-		container:   container,
-		webrtcAPI:   webrtcAPI,
-		broker:      broker,
-		store:       store,
-		waLogger:    waLogger,
-		log:         log,
-		maxCalls:    maxCalls,
-		newObserver: newObserver,
-		tracer:      tracer,
-		photos:      photos,
+		appCtx:      d.Ctx,
+		container:   d.Container,
+		webrtcAPI:   d.WebRTCAPI,
+		broker:      d.Broker,
+		store:       d.Store,
+		waLogger:    d.WALogger,
+		log:         d.Log,
+		maxCalls:    d.MaxCalls,
+		newObserver: d.NewObserver,
+		tracer:      d.Tracer,
+		photos:      d.Photos,
 		sessions:    map[string]*Session{},
 	}
 }
@@ -71,6 +85,12 @@ func (m *SessionManager) register(s *Session) {
 	m.sessions[s.id] = s
 	m.order = append(m.order, s.id)
 	m.mu.Unlock()
+}
+
+func (m *SessionManager) NewSession(id, name string, client *whatsmeow.Client) *Session {
+	s := newSession(m, id, name, client)
+	m.register(s)
+	return s
 }
 
 func (m *SessionManager) unregister(id string) {
@@ -92,7 +112,7 @@ func (m *SessionManager) Get(id string) (*Session, bool) {
 	return s, ok
 }
 
-func (m *SessionManager) infos() []events.SessionInfo {
+func (m *SessionManager) Infos() []events.SessionInfo {
 	m.mu.RLock()
 	ordered := make([]*Session, 0, len(m.order))
 	for _, id := range m.order {
@@ -108,8 +128,8 @@ func (m *SessionManager) infos() []events.SessionInfo {
 	return out
 }
 
-func (m *SessionManager) snapshotEvents() []any {
-	return []any{map[string]any{"type": "session-list", "sessions": m.infos()}}
+func (m *SessionManager) SnapshotEvents() []any {
+	return []any{map[string]any{"type": "session-list", "sessions": m.Infos()}}
 }
 
 func (m *SessionManager) Restore(ctx context.Context) error {
@@ -135,14 +155,13 @@ func (m *SessionManager) Restore(ctx context.Context) error {
 			continue
 		}
 		client := whatsmeow.NewClient(device, m.waLogger)
-		s := newSession(m, row.ID, row.Name, client)
-		m.register(s)
+		s := m.NewSession(row.ID, row.Name, client)
 		if err := s.connect(ctx); err != nil {
 			m.log.Error("session connect failed", "session", row.ID, "err", err)
 		}
 	}
-	m.broker.EmitSessionList(m.infos())
-	m.log.Info("sessions restored", "count", len(m.infos()))
+	m.broker.EmitSessionList(m.Infos())
+	m.log.Info("sessions restored", "count", len(m.Infos()))
 	return nil
 }
 
@@ -153,9 +172,8 @@ func (m *SessionManager) Create(name string) (string, error) {
 	}
 	device := m.container.NewDevice()
 	client := whatsmeow.NewClient(device, m.waLogger)
-	s := newSession(m, id, name, client)
-	m.register(s)
-	m.broker.EmitSessionList(m.infos())
+	s := m.NewSession(id, name, client)
+	m.broker.EmitSessionList(m.Infos())
 	if err := s.startPairing(m.appCtx); err != nil {
 		m.log.Error("start pairing failed", "session", id, "err", err)
 		return "", fmt.Errorf("start pairing: %w", err)
@@ -181,7 +199,7 @@ func (m *SessionManager) Delete(ctx context.Context, id string) error {
 	s.teardownAllCalls()
 	m.unregister(id)
 	_ = m.store.Delete(ctx, id)
-	m.broker.EmitSessionList(m.infos())
+	m.broker.EmitSessionList(m.Infos())
 	m.log.Info("session deleted", "session", id)
 	return nil
 }
@@ -215,12 +233,12 @@ func (m *SessionManager) Pair(id string) error {
 	if err := s.startPairing(m.appCtx); err != nil {
 		return fmt.Errorf("start pairing: %w", err)
 	}
-	m.broker.EmitSessionList(m.infos())
+	m.broker.EmitSessionList(m.Infos())
 	m.log.Info("session re-pairing", "session", id)
 	return nil
 }
 
-func (m *SessionManager) disconnectAll() {
+func (m *SessionManager) DisconnectAll() {
 	m.mu.RLock()
 	all := make([]*Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
