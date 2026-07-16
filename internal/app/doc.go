@@ -1,14 +1,17 @@
-// Package app wires the HTTP/SSE front end to the session workers and the
-// event broker that couples them. Files group by responsibility:
+// Package app is the HTTP/SSE front end and the WhatsApp session workers it
+// drives. Files group by responsibility:
 //
-//   - worker (hosts a WhatsApp session and its calls, produces events):
-//     sessionmanager.go, session.go, whatsapp.go, callrouting.go,
-//     bridge.go, webrtc.go
-//   - front  (serves HTTP/SSE to the operator): server.go, routes.go,
-//     handlers_session.go, handlers_call.go, auth.go, authlogin.go,
-//     contacts.go, history.go, openapi.go, ratelimit.go
-//   - events (the worker->front seam): broker.go, callregistry.go, webhook.go
+//   - front (serves HTTP/SSE to the operator): server.go, routes.go,
+//     handlers_session.go, handlers_call.go, contacts.go, history.go,
+//     auth.go, authlogin.go, ratelimit.go, openapi.go
+//   - worker (hosts a WhatsApp session and its calls): sessionmanager.go,
+//     session.go, whatsapp.go, callrouting.go, bridge.go, webrtc.go
 //
-// Configuration and preflight checks live in sibling packages
+// The SSE broker, live call registry, and webhook dispatcher live in the
+// sibling package internal/app/events; configuration and preflight checks in
 // internal/app/config and internal/app/doctor.
+//
+// Splitting the worker into its own package is intentionally deferred: the
+// front still reaches into Session internals (the whatsmeow client), so a clean
+// worker boundary needs command methods on Session first, not just a file move.
 package app
