@@ -21,7 +21,6 @@ import { Omnibox } from "@/components/domain/omnibox/Omnibox";
 import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
 import { useOnboarding } from "@/stores/onboarding";
 import { useNav } from "@/stores/nav";
-import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/useT";
 
 export const App = () => {
@@ -63,29 +62,11 @@ export const App = () => {
             <>
               <SessionHeader session={active} />
               {active.paired ? (
-                <>
-                  <div className="flex gap-1">
-                    <Button
-                      size="sm"
-                      variant={view === "console" ? "default" : "ghost"}
-                      onClick={() => setView("console")}
-                    >
-                      {t.nav.console}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={view === "contacts" ? "default" : "ghost"}
-                      onClick={() => setView("contacts")}
-                    >
-                      {t.nav.contacts}
-                    </Button>
-                  </div>
-                  {view === "contacts" ? (
-                    <ContactsPage sid={active.id} />
-                  ) : (
-                    <CallsPage sid={active.id} />
-                  )}
-                </>
+                view === "contacts" ? (
+                  <ContactsPage sid={active.id} />
+                ) : (
+                  <CallsPage sid={active.id} />
+                )
               ) : (
                 <SessionPairing session={active} />
               )}
