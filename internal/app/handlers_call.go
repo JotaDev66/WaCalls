@@ -10,8 +10,6 @@ import (
 	"wacalls/internal/app/events"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
-
-	"go.mau.fi/whatsmeow/types"
 )
 
 func (s *Server) handleStartCall(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +43,7 @@ func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
-	if sess.client.Store.ID == nil {
+	if !sess.IsPaired() {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
 		return
 	}
@@ -66,26 +64,22 @@ func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
 		return
 	}
-	if max := s.sessions.maxCalls; max > 0 && sess.callCount() >= max {
+	st, err := sess.StartCall(r.Context(), phone)
+	if errors.Is(err, errTooManyCalls) {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
 	}
-	peer := types.NewJID(phone, types.DefaultUserServer)
-
-	callID, err := sess.startOutgoing(r.Context(), peer)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	peerName := resolvePeerName(r.Context(), sess.client, peer)
-	photoURL := cachedPhotoURL(r.Context(), s.photos, sess.id, peer.String())
 	s.broker.UpsertCall(events.CallRecord{
-		SessionID: sess.id, CallID: callID, Owner: events.OwnerRef(owner), Direction: "outbound", Peer: peer.String(),
-		PeerName: peerName, PeerPhotoURL: photoURL,
+		SessionID: sess.ID(), CallID: st.CallID, Owner: events.OwnerRef(owner), Direction: "outbound",
+		Peer: st.Peer, PeerName: st.PeerName, PeerPhotoURL: st.PeerPhotoURL,
 		StartedAt: time.Now().UnixMilli(), Status: events.StatusRinging,
 	})
-	go sess.fetchPeerPhoto(peer, callID)
-	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": callID}})
+	sess.FetchCallPhoto(st.CallID, st.Peer)
+	writeJSON(w, http.StatusOK, map[string]any{"call": map[string]string{"callId": st.CallID}})
 }
 
 func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request) {
