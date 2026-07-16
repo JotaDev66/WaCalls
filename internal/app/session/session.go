@@ -142,6 +142,7 @@ func (s *Session) handleEvent(rawEvt any) {
 		if id := s.client.Store.ID; id != nil {
 			_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 		}
+		go s.fetchOwnPhoto()
 		s.setAuth(events.AuthSnapshot{State: "open", Paired: true})
 	case *waevents.LoggedOut:
 		s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
@@ -204,15 +205,23 @@ func (s *Session) setAuth(a events.AuthSnapshot) {
 	s.mgr.broker.EmitSessionList(s.mgr.Infos())
 }
 
+func (s *Session) rename(name string) {
+	s.mu.Lock()
+	s.name = name
+	s.mu.Unlock()
+}
+
 func (s *Session) info() events.SessionInfo {
 	s.mu.Lock()
 	a := s.auth
+	name := s.name
 	s.mu.Unlock()
-	jid := ""
+	jid, photo := "", ""
 	if id := s.client.Store.ID; id != nil {
 		jid = id.String()
+		photo = cachedPhotoURL(context.Background(), s.mgr.photos, s.id, id.ToNonAD().String())
 	}
-	return events.SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
+	return events.SessionInfo{ID: s.id, Name: name, JID: jid, State: a.State, Paired: a.Paired || jid != "", PhotoURL: photo}
 }
 
 func (s *Session) getBridge(callID string) *Bridge {

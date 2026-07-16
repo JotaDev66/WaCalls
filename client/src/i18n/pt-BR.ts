@@ -4,7 +4,8 @@ export const ptBR: Messages = {
   app: {
     noAccountsTitle: "Nenhuma conta ainda",
     noAccountsDescription:
-      "Crie sua primeira conta do WhatsApp na barra lateral para começar a ligar.",
+      "Conecte sua primeira conta do WhatsApp para começar a ligar.",
+    createFirst: "Criar conta",
     selectAccountTitle: "Selecione uma conta",
     selectAccountDescription: "Escolha uma conta na barra lateral.",
   },
@@ -36,6 +37,13 @@ export const ptBR: Messages = {
     deleteDescription: (name) => `${name} será desconectada e removida.`,
     disconnect: "Desconectar",
     reactivate: "Reativar",
+    rename: "Renomear",
+    renameTitle: "Renomear conta",
+    createTitle: "Nova conta",
+    create: "Criar",
+    save: "Salvar",
+    nameLabel: "Nome",
+    moreActions: "Mais ações",
     status: {
       open: "Conectado",
       qr: "Ler QR",
@@ -44,10 +52,13 @@ export const ptBR: Messages = {
     },
   },
   pairing: {
-    title: (name) => `Parear ${name}`,
-    description:
-      "Abra o WhatsApp → Aparelhos conectados → Conectar um aparelho e escaneie.",
-    disconnectedBadge: "Desconectado. Use Reativar acima para obter um QR",
+    stepsTitle: "Como parear",
+    step1: "Abra o WhatsApp no celular",
+    step2: "Toque em Aparelhos conectados e depois em Conectar um aparelho",
+    step3: "Aponte a câmera para o código",
+    autoRenews: "O código renova sozinho enquanto esta página estiver aberta.",
+    disconnectedBody:
+      "Esta conta foi desconectada. Gere um novo código para parear de novo.",
     waitingQr: "Aguardando QR…",
   },
   calls: {

@@ -25,6 +25,7 @@ type SessionStore interface {
 	List(ctx context.Context) ([]Session, error)
 	Insert(ctx context.Context, id, name string) error
 	SetJID(ctx context.Context, id, jid string) error
+	UpdateName(ctx context.Context, id, name string) error
 	Delete(ctx context.Context, id string) error
 }
 

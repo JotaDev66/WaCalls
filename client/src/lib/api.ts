@@ -56,6 +56,20 @@ export const apiPost = async <T>(path: string, body: unknown): Promise<T> => {
   return r.json() as Promise<T>;
 };
 
+export const apiPatch = async (path: string, body: unknown): Promise<void> => {
+  const r = await fetch(path, {
+    method: "PATCH",
+    headers: baseHeaders(),
+    body: JSON.stringify(body),
+    credentials: "same-origin",
+  });
+  if (!r.ok) {
+    guard(r.status);
+    const text = await r.text().catch(() => "");
+    throw new Error(`${path} ${r.status} ${text}`);
+  }
+};
+
 export const apiDelete = async (path: string): Promise<void> => {
   const r = await fetch(path, {
     method: "DELETE",

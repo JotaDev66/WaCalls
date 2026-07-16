@@ -84,6 +84,24 @@ func cachedPhotoURL(ctx context.Context, photos core.ContactPhotoStore, sessionI
 	return p.URL
 }
 
+func (s *Session) fetchOwnPhoto() {
+	id := s.client.Store.ID
+	if id == nil || s.mgr.photos == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	jid := id.ToNonAD()
+	info, err := s.client.GetProfilePictureInfo(ctx, jid, &whatsmeow.GetProfilePictureParams{Preview: true})
+	if err != nil || info == nil || info.URL == "" {
+		return
+	}
+	_ = s.mgr.photos.Upsert(ctx, core.ContactPhoto{
+		SessionID: s.id, Jid: jid.String(), URL: info.URL, PictureID: info.ID, FetchedAt: time.Now().UnixMilli(),
+	})
+	s.mgr.broker.EmitSessionList(s.mgr.Infos())
+}
+
 func (s *Session) fetchPeerPhoto(jid types.JID, callID string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

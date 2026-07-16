@@ -112,6 +112,11 @@ func (s *sessionStore) SetJID(ctx context.Context, id, jid string) error {
 	return err
 }
 
+func (s *sessionStore) UpdateName(ctx context.Context, id, name string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET name = ? WHERE id = ?`, name, id)
+	return err
+}
+
 func (s *sessionStore) Delete(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = ?`, id)
 	return err

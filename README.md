@@ -304,6 +304,7 @@ tagged with the originating `sessionId`.
 | `GET` | `/api/sessions` | List accounts (id, name, jid, status, paired) |
 | `POST` | `/api/sessions` | Create an account and begin QR pairing |
 | `DELETE` | `/api/sessions/{sid}` | Log out and remove an account |
+| `PATCH` | `/api/sessions/{sid}` | Rename an account (`{ name }`) |
 | `POST` | `/api/sessions/{sid}/logout` | Disconnect an account (keep it for re-pairing) |
 | `POST` | `/api/sessions/{sid}/pair` | Re-pair an account (emit a fresh QR) |
 | `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone }`) |

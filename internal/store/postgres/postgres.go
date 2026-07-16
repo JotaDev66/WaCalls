@@ -120,6 +120,11 @@ func (s *sessionStore) SetJID(ctx context.Context, id, jid string) error {
 	return err
 }
 
+func (s *sessionStore) UpdateName(ctx context.Context, id, name string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE sessions SET name = $1 WHERE id = $2`, name, id)
+	return err
+}
+
 func (s *sessionStore) Delete(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE id = $1`, id)
 	return err

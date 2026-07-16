@@ -141,3 +141,11 @@
 .tom-wave {
   animation: tom-wave 1.1s ease-in-out infinite;
 }
+
+.dot-grid {
+  background-image: radial-gradient(
+    hsl(var(--muted-foreground) / 0.18) 1px,
+    transparent 1px
+  );
+  background-size: 16px 16px;
+}

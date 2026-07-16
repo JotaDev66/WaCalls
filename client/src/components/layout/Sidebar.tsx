@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { setActiveSession, useSessions } from "@/stores/sessions";
-import { createSession, deleteSession } from "@/services/sessions";
+import { deleteSession } from "@/services/sessions";
+import { openCreateSession } from "@/stores/session-name-dialog";
 import { useT } from "@/hooks/useT";
 import type { SessionInfo, SessionState } from "@/types/session";
 
@@ -19,21 +20,12 @@ const dotClass: Record<SessionState, string> = {
 export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
   const sessions = useSessions((s) => s.sessions);
   const activeId = useSessions((s) => s.activeId);
-  const [creating, setCreating] = useState(false);
   const [toDelete, setToDelete] = useState<SessionInfo | null>(null);
   const t = useT();
 
-  const onNew = async () => {
-    setCreating(true);
-    try {
-      const { id } = await createSession("WhatsApp");
-      setActiveSession(id);
-      onNavigate?.();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setCreating(false);
-    }
+  const onNew = () => {
+    openCreateSession();
+    onNavigate?.();
   };
 
   const remove = async (id: string) => {
@@ -85,7 +77,7 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
                 e.stopPropagation();
                 setToDelete(s);
               }}
-              className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+              className="text-muted-foreground/60 transition-colors hover:text-destructive"
               aria-label={t.sessions.deleteAria(s.name)}
             >
               <Trash2 className="h-4 w-4" />
@@ -98,17 +90,8 @@ export const Sidebar = ({ onNavigate }: { onNavigate?: () => void }) => {
           </p>
         )}
       </div>
-      <Button
-        variant="outline"
-        className="w-full"
-        onClick={onNew}
-        disabled={creating}
-      >
-        {creating ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Plus className="h-4 w-4" />
-        )}
+      <Button variant="outline" className="w-full" onClick={onNew}>
+        <Plus className="h-4 w-4" />
         {t.sessions.newSession}
       </Button>
 
