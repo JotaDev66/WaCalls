@@ -134,11 +134,11 @@ func contactsServer(paired bool, all map[types.JID]types.ContactInfo) *Server {
 		owner := types.NewJID("owner", types.DefaultUserServer)
 		dev.ID = &owner
 	}
+	mgr := &SessionManager{}
+	mgr.sessions = map[string]*Session{"s1": {id: "s1", mgr: mgr, client: &whatsmeow.Client{Store: dev}}}
 	return &Server{
 		authorize: bearerAuthorizer(""),
-		sessions: &SessionManager{sessions: map[string]*Session{
-			"s1": {id: "s1", client: &whatsmeow.Client{Store: dev}},
-		}},
+		sessions:  mgr,
 	}
 }
 
@@ -194,12 +194,11 @@ func TestContactListWithPhoto(t *testing.T) {
 	jid := mkJID("5511999998888", types.DefaultUserServer)
 	owner := types.NewJID("owner", types.DefaultUserServer)
 	dev := &store.Device{ID: &owner, Contacts: fakeContacts{all: map[types.JID]types.ContactInfo{jid: {FirstName: "Alice"}}}}
+	mgr := &SessionManager{photos: fakePhotos{m: map[string]core.ContactPhoto{jid.String(): {URL: "http://cdn/pic.jpg"}}}}
+	mgr.sessions = map[string]*Session{"s1": {id: "s1", mgr: mgr, client: &whatsmeow.Client{Store: dev}}}
 	s := &Server{
 		authorize: bearerAuthorizer(""),
-		photos:    fakePhotos{m: map[string]core.ContactPhoto{jid.String(): {URL: "http://cdn/pic.jpg"}}},
-		sessions: &SessionManager{sessions: map[string]*Session{
-			"s1": {id: "s1", client: &whatsmeow.Client{Store: dev}},
-		}},
+		sessions:  mgr,
 	}
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
