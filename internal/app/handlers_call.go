@@ -114,8 +114,7 @@ func (s *Server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	cm, ok := sess.callFor(id)
-	if !ok {
+	if !sess.HasCall(id) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
 	}
@@ -128,8 +127,8 @@ func (s *Server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "claimed by another client"})
 		return
 	}
-	s.broker.EmitIncomingClaimed(sess.id, id, owner)
-	if err := cm.AcceptCall(r.Context(), id); err != nil {
+	s.broker.EmitIncomingClaimed(sess.ID(), id, owner)
+	if err := sess.AcceptCall(r.Context(), id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -159,24 +158,18 @@ func (s *Server) handleCallGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if cm, ok := sess.callFor(id); ok {
-		var invalid *call.InvalidTransition
-		if err := cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined); errors.As(err, &invalid) {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-			return
-		}
+	var invalid *call.InvalidTransition
+	if err := sess.RejectCall(r.Context(), id); errors.As(err, &invalid) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
 	}
-	sess.removeCall(id)
 	s.broker.EndCall(id, string(core.EndCallReasonDeclined))
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (s *Server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if cm, ok := sess.callFor(id); ok {
-		_ = cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
-	}
-	sess.removeCall(id)
+	_ = sess.EndCall(r.Context(), id)
 	s.broker.EndCall(id, string(core.EndCallReasonUserEnded))
 	w.WriteHeader(http.StatusNoContent)
 }

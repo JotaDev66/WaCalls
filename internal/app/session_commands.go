@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 
+	"wacalls/internal/voip/call"
+	"wacalls/internal/voip/core"
+
 	"go.mau.fi/whatsmeow/types"
 )
 
@@ -43,4 +46,24 @@ func (s *Session) FetchCallPhoto(callID, peer string) {
 		return
 	}
 	go s.fetchPeerPhoto(jid, callID)
+}
+
+func (s *Session) AcceptCall(ctx context.Context, callID string) error {
+	return s.calls.AcceptCall(ctx, callID)
+}
+
+func (s *Session) RejectCall(ctx context.Context, callID string) error {
+	err := s.calls.RejectCall(ctx, callID, core.EndCallReasonDeclined)
+	var invalid *call.InvalidTransition
+	if errors.As(err, &invalid) {
+		return err
+	}
+	s.removeCall(callID)
+	return nil
+}
+
+func (s *Session) EndCall(ctx context.Context, callID string) error {
+	err := s.calls.EndCall(ctx, callID, core.EndCallReasonUserEnded)
+	s.removeCall(callID)
+	return err
 }
