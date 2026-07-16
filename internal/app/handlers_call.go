@@ -44,13 +44,6 @@ func (s *Server) handleEndCall(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func ownerRef(owner string) *string {
-	if owner == "" {
-		return nil
-	}
-	return &owner
-}
-
 func (s *Server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	if sess.client.Store.ID == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
