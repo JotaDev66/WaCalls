@@ -1,4 +1,4 @@
-package app
+package doctor
 
 import (
 	"context"
