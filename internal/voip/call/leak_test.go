@@ -1,9 +1,12 @@
 package call
 
 import (
+	"context"
+	"errors"
 	"log/slog"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,6 +15,9 @@ import (
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
 	"wacalls/internal/voip/media"
+
+	waBinary "go.mau.fi/whatsmeow/binary"
+	"go.mau.fi/whatsmeow/types"
 )
 
 type countingObserver struct {
@@ -63,6 +69,41 @@ func waitFor(t *testing.T, d time.Duration, cond func() bool) {
 	}
 	if !cond() {
 		t.Fatalf("condition not met within %s", d)
+	}
+}
+
+type closeCountCodec struct{ closed atomic.Int32 }
+
+func (c *closeCountCodec) Encode([]float32) ([]byte, error) { return []byte{0}, nil }
+func (c *closeCountCodec) Decode([]byte) ([]float32, error) { return nil, nil }
+func (c *closeCountCodec) FrameSize() int                   { return 960 }
+func (c *closeCountCodec) SampleRate() int                  { return 16000 }
+func (c *closeCountCodec) Close()                           { c.closed.Add(1) }
+
+type failingQuerySock struct{ fakeSock }
+
+func (failingQuerySock) Query(context.Context, waBinary.Node) (*waBinary.Node, error) {
+	return nil, errors.New("network down")
+}
+
+// TestFailedStartCallClosesCodec: a dial that errors before setup must still tear
+// down media so every extension's codec.Close fires (a real resource once the
+// native encoder lands; silently leaked before this test existed).
+func TestFailedStartCallClosesCodec(t *testing.T) {
+	codec := &closeCountCodec{}
+	client := NewClient(failingQuerySock{}, slog.Default(), func() []engine.Extension {
+		return []engine.Extension{audio.New(codec)}
+	}, 0, func(string, *CallManager) {}, nil)
+
+	_, err := client.StartCall(context.Background(), types.NewJID("5511999999999", types.DefaultUserServer))
+	if err == nil {
+		t.Fatal("expected StartCall to fail")
+	}
+	if codec.closed.Load() == 0 {
+		t.Fatal("codec.Close not called after failed StartCall")
+	}
+	if n := client.Count(); n != 0 {
+		t.Fatalf("call not removed after failed StartCall: %d", n)
 	}
 }
 

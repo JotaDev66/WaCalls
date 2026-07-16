@@ -81,6 +81,7 @@ func (c *Client) StartCall(ctx context.Context, peer types.JID) (string, error) 
 	callID := signaling.GenerateCallID()
 	cm := c.createCall(callID)
 	if err := cm.StartCall(ctx, callID, peer); err != nil {
+		cm.cleanupMedia()
 		c.Remove(callID)
 		return "", err
 	}
