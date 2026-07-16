@@ -36,6 +36,13 @@ export const en: Messages = {
     deleteDescription: (name) => `${name} will be logged out and removed.`,
     disconnect: "Disconnect",
     reactivate: "Reactivate",
+    rename: "Rename",
+    renameTitle: "Rename account",
+    createTitle: "New account",
+    create: "Create",
+    save: "Save",
+    nameLabel: "Name",
+    moreActions: "More actions",
     status: {
       open: "Connected",
       qr: "Scan QR",

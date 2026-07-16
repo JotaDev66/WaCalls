@@ -33,6 +33,13 @@ export type Messages = {
     deleteDescription: (name: string) => string;
     disconnect: string;
     reactivate: string;
+    rename: string;
+    renameTitle: string;
+    createTitle: string;
+    create: string;
+    save: string;
+    nameLabel: string;
+    moreActions: string;
     status: {
       open: string;
       qr: string;

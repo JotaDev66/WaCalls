@@ -36,6 +36,13 @@ export const ptBR: Messages = {
     deleteDescription: (name) => `${name} será desconectada e removida.`,
     disconnect: "Desconectar",
     reactivate: "Reativar",
+    rename: "Renomear",
+    renameTitle: "Renomear conta",
+    createTitle: "Nova conta",
+    create: "Criar",
+    save: "Salvar",
+    nameLabel: "Nome",
+    moreActions: "Mais ações",
     status: {
       open: "Conectado",
       qr: "Ler QR",

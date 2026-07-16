@@ -7,6 +7,7 @@ import { CallsPage } from "@/pages/CallsPage";
 import { ContactsPage } from "@/components/domain/contacts/ContactsPage";
 import { SessionPairing } from "@/components/domain/session/SessionPairing";
 import { SessionHeader } from "@/components/domain/session/SessionHeader";
+import { SessionNameDialog } from "@/components/domain/session/SessionNameDialog";
 import { IncomingCallModal } from "@/components/domain/call/IncomingCallModal";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ensureSessionsWired, useSessions } from "@/stores/sessions";
@@ -99,6 +100,7 @@ export const App = () => {
       </AppShell>
       <IncomingCallModal />
       <Omnibox />
+      <SessionNameDialog />
       <AuthGate />
       <Toaster theme={theme} position="top-right" richColors closeButton />
     </TooltipProvider>
