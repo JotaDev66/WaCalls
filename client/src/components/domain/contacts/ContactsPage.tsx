@@ -46,7 +46,7 @@ export const ContactsPage = ({ sid }: { sid: string }) => {
   const list = useMemo(() => filterContacts(q, data ?? []), [q, data]);
 
   return (
-    <Card>
+    <Card className="mx-auto max-w-5xl">
       <CardHeader className="space-y-3">
         <div className="flex items-center justify-between">
           <CardTitle>{t.contacts.title}</CardTitle>
