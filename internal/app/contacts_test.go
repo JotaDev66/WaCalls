@@ -83,7 +83,7 @@ func TestContactsFromStoreNameFallback(t *testing.T) {
 		mkJID("222", types.DefaultUserServer): {},
 	}
 	out := contactsFromStore(raw)
-	byPhone := map[string]contactDTO{out[0].Phone: out[0], out[1].Phone: out[1]}
+	byPhone := map[string]Contact{out[0].Phone: out[0], out[1].Phone: out[1]}
 	if byPhone["111"].Name != "Pushy" {
 		t.Fatalf("want PushName fallback, got %q", byPhone["111"].Name)
 	}
@@ -153,7 +153,7 @@ func TestContactListOK(t *testing.T) {
 		t.Fatalf("want 200, got %d %s", rec.Code, rec.Body.String())
 	}
 	var body struct {
-		Contacts []contactDTO `json:"contacts"`
+		Contacts []Contact `json:"contacts"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -203,7 +203,7 @@ func TestContactListWithPhoto(t *testing.T) {
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, httptest.NewRequest("GET", "/api/sessions/s1/contacts", nil))
 	var body struct {
-		Contacts []contactDTO `json:"contacts"`
+		Contacts []Contact `json:"contacts"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode: %v", err)

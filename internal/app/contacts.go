@@ -21,20 +21,20 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-type contactDTO struct {
+type Contact struct {
 	JID      string `json:"jid"`
 	Name     string `json:"name"`
 	Phone    string `json:"phone"`
 	PhotoURL string `json:"photoUrl,omitempty"`
 }
 
-func contactsFromStore(raw map[types.JID]types.ContactInfo) []contactDTO {
-	out := make([]contactDTO, 0, len(raw))
+func contactsFromStore(raw map[types.JID]types.ContactInfo) []Contact {
+	out := make([]Contact, 0, len(raw))
 	for id, info := range raw {
 		if id.Server != types.DefaultUserServer || id.User == "" {
 			continue
 		}
-		out = append(out, contactDTO{
+		out = append(out, Contact{
 			JID:   id.String(),
 			Name:  cmp.Or(info.FullName, info.FirstName, info.PushName, info.BusinessName, id.User),
 			Phone: id.User,
@@ -99,7 +99,7 @@ func (s *Session) fetchPeerPhoto(jid types.JID, callID string) {
 	s.mgr.broker.SetCallPhoto(callID, info.URL)
 }
 
-func (s *Session) ContactList(ctx context.Context) ([]contactDTO, error) {
+func (s *Session) ContactList(ctx context.Context) ([]Contact, error) {
 	raw, err := s.client.Store.Contacts.GetAllContacts(ctx)
 	if err != nil {
 		return nil, err
@@ -179,23 +179,23 @@ var (
 	errAppStateSyncing = errors.New("app state not synced yet")
 )
 
-func upsertContact(ctx context.Context, cc contactClient, phone, name string) (contactDTO, error) {
+func upsertContact(ctx context.Context, cc contactClient, phone, name string) (Contact, error) {
 	full, first := splitName(name)
 	resp, err := cc.IsOnWhatsApp(ctx, []string{"+" + phone})
 	if err != nil {
-		return contactDTO{}, fmt.Errorf("checking whatsapp: %w", err)
+		return Contact{}, fmt.Errorf("checking whatsapp: %w", err)
 	}
 	if len(resp) == 0 || !resp[0].IsIn {
-		return contactDTO{}, errNotOnWhatsApp
+		return Contact{}, errNotOnWhatsApp
 	}
 	jid := resp[0].JID
 	if err := cc.SendAppState(ctx, buildContactPatch(jid, full, first)); err != nil {
 		if strings.Contains(err.Error(), "no app state keys found") {
-			return contactDTO{}, fmt.Errorf("%w: %v", errAppStateSyncing, err)
+			return Contact{}, fmt.Errorf("%w: %v", errAppStateSyncing, err)
 		}
-		return contactDTO{}, fmt.Errorf("sending app state: %w", err)
+		return Contact{}, fmt.Errorf("sending app state: %w", err)
 	}
-	return contactDTO{JID: jid.String(), Name: full, Phone: jid.User}, nil
+	return Contact{JID: jid.String(), Name: full, Phone: jid.User}, nil
 }
 
 func statusForContactErr(err error) int {
@@ -209,7 +209,7 @@ func statusForContactErr(err error) int {
 	}
 }
 
-func (s *Session) SaveContact(ctx context.Context, phone, name string) (contactDTO, error) {
+func (s *Session) SaveContact(ctx context.Context, phone, name string) (Contact, error) {
 	return upsertContact(ctx, s.client, phone, name)
 }
 
