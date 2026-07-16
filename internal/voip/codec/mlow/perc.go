@@ -181,10 +181,12 @@ func percRc2a(rc []float32, order int, a []float32) {
 
 // --- inverse real FFT (forward + cfft live in fft.go) ----------------------
 
-// rfftBackwardOrdered: inverse real FFT from the ordered REAL layout, unnormalized.
-func rfftBackwardOrdered(f []float32, time []float32) {
+// rfftBackwardOrderedSc: inverse real FFT from the ordered REAL layout, unnormalized.
+// Uses sc.spec/sc.tout/sc.arena as scratch (reused across calls).
+func rfftBackwardOrderedSc(f []float32, time []float32, sc *fftScratch) {
+	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/652d25de50822259c387e0442a487b5d8a075cf8/wacore/src/voip/mlow/smpl_perc.rs#L572-L593
 	n := len(f)
-	spec := make([]cpx, n)
+	spec := sc.spec
 	spec[0] = cpx{f[0], 0}
 	spec[n/2] = cpx{f[1], 0}
 	for i := 1; i < n/2; i++ {
@@ -193,8 +195,8 @@ func rfftBackwardOrdered(f []float32, time []float32) {
 		spec[i] = cpx{re, im}
 		spec[n-i] = cpx{re, -im}
 	}
-	tout := make([]cpx, n)
-	cfft(spec, tout, 1.0)
+	cfft(spec, sc.tout, sc.arena, &sc.twBwd)
+	tout := sc.tout
 	for i := range n {
 		time[i] = tout[i].re
 	}
@@ -264,11 +266,18 @@ func smthFilt(f []float32, smthcoef []float32) {
 	f[0] = f[0] + smthcoef[0]*(f2smth-f[0])
 }
 
-// PercModelState carries the buf history (PERCW_NFFT) across SmplPercModel calls.
+// PercModelState carries the buf history (PERCW_NFFT) across SmplPercModel calls,
+// plus the reusable per-call FFT/windowing scratch so the perceptual model allocates
+// nothing per frame beyond the returned lags.
+//
+// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/652d25de50822259c387e0442a487b5d8a075cf8/wacore/src/voip/mlow/smpl_perc.rs#L699-L729
 type PercModelState struct {
 	buf      [percwNfft]float32
 	smthcoef []float32
 	windows  percWindows
+	fft      *fftScratch
+	bufWin   []float32
+	f        []float32
 }
 
 // NewPercModelState builds the per-bin mel-width smoothing coefficients (smpl_create_perc_model_tables).
@@ -279,7 +288,13 @@ func NewPercModelState() *PercModelState {
 		percWidthPerBin := percMaskSmth * (fsStep*float32(i) + percMelFcHz) / fsStep
 		smthcoef[i] = percWidthPerBin / (percWidthPerBin + 1.0)
 	}
-	return &PercModelState{smthcoef: smthcoef, windows: newPercWindows()}
+	return &PercModelState{
+		smthcoef: smthcoef,
+		windows:  newPercWindows(),
+		fft:      newFFTScratch(percwNfft),
+		bufWin:   make([]float32, percwNfft),
+		f:        make([]float32, percwNfft),
+	}
 }
 
 // SmplPercModel: windowed power spectrum → bidirectional masking smooth → inverse →
@@ -293,11 +308,13 @@ func SmplPercModel(state *PercModelState, xsubfr []float32, xsubfrLen int, frame
 	winlen := winPrevPercLen + int(frameMs)*16 + win3LongLen
 	skipSamples := percwNfft - winlen
 
-	bufWin := make([]float32, percwNfft)
-	smplWindowPerc(&state.windows, state.buf[skipSamples:], bufWin[skipSamples:], winlen, frameMs, isLastSubfr == 0)
+	// Re-zero the persistent bufWin so the windowed frame matches a fresh zeroed
+	// buffer (the skip region plus any bins the windowing leaves untouched).
+	clear(state.bufWin)
+	smplWindowPerc(&state.windows, state.buf[skipSamples:], state.bufWin[skipSamples:], winlen, frameMs, isLastSubfr == 0)
 
-	f := make([]float32, percwNfft)
-	rfftForwardOrdered(bufWin, f)
+	rfftForwardOrderedSc(state.bufWin, state.f, state.fft)
+	f := state.f
 	f[0] = f[0] * f[0]
 	f[1] = f[1] * f[1]
 	for i := 1; i < percwNfft/2; i++ {
@@ -305,10 +322,10 @@ func SmplPercModel(state *PercModelState, xsubfr []float32, xsubfrLen int, frame
 		f[2*i+1] = 0.0
 	}
 	smthFilt(f, state.smthcoef)
-	rfftBackwardOrdered(f, bufWin)
+	rfftBackwardOrderedSc(state.f, state.bufWin, state.fft)
 
 	r := make([]float32, lenR)
-	percScaleVec(bufWin, r, lenR, 1.0/float32(percwNfft))
+	percScaleVec(state.bufWin, r, lenR, 1.0/float32(percwNfft))
 	return r
 }
 

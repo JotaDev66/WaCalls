@@ -19,13 +19,7 @@ func benchToneFrames(frames int) [][]float32 {
 }
 
 func benchSignal(n int) []float32 {
-	x := make([]float32, n)
-	var s uint32 = 12345
-	for i := range x {
-		s = s*196314165 + 907633515
-		x[i] = float32(s>>9)/float32(uint32(1)<<23) - 1.0
-	}
-	return x
+	return lcgFloats(12345, n)
 }
 
 func BenchmarkEncode(b *testing.B) {
@@ -63,9 +57,10 @@ func BenchmarkRfftForward576(b *testing.B) { benchRfftForward(b, 576) }
 func benchRfftForward(b *testing.B, n int) {
 	x := benchSignal(n)
 	f := make([]float32, n)
+	sc := newFFTScratch(n)
 	b.ReportAllocs()
 	for b.Loop() {
-		rfftForwardOrdered(x, f)
+		rfftForwardOrderedSc(x, f, sc)
 	}
 }
 
@@ -73,10 +68,11 @@ func BenchmarkRfftBackward576(b *testing.B) {
 	const n = 576
 	x := benchSignal(n)
 	f := make([]float32, n)
-	rfftForwardOrdered(x, f)
+	sc := newFFTScratch(n)
+	rfftForwardOrderedSc(x, f, sc)
 	tout := make([]float32, n)
 	b.ReportAllocs()
 	for b.Loop() {
-		rfftBackwardOrdered(f, tout)
+		rfftBackwardOrderedSc(f, tout, sc)
 	}
 }

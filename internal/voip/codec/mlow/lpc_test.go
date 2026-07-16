@@ -74,7 +74,7 @@ func TestFrontEndAMatchesC(t *testing.T) {
 				worstWin = d
 			}
 		}
-		a, _ := smplLPCAnalyzeWithF2(&win)
+		a, _ := smplLPCAnalyzeWithF2(&win, newLPCFFTScratch())
 		var rd float32
 		for k := 0; k <= SmplLPCOrder; k++ {
 			if d := float32(math.Abs(float64(a[k] - r.A[k]))); d > rd {

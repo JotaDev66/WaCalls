@@ -1,6 +1,9 @@
 package mlow
 
-import "math"
+import (
+	"math"
+	"sync"
+)
 
 const (
 	SmplLPCOrder  = 16
@@ -250,15 +253,39 @@ func bweExpand(a []float32, order int, bwe float32) {
 	}
 }
 
+// newLPCFFTScratch builds the reusable FFT scratch for the 512-point LPC analysis
+// (owned by SmplEncoderState, threaded into smplLPCAnalyzeWithF2).
+//
+// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/652d25de50822259c387e0442a487b5d8a075cf8/wacore/src/voip/mlow/smpl_lpc.rs#L249-L251
+func newLPCFFTScratch() *fftScratch {
+	return newFFTScratch(SmplLPCNFFT)
+}
+
+// lpcDctTables returns the cached DCT cos tables: deterministic in the fixed
+// NFFT/order, built once instead of recomputing ~2k cos() per LPC analysis.
+//
+// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/652d25de50822259c387e0442a487b5d8a075cf8/wacore/src/voip/mlow/smpl_lpc.rs#L253-L259
+func lpcDctTables() *dctTables {
+	lpcDctTablesOnce.Do(func() {
+		lpcDctTablesV = buildDctTables()
+	})
+	return &lpcDctTablesV
+}
+
+var (
+	lpcDctTablesOnce sync.Once
+	lpcDctTablesV    dctTables
+)
+
 // smplLPCAnalyzeWithF2 runs the full LPC analysis over a windowed buffer: returns
 // the post-bandwidth-expansion monic LPC A[0..16] (A[0]=1) and the power spectrum
 // F2[0..256] that the pitch and signal-mode paths consume.
-func smplLPCAnalyzeWithF2(windowed *[SmplLPCBufLen]float32) ([SmplLPCOrder + 1]float32, [SmplFLen]float32) {
-	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/674e85164b35ca19115dfebcf605708d15951ee7/wacore/src/voip/mlow/smpl_lpc.rs#L255-L283
+func smplLPCAnalyzeWithF2(windowed *[SmplLPCBufLen]float32, fft *fftScratch) ([SmplLPCOrder + 1]float32, [SmplFLen]float32) {
+	// Source of truth: https://github.com/oxidezap/whatsapp-rust/blob/652d25de50822259c387e0442a487b5d8a075cf8/wacore/src/voip/mlow/smpl_lpc.rs#L260-L291
 	var xbuf [SmplLPCNFFT]float32
 	copy(xbuf[:SmplLPCBufLen], windowed[:])
 	var f [SmplLPCNFFT]float32
-	rfftForwardOrdered(xbuf[:], f[:])
+	rfftForwardOrderedSc(xbuf[:], f[:], fft)
 
 	var f2 [SmplFLen]float32
 	f2[0] = f[0] * f[0]
@@ -271,9 +298,8 @@ func smplLPCAnalyzeWithF2(windowed *[SmplLPCBufLen]float32) ([SmplLPCOrder + 1]f
 		f2d[i] = float64(f2[i])
 	}
 
-	tables := buildDctTables()
 	var r [SmplLPCOrder + 1]float64
-	bruteDct(&tables, f2d, SmplLPCOrder, r[:])
+	bruteDct(lpcDctTables(), f2d, SmplLPCOrder, r[:])
 
 	var rc [SmplLPCOrder]float32
 	ac2rcDbl(r[:], SmplLPCOrder, smplLPCReg, rc[:])
