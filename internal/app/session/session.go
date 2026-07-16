@@ -11,6 +11,7 @@ import (
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/codec/mlow"
+	"wacalls/internal/voip/codec/nativemlow"
 	"wacalls/internal/voip/codec/opus"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
@@ -57,7 +58,8 @@ func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Sessio
 func (s *Session) makeExtensions() []engine.Extension {
 	var exts []engine.Extension
 	if codec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions); err == nil {
-		exts = append(exts, audio.New(opus.WithFallback(codec)))
+		s.log.Info("audio codec ready", "encoder", nativemlow.Mode())
+		exts = append(exts, audio.New(opus.WithFallback(nativemlow.WrapEncoder(codec))))
 	} else {
 		s.log.Warn("MLow codec unavailable; call runs without audio", "err", err)
 	}

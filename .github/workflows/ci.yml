@@ -47,6 +47,59 @@ jobs:
           CGO_ENABLED: "0"
         run: go test -count=1 ./...
 
+  native:
+    name: native
+    runs-on: ubuntu-latest
+    env:
+      OPUS_MLOW_SHA: 93e91a74c0a2af610d8313a85e2c811081a73f93
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cache opus_mlow
+        id: opus-cache
+        uses: actions/cache@v5
+        with:
+          path: opus_mlow
+          key: opus-mlow-${{ env.OPUS_MLOW_SHA }}
+
+      - name: Build opus_mlow
+        if: steps.opus-cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq cmake ninja-build
+          git clone https://github.com/edgardmessias/opus_mlow.git
+          cd opus_mlow
+          git checkout "${OPUS_MLOW_SHA}"
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Vet
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: -I${{ github.workspace }}/opus_mlow/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/opus_mlow/build
+        run: go vet -tags nativemlow ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: -I${{ github.workspace }}/opus_mlow/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/opus_mlow/build
+        run: go build -tags nativemlow ./...
+
+      - name: Test
+        env:
+          CGO_ENABLED: "1"
+          CGO_CFLAGS: -I${{ github.workspace }}/opus_mlow/include
+          CGO_LDFLAGS: -L${{ github.workspace }}/opus_mlow/build
+        run: go test -tags nativemlow -count=1 ./internal/voip/codec/...
+
   race:
     name: race
     runs-on: ubuntu-latest

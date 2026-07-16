@@ -149,7 +149,23 @@ go run ./cmd/server -addr :8080          # add -debug for verbose logs
 ```
 
 Live audio works out of the box - the MLow codec is pure Go, so a plain build
-includes it. No build tags, no `CGO_ENABLED`, no DLLs.
+includes it. No build tags, no `CGO_ENABLED`, no DLLs by default.
+
+#### Native codec (optional)
+
+For high call density the encoder can run on
+[opus_mlow](https://github.com/edgardmessias/opus_mlow) (a libopus fork with the
+SMPL/MLow codec, ~5x faster encode than the pure-Go port). It is enabled by the
+`nativemlow` build tag plus CGO and is what the default Docker images ship with;
+source builds stay pure Go unless you opt in:
+
+```bash
+CGO_ENABLED=1 CGO_CFLAGS=-I<opus_mlow>/include CGO_LDFLAGS=-L<opus_mlow>/build \
+  go build -tags nativemlow ./cmd/server
+```
+
+The decode path always stays on the byte-exact pure-Go decoder; the native
+frames are continuously validated against it in CI.
 
 Open `http://localhost:8080`, click **New session**, and scan the QR shown in the browser
 (it is also printed in the terminal) with **WhatsApp → Linked devices**. Add more accounts
@@ -198,8 +214,17 @@ SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unse
 ## Docker
 
 The server and the React client ship as a single self-contained image - a static
-(`CGO_ENABLED=0`) Go binary plus the built `client/dist` on Alpine, ~30 MB. Images
-are published to **[ghcr.io/jotadev66/wacalls](https://github.com/JotaDev66?tab=packages&repo_name=WaCalls)**.
+Go binary plus the built `client/dist` on Alpine, ~30 MB. Images are published to
+**[ghcr.io/jotadev66/wacalls](https://github.com/JotaDev66?tab=packages&repo_name=WaCalls)**
+in two variants:
+
+| Tags | Variant |
+|---|---|
+| `:latest`, `:develop`, `:vX.Y.Z` | native MLow encoder (`nativemlow` tag, static CGO build) |
+| `:latest-pure`, `:develop-pure`, `:vX.Y.Z-pure` | pure-Go build (`CGO_ENABLED=0`, today's default source build) |
+
+Self-builders pick the variant with the `NATIVE` build arg
+(`docker build --build-arg NATIVE=1 .`; default `0` = pure Go).
 
 ### Run with Docker Compose
 
