@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"wacalls/internal/app/events"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -49,7 +51,7 @@ func TestOpenAPISpecMatchesRoutes(t *testing.T) {
 func TestOpenAPIServedWithoutAuth(t *testing.T) {
 	s := &Server{
 		authorize: bearerAuthorizer("secret"),
-		broker:    NewBroker(nil, slog.Default()),
+		broker:    events.NewBroker(nil, slog.Default()),
 		sessions:  &SessionManager{sessions: map[string]*Session{}},
 	}
 	rec := httptest.NewRecorder()

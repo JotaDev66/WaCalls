@@ -1,4 +1,4 @@
-package app
+package config
 
 import (
 	"reflect"
@@ -23,28 +23,28 @@ func TestLoadConfigTrustedProxies(t *testing.T) {
 }
 
 func TestValidateConfigWebhook(t *testing.T) {
-	if err := validateConfig(Config{WebhookURL: "https://x", WebhookSecret: ""}); err == nil {
+	if err := Validate(Config{WebhookURL: "https://x", WebhookSecret: ""}); err == nil {
 		t.Fatal("url without secret must fail the boot")
 	}
-	if err := validateConfig(Config{WebhookURL: "https://x", WebhookSecret: "s"}); err != nil {
+	if err := Validate(Config{WebhookURL: "https://x", WebhookSecret: "s"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateConfig(Config{}); err != nil {
+	if err := Validate(Config{}); err != nil {
 		t.Fatal(err)
 	}
 }
 
 func TestValidateConfigAdminPair(t *testing.T) {
-	if err := validateConfig(Config{AdminUser: "a", AdminPassword: "b"}); err != nil {
+	if err := Validate(Config{AdminUser: "a", AdminPassword: "b"}); err != nil {
 		t.Fatalf("both set must be ok: %v", err)
 	}
-	if err := validateConfig(Config{}); err != nil {
+	if err := Validate(Config{}); err != nil {
 		t.Fatalf("neither set must be ok: %v", err)
 	}
-	if err := validateConfig(Config{AdminUser: "a"}); err == nil {
+	if err := Validate(Config{AdminUser: "a"}); err == nil {
 		t.Fatal("user without password must error")
 	}
-	if err := validateConfig(Config{AdminPassword: "b"}); err == nil {
+	if err := Validate(Config{AdminPassword: "b"}); err == nil {
 		t.Fatal("password without user must error")
 	}
 }

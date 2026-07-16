@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"testing"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/store"
 	"wacalls/internal/voip/core"
 )
@@ -23,7 +24,7 @@ func historyServer(t *testing.T) (*Server, core.CallRecordStore) {
 	t.Cleanup(func() { _ = bundle.Close() })
 	s := &Server{
 		authorize: bearerAuthorizer(""),
-		broker:    NewBroker(bundle.Calls, slog.Default()),
+		broker:    events.NewBroker(bundle.Calls, slog.Default()),
 		sessions:  &SessionManager{sessions: map[string]*Session{"s1": {id: "s1"}}},
 	}
 	return s, bundle.Calls
@@ -48,8 +49,8 @@ func seedHistory(t *testing.T, st core.CallRecordStore, n int) {
 }
 
 type historyResp struct {
-	Calls      []CallRecord `json:"calls"`
-	NextCursor string       `json:"nextCursor"`
+	Calls      []events.CallRecord `json:"calls"`
+	NextCursor string              `json:"nextCursor"`
 }
 
 func TestHistoryPaginates(t *testing.T) {

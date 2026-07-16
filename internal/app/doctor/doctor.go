@@ -1,4 +1,4 @@
-package app
+package doctor
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 
+	"wacalls/internal/app/config"
 	"wacalls/internal/store"
 )
 
@@ -41,7 +42,7 @@ type checkResult struct {
 // Doctor runs preflight connectivity checks against cfg, writes a report to w,
 // and reports whether every check passed (no fail). It is safe to run before
 // the server starts; it opens and closes each resource it probes.
-func Doctor(ctx context.Context, cfg Config, w io.Writer) bool {
+func Doctor(ctx context.Context, cfg config.Config, w io.Writer) bool {
 	results := []checkResult{
 		checkUDPPort(cfg.WebRTCUDPPort),
 		checkPublicIP(cfg.PublicIPs, localIPv4s()),
@@ -107,7 +108,7 @@ func checkDatabase(ctx context.Context, cfg store.Config) checkResult {
 	return checkResult{name: name, status: statusOK, detail: describeStore(cfg)}
 }
 
-func storeConfigFor(cfg Config) store.Config {
+func storeConfigFor(cfg config.Config) store.Config {
 	return store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath}
 }
 

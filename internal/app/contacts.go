@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/voip/core"
 
 	"go.mau.fi/whatsmeow"
@@ -95,7 +96,7 @@ func (s *Session) fetchPeerPhoto(jid types.JID, callID string) {
 	_ = s.mgr.photos.Upsert(ctx, core.ContactPhoto{
 		SessionID: s.id, Jid: jid.String(), URL: info.URL, PictureID: info.ID, FetchedAt: time.Now().UnixMilli(),
 	})
-	s.mgr.broker.setCallPhoto(callID, info.URL)
+	s.mgr.broker.SetCallPhoto(callID, info.URL)
 }
 
 func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
@@ -127,7 +128,7 @@ func (s *Server) handleContactList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"contacts": out})
 }
 
-func enrichPeers(rows []CallRecord, names map[string]string, photos map[string]core.ContactPhoto) {
+func enrichPeers(rows []events.CallRecord, names map[string]string, photos map[string]core.ContactPhoto) {
 	for i := range rows {
 		if n, ok := names[rows[i].Peer]; ok {
 			rows[i].PeerName = n
@@ -228,7 +229,7 @@ func (s *Server) handleContactSave(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"contact": dto})
 }
 
-func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []CallRecord) {
+func (s *Server) enrichHistoryPeers(ctx context.Context, sess *Session, rows []events.CallRecord) {
 	if len(rows) == 0 {
 		return
 	}

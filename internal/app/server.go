@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"wacalls/internal/app/config"
+	"wacalls/internal/app/events"
 	"wacalls/internal/store"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/core"
@@ -36,7 +38,7 @@ func newHTTPServer(addr string, h http.Handler) *http.Server {
 }
 
 type Server struct {
-	broker         *Broker
+	broker         *events.Broker
 	sessions       *SessionManager
 	log            *slog.Logger
 	staticDir      string
@@ -63,8 +65,8 @@ func parseOrigins(raw string) map[string]struct{} {
 	return set
 }
 
-func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
-	if err := validateConfig(cfg); err != nil {
+func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) core.CallObserver, tracer telemetry.CallTracer, log *slog.Logger) (*Server, error) {
+	if err := config.Validate(cfg); err != nil {
 		return nil, err
 	}
 	bundle, err := store.Open(ctx, store.Config{DatabaseURL: cfg.DatabaseURL, SQLitePath: cfg.DBPath})
@@ -100,13 +102,11 @@ func NewServer(ctx context.Context, cfg Config, obsFactory func(string) core.Cal
 		waLogger = waLog.Stdout("WA", "INFO", true)
 	}
 
-	broker := NewBroker(bundle.Calls, log)
+	broker := events.NewBroker(bundle.Calls, log)
 	mgr := newSessionManager(ctx, bundle.Container, broker, bundle.Sessions, waLogger, log, cfg.MaxCalls, obsFactory, tracer, bundle.Photos)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	if cfg.WebhookURL != "" {
-		broker.webhooks = newWebhookDispatcher(cfg.WebhookURL, cfg.WebhookSecret, log)
-		go broker.webhooks.run(ctx)
+	if broker.EnableWebhooks(ctx, cfg.WebhookURL, cfg.WebhookSecret) {
 		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
 	}
 

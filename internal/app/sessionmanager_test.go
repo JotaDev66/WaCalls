@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/store/sqlite"
 
 	"go.mau.fi/whatsmeow"
@@ -21,7 +22,7 @@ func newTestManager(t *testing.T) *SessionManager {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = bundle.Close() })
-	return newSessionManager(ctx, bundle.Container, NewBroker(bundle.Calls, slog.Default()), bundle.Sessions, waLog.Noop, slog.Default(), 0, nil, nil, bundle.Photos)
+	return newSessionManager(ctx, bundle.Container, events.NewBroker(bundle.Calls, slog.Default()), bundle.Sessions, waLog.Noop, slog.Default(), 0, nil, nil, bundle.Photos)
 }
 
 func TestNewSessionID(t *testing.T) {

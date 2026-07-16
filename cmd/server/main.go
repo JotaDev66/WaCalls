@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"wacalls/internal/app"
+	"wacalls/internal/app/config"
+	"wacalls/internal/app/doctor"
 	"wacalls/internal/telemetry"
 )
 
@@ -23,7 +25,7 @@ func main() {
 	debug := flag.Bool("debug", false, "verbose logging")
 	maxCalls := flag.Int("max-calls-per-session", 8, "max concurrent calls per session (0 = unlimited)")
 	showVersion := flag.Bool("version", false, "print version and exit")
-	doctor := flag.Bool("doctor", false, "run preflight connectivity checks and exit")
+	runDoctor := flag.Bool("doctor", false, "run preflight connectivity checks and exit")
 	flag.Parse()
 
 	if *showVersion {
@@ -31,11 +33,11 @@ func main() {
 		return
 	}
 
-	cfg := app.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
+	cfg := config.LoadConfig(*addr, *dbPath, *staticDir, *debug, *maxCalls)
 	cfg.Version = version
 
-	if *doctor {
-		if !app.Doctor(context.Background(), cfg, os.Stdout) {
+	if *runDoctor {
+		if !doctor.Doctor(context.Background(), cfg, os.Stdout) {
 			os.Exit(1)
 		}
 		return
