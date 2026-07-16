@@ -21,6 +21,8 @@ import { Omnibox } from "@/components/domain/omnibox/Omnibox";
 import { OnboardingChecklist } from "@/components/domain/onboarding/OnboardingChecklist";
 import { useOnboarding } from "@/stores/onboarding";
 import { useNav } from "@/stores/nav";
+import { openCreateSession } from "@/stores/session-name-dialog";
+import { Button } from "@/components/ui/button";
 import { useT } from "@/hooks/useT";
 
 export const App = () => {
@@ -56,6 +58,11 @@ export const App = () => {
                 icon={<PlusCircle className="h-6 w-6" />}
                 title={t.app.noAccountsTitle}
                 description={t.app.noAccountsDescription}
+                action={
+                  <Button onClick={() => openCreateSession()}>
+                    {t.app.createFirst}
+                  </Button>
+                }
               />
             ) : null
           ) : active ? (

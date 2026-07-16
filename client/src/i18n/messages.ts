@@ -2,6 +2,7 @@ export type Messages = {
   app: {
     noAccountsTitle: string;
     noAccountsDescription: string;
+    createFirst: string;
     selectAccountTitle: string;
     selectAccountDescription: string;
   };

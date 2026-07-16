@@ -4,7 +4,8 @@ export const en: Messages = {
   app: {
     noAccountsTitle: "No accounts yet",
     noAccountsDescription:
-      "Create your first WhatsApp account from the sidebar to start calling.",
+      "Connect your first WhatsApp account to start calling.",
+    createFirst: "Create account",
     selectAccountTitle: "Select an account",
     selectAccountDescription: "Choose an account from the sidebar.",
   },

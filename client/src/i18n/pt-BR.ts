@@ -4,7 +4,8 @@ export const ptBR: Messages = {
   app: {
     noAccountsTitle: "Nenhuma conta ainda",
     noAccountsDescription:
-      "Crie sua primeira conta do WhatsApp na barra lateral para começar a ligar.",
+      "Conecte sua primeira conta do WhatsApp para começar a ligar.",
+    createFirst: "Criar conta",
     selectAccountTitle: "Selecione uma conta",
     selectAccountDescription: "Escolha uma conta na barra lateral.",
   },
