@@ -4,7 +4,8 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-docker}
-    image: ghcr.io/jotadev66/wacalls:latest
+    # :latest = production, :develop = beta. Override with WACALLS_IMAGE.
+    image: ${WACALLS_IMAGE:-ghcr.io/jotadev66/wacalls:latest}
     container_name: wacalls
     restart: unless-stopped
     ports:

@@ -23,11 +23,9 @@ services:
       - wacalls-web
 
   wacalls:
-    build:
-      context: .
-      args:
-        VERSION: ${VERSION:-docker}
-    image: ghcr.io/jotadev66/wacalls:latest
+    # Production uses the published image (:latest). For the beta channel set
+    # WACALLS_IMAGE=ghcr.io/jotadev66/wacalls:develop in .env.
+    image: ${WACALLS_IMAGE:-ghcr.io/jotadev66/wacalls:latest}
     restart: unless-stopped
     depends_on:
       postgres:

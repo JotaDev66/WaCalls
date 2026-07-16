@@ -151,6 +151,8 @@ docker compose exec wacalls wacalls -doctor
 
 ## Notes
 
+- Image tags: `ghcr.io/jotadev66/wacalls:latest` is production, `:develop` is the
+  beta channel. Pick one with `WACALLS_IMAGE` in `.env`.
 - Removing the data volume (`docker compose down -v`) unpairs every account.
 - Switching an existing SQLite deploy to Postgres starts empty; accounts re-pair.
 - Use a dedicated browser or profile for the WaCalls operator: a WhatsApp Web tab
