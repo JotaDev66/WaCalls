@@ -13,21 +13,26 @@ import (
 
 const audioCodecBytes = 96 * 1024
 
+// jitterDepth is how many newer packets must pile up behind a missing one before it
+// is concealed, giving a reordered packet time to arrive. 3 packets at 60 ms is 180 ms.
+const jitterDepth = 3
+
 type Audio struct {
-	codec              core.AudioCodec
-	scope              *engine.CallScope
-	mu                 sync.Mutex
-	captureBuf         []float32
-	audioTimelineSet   bool
-	audioBaseTs        uint32
-	audioPlayedSamples uint64
-	sendLoopStop       chan struct{}
-	onPeerPCM          func([]float32)
-	detached           bool
+	codec        core.AudioCodec
+	scope        *engine.CallScope
+	mu           sync.Mutex
+	captureBuf   []float32
+	sendLoopStop chan struct{}
+	onPeerPCM    func([]float32)
+	detached     bool
+
+	jitter    *jitterBuffer
+	lastFrame []float32
+	concealed int
 }
 
 func New(codec core.AudioCodec) *Audio {
-	return &Audio{codec: codec}
+	return &Audio{codec: codec, jitter: newJitterBuffer(jitterDepth)}
 }
 
 func (a *Audio) Name() string {
@@ -124,44 +129,50 @@ func (a *Audio) startSendLoopLocked() {
 	}()
 }
 
+// handleInbound feeds the packet through the jitter buffer and plays out whatever it
+// releases in sequence order: present frames are decoded (in order, so the stateful
+// codec stays coherent) and missing ones are concealed.
 func (a *Audio) handleInbound(pkt *media.RtpPacket) {
-	pcm, err := a.codec.Decode(pkt.Payload)
-	if err != nil || len(pcm) == 0 {
-		return
-	}
-	aligned := a.align(pkt.Header.Timestamp, pcm)
 	a.mu.Lock()
+	frames := a.jitter.push(pkt.Header.SequenceNumber, pkt.Payload)
+	var out [][]float32
+	for _, fr := range frames {
+		if fr.present {
+			pcm, err := a.codec.Decode(fr.payload)
+			if err != nil || len(pcm) == 0 {
+				continue
+			}
+			a.lastFrame = pcm
+			a.concealed = 0
+			out = append(out, pcm)
+		} else if concealed := a.concealLocked(); concealed != nil {
+			out = append(out, concealed)
+		}
+	}
 	cb := a.onPeerPCM
 	a.mu.Unlock()
 	if cb != nil {
-		cb(aligned)
+		for _, pcm := range out {
+			cb(pcm)
+		}
 	}
 }
 
-func (a *Audio) align(ts uint32, pcm []float32) []float32 {
-	const maxGapSamples = 8000
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	origLen := uint64(len(pcm))
-	if !a.audioTimelineSet {
-		a.audioTimelineSet = true
-		a.audioBaseTs = ts
-		a.audioPlayedSamples = origLen
-		return pcm
+// concealLocked produces a frame to cover a lost packet: the last decoded frame faded
+// out once, then silence for any consecutive losses. Caller holds a.mu.
+func (a *Audio) concealLocked() []float32 {
+	n := a.codec.FrameSize()
+	if len(a.lastFrame) > 0 {
+		n = len(a.lastFrame)
 	}
-	target := uint64(ts - a.audioBaseTs)
-	gap := int64(target) - int64(a.audioPlayedSamples)
-	if gap < 0 || gap > maxGapSamples {
-		a.audioBaseTs = ts
-		a.audioPlayedSamples = origLen
-		return pcm
+	pcm := make([]float32, n)
+	if a.concealed == 0 && len(a.lastFrame) > 1 {
+		last := len(pcm) - 1
+		for i := range pcm {
+			pcm[i] = a.lastFrame[i] * (1 - float32(i)/float32(last))
+		}
 	}
-	if gap > 0 {
-		padded := make([]float32, int(gap)+int(origLen))
-		copy(padded[int(gap):], pcm)
-		pcm = padded
-	}
-	a.audioPlayedSamples = target + origLen
+	a.concealed++
 	return pcm
 }
 
