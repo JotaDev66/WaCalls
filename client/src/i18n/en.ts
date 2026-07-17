@@ -93,6 +93,9 @@ export const en: Messages = {
     mute: "Mute microphone",
     unmute: "Unmute microphone",
     peerMuted: "Peer mic muted",
+    reconnectDropped: "Audio disconnected",
+    reconnectingAudio: "Reconnecting audio…",
+    reconnectCall: "Reconnect call",
   },
   dialer: {
     title: "Dialer",
