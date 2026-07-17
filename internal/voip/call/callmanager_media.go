@@ -187,14 +187,6 @@ func (m *CallManager) onRelayData(data []byte) {
 		return
 	}
 	m.notePeerMediaLocked()
-	if pt == core.PayloadTypeWhatsAppOpus && !m.actualPeerSet {
-		m.actualPeerSet = true
-		if !containsSsrc(m.peerSsrcs, ssrc) {
-			m.peerSsrcs = []uint32{ssrc}
-			m.relay.SetSubscriptionSsrc(ssrc)
-			go m.relay.ResendSubscriptions()
-		}
-	}
 	srtp := m.srtp
 	obs := m.observer
 	recvStats := m.recvStats
@@ -225,6 +217,20 @@ func (m *CallManager) onRelayData(data []byte) {
 	}
 	if len(pkt.Payload) == 0 {
 		return
+	}
+	// Subscription bootstrap only after the packet authenticated: RTP-shaped bytes
+	// with a spoofed SSRC must never redirect the peer subscription.
+	if pt == core.PayloadTypeWhatsAppOpus {
+		m.mu.Lock()
+		if !m.actualPeerSet {
+			m.actualPeerSet = true
+			if !containsSsrc(m.peerSsrcs, ssrc) {
+				m.peerSsrcs = []uint32{ssrc}
+				m.relay.SetSubscriptionSsrc(ssrc)
+				go m.relay.ResendSubscriptions()
+			}
+		}
+		m.mu.Unlock()
 	}
 	if recvStats != nil {
 		recvStats.NoteRTP(pkt.Header.SequenceNumber, pkt.Header.Timestamp, uint64(time.Now().UnixMilli()))
