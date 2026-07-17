@@ -2,6 +2,7 @@ package call
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 
@@ -162,6 +163,106 @@ func TestSecondAcceptFromAnotherDeviceIsIgnored(t *testing.T) {
 	}
 	if after := len(sock.sentStanzas()); after != before {
 		t.Fatalf("duplicate accept must not send stanzas: %d -> %d", before, after)
+	}
+}
+
+type decryptStep struct {
+	key []byte
+	err error
+}
+
+type repairSock struct {
+	recordSock
+	devices  []types.JID
+	steps    []decryptStep
+	decrypts int
+}
+
+func (s *repairSock) GetUSyncDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	return s.devices, nil
+}
+
+func (s *repairSock) DecryptCallKey(ctx context.Context, from types.JID, encChild *waBinary.Node) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := min(s.decrypts, len(s.steps)-1)
+	s.decrypts++
+	return s.steps[i].key, s.steps[i].err
+}
+
+func acceptNodeWithEnc(callID string, from types.JID) *waBinary.Node {
+	return &waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"from": from},
+		Content: []waBinary.Node{{
+			Tag:   "accept",
+			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": "caller@lid"},
+			Content: []waBinary.Node{{
+				Tag:   "enc",
+				Attrs: waBinary.Attrs{"v": "2", "type": "pkmsg"},
+			}},
+		}},
+	}
+}
+
+// A retransmitted accept from the device that already answered must reach the
+// decrypt/rekey path again: the first accept's call key can fail to decrypt on a
+// transient signal-session desync, and the retry is the only chance to repair it.
+func TestSameDeviceAcceptRetryRepairsKey(t *testing.T) {
+	companion := lidDevice("62440234549366", 33)
+	peerKey := make([]byte, 32)
+	for i := range peerKey {
+		peerKey[i] = byte(i + 1)
+	}
+	sock := &repairSock{
+		devices: []types.JID{companion},
+		steps: []decryptStep{
+			{nil, errors.New("no signal session")},
+			{peerKey, nil},
+		},
+	}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNodeWithEnc("CALL1", companion), companion)
+	cm.mu.Lock()
+	srtpAfterFirst := cm.srtp
+	cm.mu.Unlock()
+
+	cm.HandleCallAccept(context.Background(), acceptNodeWithEnc("CALL1", companion), companion)
+	cm.mu.Lock()
+	decrypts := sock.decrypts
+	srtpAfterRetry := cm.srtp
+	accepted := cm.acceptedByJid
+	cm.mu.Unlock()
+
+	if decrypts != 2 {
+		t.Fatalf("same-device accept retry must reach the decrypt path again, decrypts=%d", decrypts)
+	}
+	if srtpAfterRetry == srtpAfterFirst {
+		t.Fatal("successful decrypt on retry must re-arm srtp")
+	}
+	if accepted != companion.String() {
+		t.Fatalf("acceptedByJid = %q, want %q", accepted, companion)
+	}
+}
+
+func TestSameDeviceAcceptRetryDoesNotRepeatElsewhereFanout(t *testing.T) {
+	primary := lidDevice("62440234549366", 0)
+	companion := lidDevice("62440234549366", 33)
+	sock := &elsewhereSock{devices: []types.JID{primary, companion}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+
+	elsewheres := 0
+	for _, st := range sock.sentStanzas() {
+		if st.reason == "accepted_elsewhere" {
+			elsewheres++
+		}
+	}
+	if elsewheres != 1 {
+		t.Fatalf("elsewhere fanout must go out exactly once, got %d", elsewheres)
 	}
 }
 

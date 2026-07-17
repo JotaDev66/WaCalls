@@ -90,11 +90,14 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
 	m.mu.Lock()
 	call := m.currentCall
-	// First accept wins: a later accept from a sibling device (or a retransmission)
-	// must not swap acceptedByJid and rekey SRTP under an established media path.
-	if m.acceptedByJid != "" {
+	// First accept wins: a later accept from a SIBLING device must not swap
+	// acceptedByJid and rekey SRTP under an established media path. A retry from
+	// the same device passes through: its first accept may have carried a call key
+	// we could not decrypt (signal-session desync), and the retransmission is the
+	// only chance to repair the keying.
+	if accepted := m.acceptedByJid; accepted != "" && accepted != peerJid.String() {
 		m.mu.Unlock()
-		m.log.Info("duplicate accept ignored", "accepted_by", m.acceptedByJid, "from", peerJid.String())
+		m.log.Info("accept from another device ignored", "accepted_by", accepted, "from", peerJid.String())
 		return
 	}
 	m.mu.Unlock()
@@ -129,6 +132,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 	_ = call.ApplyTransition(Transition{Type: TransitionRemoteAccepted})
 	m.emitState()
+	firstAccept := m.acceptedByJid == ""
 	m.acceptedByJid = peerJid.String()
 	if m.peerSsrcs == nil || !m.actualPeerSet {
 		peerDeviceJid := ensureDeviceJid(peerJid.String())
@@ -139,9 +143,11 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	hasConn := m.relay.HasConnection()
 	relayData := call.RelayData
 	var siblings []types.JID
-	for _, dev := range m.calleeDevices {
-		if dev.String() != peerJid.String() {
-			siblings = append(siblings, dev)
+	if firstAccept {
+		for _, dev := range m.calleeDevices {
+			if dev.String() != peerJid.String() {
+				siblings = append(siblings, dev)
+			}
 		}
 	}
 	basePeer := call.PeerJid
