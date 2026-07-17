@@ -61,6 +61,13 @@ const relayEv = (id: string, relayName: string, rttMs: number) => ({
   hasRtt: true,
 });
 
+const peerMuteEv = (id: string, muted: boolean) => ({
+  type: "call-peer-mute" as const,
+  sessionId: "s1",
+  id,
+  muted,
+});
+
 ensureCallsWired();
 
 describe("calls store event handlers", () => {
@@ -72,6 +79,7 @@ describe("calls store event handlers", () => {
       quality: new Map(),
       marks: new Map(),
       relays: new Map(),
+      peerMuted: new Map(),
     });
   });
 
@@ -195,6 +203,39 @@ describe("calls store event handlers", () => {
       endedAt: 2,
     });
     expect(useCalls.getState().relays.size).toBe(0);
+  });
+
+  it("tracks the peer mute state for a live call and the latest event wins", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(peerMuteEv("c1", true));
+    expect(useCalls.getState().peerMuted.get("c1")).toBe(true);
+    emit(peerMuteEv("c1", false));
+    expect(useCalls.getState().peerMuted.get("c1")).toBe(false);
+  });
+
+  it("ignores a peer mute event for a call not in the live list", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(peerMuteEv("ghost", true));
+    expect(useCalls.getState().peerMuted.has("ghost")).toBe(false);
+  });
+
+  it("call-list prunes orphaned peer mute entries and call-ended clears them", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(peerMuteEv("c1", true));
+    emit({ type: "call-list", calls: [] });
+    expect(useCalls.getState().peerMuted.size).toBe(0);
+
+    emit({ type: "call-list", calls: [row("c2")] });
+    emit(peerMuteEv("c2", true));
+    emit({
+      type: "call-ended",
+      sessionId: "s1",
+      id: "c2",
+      owner: "op-A",
+      reason: "user_ended",
+      endedAt: 2,
+    });
+    expect(useCalls.getState().peerMuted.size).toBe(0);
   });
 
   it("call-list prunes orphaned marks and call-ended clears them", () => {

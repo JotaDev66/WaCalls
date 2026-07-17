@@ -84,6 +84,9 @@ export type Messages = {
     jitter: string;
     loss: string;
     endCall: string;
+    mute: string;
+    unmute: string;
+    peerMuted: string;
   };
   dialer: {
     title: string;

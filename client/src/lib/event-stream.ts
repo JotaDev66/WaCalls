@@ -78,6 +78,12 @@ export type BrokerEvent =
       relayName: string;
       rttMs: number;
       hasRtt: boolean;
+    }
+  | {
+      type: "call-peer-mute";
+      sessionId: string;
+      id: string;
+      muted: boolean;
     };
 
 type Listener = (ev: BrokerEvent) => void;

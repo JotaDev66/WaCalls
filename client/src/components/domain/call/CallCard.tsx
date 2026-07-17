@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, PhoneOff, WifiOff } from "lucide-react";
+import { Check, Mic, MicOff, PhoneOff, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { attachMeter } from "@/lib/audio-meter";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
+import { useSetMute } from "@/hooks/useSetMute";
 import { useT } from "@/hooks/useT";
 import { callStatusTone, callStatusPulse } from "@/lib/status";
 import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
@@ -246,13 +247,37 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
   const quality = useCalls((s) => s.quality.get(call.callId));
   const marks = useCalls((s) => s.marks.get(call.callId));
+  const peerMuted = useCalls((s) => s.peerMuted.get(call.callId) ?? false);
   const outDeviceId = useDevices((s) => s.outId);
   const endCall = useEndCall();
+  const setMute = useSetMute();
   const t = useT();
   const [, force] = useState(0);
   const [micDb, setMicDb] = useState(-60);
   const [peerDb, setPeerDb] = useState(-60);
+  // Mute lives on the mic track (enabled=false keeps zeroed frames flowing so the
+  // peer's media watchdog stays fed); re-derive it on mount so a card remount
+  // during a muted call does not desync the button.
+  const [muted, setMutedState] = useState(
+    () => conn?.micStream.getAudioTracks().some((tr) => !tr.enabled) ?? false,
+  );
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const toggleMute = () => {
+    if (!conn) return;
+    const next = !muted;
+    conn.micStream.getAudioTracks().forEach((tr) => (tr.enabled = !next));
+    setMutedState(next);
+    setMute.mutate(
+      { sid: call.sessionId, callId: call.callId, muted: next },
+      {
+        onError: () => {
+          conn.micStream.getAudioTracks().forEach((tr) => (tr.enabled = next));
+          setMutedState(!next);
+        },
+      },
+    );
+  };
 
   useEffect(() => {
     const timer = setInterval(() => force((n) => n + 1), 1000);
@@ -309,21 +334,45 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
               </StatusBadge>
             </div>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={() =>
-                  endCall.mutate({ sid: call.sessionId, callId: call.callId })
-                }
-                aria-label={t.calls.endCall}
-              >
-                <PhoneOff className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t.calls.endCall}</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            {call.status === "connected" && conn && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={muted ? "secondary" : "outline"}
+                    size="icon"
+                    onClick={toggleMute}
+                    aria-label={muted ? t.calls.unmute : t.calls.mute}
+                    aria-pressed={muted}
+                  >
+                    {muted ? (
+                      <MicOff className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {muted ? t.calls.unmute : t.calls.mute}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={() =>
+                    endCall.mutate({ sid: call.sessionId, callId: call.callId })
+                  }
+                  aria-label={t.calls.endCall}
+                >
+                  <PhoneOff className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t.calls.endCall}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
         {call.status === "reconnecting" && <ReconnectingNotice />}
         {marks && marks.length > 0 && (
@@ -331,6 +380,12 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
         )}
         <Meter label={t.calls.mic} db={micDb} />
         <Meter label={t.calls.peer} db={peerDb} />
+        {peerMuted && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MicOff className="h-3.5 w-3.5" />
+            {t.calls.peerMuted}
+          </div>
+        )}
         {call.status === "connected" && <QualityPanel q={quality} />}
         <audio ref={audioRef} autoPlay />
       </CardContent>

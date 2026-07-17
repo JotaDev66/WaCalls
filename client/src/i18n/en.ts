@@ -90,6 +90,9 @@ export const en: Messages = {
     jitter: "Jitter",
     loss: "Loss",
     endCall: "End call",
+    mute: "Mute microphone",
+    unmute: "Unmute microphone",
+    peerMuted: "Peer mic muted",
   },
   dialer: {
     title: "Dialer",
