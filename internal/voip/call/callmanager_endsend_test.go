@@ -10,6 +10,7 @@ import (
 
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
+	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/wanode"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
@@ -64,7 +65,7 @@ func awaitQuery(t *testing.T, s *ctxQuerySock) {
 	}
 }
 
-func ringingManager(t *testing.T, sock core.VoipSocket) *CallManager {
+func ringingManager(t *testing.T, sock signaling.Socket) *CallManager {
 	t.Helper()
 	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0, func(string, *CallManager) {}, nil)
 	peer := types.NewJID("5511999990000", types.DefaultUserServer)

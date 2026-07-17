@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/signaling"
 
 	"go.mau.fi/whatsmeow"
@@ -18,7 +17,7 @@ type Socket struct {
 
 func NewSocket(cli *whatsmeow.Client) *Socket { return &Socket{cli: cli} }
 
-var _ core.VoipSocket = (*Socket)(nil)
+var _ signaling.Socket = (*Socket)(nil)
 
 func (s *Socket) di() *whatsmeow.DangerousInternalClient { return s.cli.DangerousInternals() }
 

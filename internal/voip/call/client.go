@@ -16,7 +16,7 @@ import (
 )
 
 type Client struct {
-	sock           core.VoipSocket
+	sock           signaling.Socket
 	log            *slog.Logger
 	makeExtensions func() []engine.Extension
 	newObserver    func(callID string) core.CallObserver
@@ -26,7 +26,7 @@ type Client struct {
 	calls          map[string]*CallManager
 }
 
-func NewClient(sock core.VoipSocket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager), newObserver func(callID string) core.CallObserver) *Client {
+func NewClient(sock signaling.Socket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager), newObserver func(callID string) core.CallObserver) *Client {
 	if newObserver == nil {
 		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}

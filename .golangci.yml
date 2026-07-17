@@ -4,6 +4,16 @@ linters:
   default: standard
   enable:
     - modernize
+    - depguard
+  settings:
+    depguard:
+      rules:
+        core-transport-agnostic:
+          files:
+            - "**/internal/voip/core/**"
+          deny:
+            - pkg: go.mau.fi/whatsmeow
+              desc: voip/core must stay transport-agnostic; whatsmeow types belong in signaling/wa
   exclusions:
     paths:
       - client/node_modules
