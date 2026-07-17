@@ -159,6 +159,36 @@ func (s *Server) doReject(sess *session.Session, w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+func (s *Server) handleMute(w http.ResponseWriter, r *http.Request) {
+	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
+		s.doMute(sess, w, r)
+	}
+}
+
+func (s *Server) doMute(sess *session.Session, w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !sess.HasCall(id) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
+		return
+	}
+	var body struct {
+		Muted *bool `json:"muted"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Muted == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "muted required"})
+		return
+	}
+	var invalid *call.InvalidTransition
+	if err := sess.SetMute(r.Context(), id, *body.Muted); errors.As(err, &invalid) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	} else if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) doEndCall(sess *session.Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	_ = sess.EndCall(r.Context(), id)

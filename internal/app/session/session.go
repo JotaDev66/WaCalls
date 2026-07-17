@@ -136,6 +136,9 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnRelay = func(callID, relayName string, rttMs int, hasRtt bool) {
 		s.mgr.broker.EmitCallRelay(s.id, callID, relayName, rttMs, hasRtt)
 	}
+	cm.OnPeerMute = func(callID string, muted bool) {
+		s.mgr.broker.EmitCallPeerMute(s.id, callID, muted)
+	}
 }
 
 func (s *Session) handleEvent(rawEvt any) {
@@ -161,6 +164,10 @@ func (s *Session) handleEvent(rawEvt any) {
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	case *waevents.CallReject:
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
+	case *waevents.UnknownCallEvent:
+		if _, ok := evt.Node.GetOptionalChildByTag("mute_v2"); ok {
+			s.calls.HandleMute(evt.Node)
+		}
 	}
 }
 

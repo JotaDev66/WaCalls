@@ -162,6 +162,15 @@ func (b *Broker) EmitCallRelay(sessionID, callID, relayName string, rttMs int, h
 	})
 }
 
+// EmitCallPeerMute broadcasts the remote party's microphone state parsed from in-call
+// mute_v2 signaling. Transient live-only signal like call-quality: never persisted.
+func (b *Broker) EmitCallPeerMute(sessionID, callID string, muted bool) {
+	b.broadcast(map[string]any{
+		"type": "call-peer-mute", "sessionId": sessionID, "id": callID,
+		"muted": muted,
+	})
+}
+
 func (b *Broker) ServeSSE(w http.ResponseWriter, r *http.Request, clientID string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {

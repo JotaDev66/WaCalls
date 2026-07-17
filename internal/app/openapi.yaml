@@ -328,6 +328,55 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/calls/{id}/mute:
+    post:
+      operationId: setCallMute
+      summary: Set the local microphone mute state, signaling it to the peer
+      description: >-
+        Signals mute_v2 to the peer so their client reflects the mute state. The
+        audio itself is silenced by the media source (the browser mic track); this
+        endpoint only carries the signaling and call state.
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+        - $ref: "#/components/parameters/CallId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [muted]
+              properties:
+                muted:
+                  type: boolean
+      responses:
+        "200":
+          description: Mute state applied and signaled
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
+        "400":
+          description: Missing or invalid muted field
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Call is not active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "500": { $ref: "#/components/responses/InternalError" }
   /api/sessions/{sid}/history:
     get:
       operationId: listHistory
@@ -578,6 +627,7 @@ paths:
                   - $ref: "#/components/schemas/CallQualityEvent"
                   - $ref: "#/components/schemas/CallMarkEvent"
                   - $ref: "#/components/schemas/CallRelayEvent"
+                  - $ref: "#/components/schemas/CallPeerMuteEvent"
                   - $ref: "#/components/schemas/PingEvent"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -996,6 +1046,23 @@ components:
           type: integer
           description: Server-declared client-to-relay RTT in ms; meaningful only when hasRtt is true.
         hasRtt:
+          type: boolean
+    CallPeerMuteEvent:
+      type: object
+      description: >-
+        The remote party's microphone state, parsed from in-call mute_v2 signaling.
+        Emitted on each state change; the latest event reflects the current state.
+        Transient, not persisted.
+      required: [type, sessionId, id, muted]
+      properties:
+        type:
+          type: string
+          const: call-peer-mute
+        sessionId:
+          type: string
+        id:
+          type: string
+        muted:
           type: boolean
     PingEvent:
       type: object
