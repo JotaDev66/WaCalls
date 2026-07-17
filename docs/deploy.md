@@ -135,7 +135,8 @@ see [troubleshooting.md](./troubleshooting.md#webrtc-ice-fails-no-audio).
 
 ## Verify before going live
 
-Run the built-in preflight (binds the UDP port, checks the public IP, opens the
+Run the built-in preflight (binds the UDP port, checks the public IP, discovers the
+external IP via STUN and cross-checks it against `WACALLS_PUBLIC_IP`, opens the
 database):
 
 ```bash

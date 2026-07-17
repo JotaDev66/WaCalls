@@ -43,9 +43,11 @@ type checkResult struct {
 // and reports whether every check passed (no fail). It is safe to run before
 // the server starts; it opens and closes each resource it probes.
 func Doctor(ctx context.Context, cfg config.Config, w io.Writer) bool {
+	stunIP, stunServer, stunErr := probeExternalIP(ctx, cfg.STUNServers, cfg.WebRTCUDPPort)
 	results := []checkResult{
 		checkUDPPort(cfg.WebRTCUDPPort),
 		checkPublicIP(cfg.PublicIPs, localIPv4s()),
+		checkExternalIP(cfg.PublicIPs, stunIP, stunServer, stunErr),
 		checkDatabase(ctx, storeConfigFor(cfg)),
 		{name: "relays", status: statusInfo, detail: "discovered per call via WhatsApp signaling; not checkable in preflight"},
 	}
