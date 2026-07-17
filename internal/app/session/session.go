@@ -133,6 +133,9 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnMark = func(callID string, mark string, elapsedMs int64) {
 		s.mgr.broker.EmitCallMark(s.id, callID, mark, elapsedMs)
 	}
+	cm.OnRelay = func(callID, relayName string, rttMs int, hasRtt bool) {
+		s.mgr.broker.EmitCallRelay(s.id, callID, relayName, rttMs, hasRtt)
+	}
 }
 
 func (s *Session) handleEvent(rawEvt any) {

@@ -76,6 +76,7 @@ type CallManager struct {
 	OnPeerAudio   func([]float32)
 	OnQuality     func(callID string, q core.CallQuality)
 	OnMark        func(callID string, mark string, elapsedMs int64)
+	OnRelay       func(callID, relayName string, rttMs int, hasRtt bool)
 }
 
 func NewCallManager(sock signaling.Socket, log *slog.Logger, exts ...engine.Extension) *CallManager {
@@ -97,7 +98,7 @@ func NewCallManager(sock signaling.Socket, log *slog.Logger, exts ...engine.Exte
 		declaredSelf: map[uint32]bool{},
 	}
 	relay := transport.NewSctpRelayManager(log)
-	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected() })
+	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected(ip, port) })
 	relay.SetOnReceive(func(data []byte) { m.onRelayData(data) })
 	relay.SetOnUsableChange(func(usable int) { m.onRelayUsableChange(usable) })
 	m.relay = relay

@@ -577,6 +577,7 @@ paths:
                   - $ref: "#/components/schemas/IncomingClaimedEvent"
                   - $ref: "#/components/schemas/CallQualityEvent"
                   - $ref: "#/components/schemas/CallMarkEvent"
+                  - $ref: "#/components/schemas/CallRelayEvent"
                   - $ref: "#/components/schemas/PingEvent"
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -973,6 +974,29 @@ components:
           type: integer
           format: int64
           description: Milliseconds since the call started.
+    CallRelayEvent:
+      type: object
+      description: >-
+        The relay the call's media transport connected to, with the server-declared
+        client-to-relay RTT when known. Emitted on each relay (re)connection; the latest
+        event reflects the relay in use. Transient, not persisted.
+      required: [type, sessionId, id, relayName, rttMs, hasRtt]
+      properties:
+        type:
+          type: string
+          const: call-relay
+        sessionId:
+          type: string
+        id:
+          type: string
+        relayName:
+          type: string
+          description: Relay name from the election data; falls back to the relay IP.
+        rttMs:
+          type: integer
+          description: Server-declared client-to-relay RTT in ms; meaningful only when hasRtt is true.
+        hasRtt:
+          type: boolean
     PingEvent:
       type: object
       required: [type]
