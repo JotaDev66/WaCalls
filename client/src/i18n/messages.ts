@@ -87,6 +87,9 @@ export type Messages = {
     mute: string;
     unmute: string;
     peerMuted: string;
+    reconnectDropped: string;
+    reconnectingAudio: string;
+    reconnectCall: string;
   };
   dialer: {
     title: string;

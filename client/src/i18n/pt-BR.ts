@@ -95,6 +95,9 @@ export const ptBR: Messages = {
     mute: "Silenciar microfone",
     unmute: "Reativar microfone",
     peerMuted: "Mic do remoto silenciado",
+    reconnectDropped: "Áudio desconectado",
+    reconnectingAudio: "Reconectando áudio…",
+    reconnectCall: "Reconectar Chamada",
   },
   dialer: {
     title: "Discador",
