@@ -13,6 +13,7 @@ import (
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
 	"wacalls/internal/voip/media"
+	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/transport"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
@@ -21,7 +22,7 @@ import (
 
 type fakeSock struct{}
 
-var _ core.VoipSocket = fakeSock{}
+var _ signaling.Socket = fakeSock{}
 
 func (fakeSock) OwnPN() types.JID                                 { return types.JID{} }
 func (fakeSock) OwnLID() types.JID                                { return types.JID{} }

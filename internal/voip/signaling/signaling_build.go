@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/wanode"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
@@ -16,7 +15,7 @@ var (
 	capabilityPreaccept = []byte{0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07}
 )
 
-func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid types.JID) (waBinary.Node, error) {
+func BuildOfferStanza(ctx context.Context, sock Socket, callID string, callKey []byte, peerJid types.JID) (waBinary.Node, error) {
 	creator := sock.OwnLID()
 	if creator.IsEmpty() {
 		creator = sock.OwnPN()
@@ -68,7 +67,7 @@ func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, 
 	}, nil
 }
 
-func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid, callCreator types.JID) (waBinary.Node, error) {
+func BuildAcceptStanza(ctx context.Context, sock Socket, callID string, callKey []byte, peerJid, callCreator types.JID) (waBinary.Node, error) {
 	if err := sock.AssertSessions(ctx, []types.JID{callCreator}, true); err != nil {
 		return waBinary.Node{}, fmt.Errorf("assert creator session: %w", err)
 	}

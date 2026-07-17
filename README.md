@@ -58,7 +58,7 @@ concurrent 1:1 calls** at once - one per browser operator - routed independently
 │  Broker           SSE hub (sessions, auth, call lifecycle fan-out)          │
 │  Bridge           pion WebRTC bridge (16 kHz PCM data channel ⇄ call core)  │
 │                                                                            │
-│  internal/wa      VoipSocket adapter over whatsmeow                        │
+│  internal/wa      signaling.Socket adapter over whatsmeow                  │
 │  internal/voip    call · signaling · media · transport · core · wanode     │
 └───────────────┬──────────────────────────────────────┬────────────────────┘
                 │ <call> signaling (Signal/USync)       │ SRTP media
@@ -74,8 +74,8 @@ concurrent 1:1 calls** at once - one per browser operator - routed independently
 | Path | Responsibility |
 |---|---|
 | `cmd/server` | HTTP/SSE broker, session manager + store, WebRTC bridge, process lifecycle |
-| `internal/wa` | `VoipSocket` - sends/receives `<call>` stanzas via whatsmeow |
-| `internal/voip/core` | Domain types, constants, the `VoipSocket` interface |
+| `internal/wa` | `signaling.Socket` impl - sends/receives `<call>` stanzas via whatsmeow |
+| `internal/voip/core` | Domain types and constants (whatsmeow-free, lint-enforced) |
 | `internal/voip/wanode` | Shared WhatsApp-node and JID helpers |
 | `internal/voip/codec` | Audio codecs: vendored pure-Go MLow (`mlow/`) and the standard-Opus recv fallback (`opus/`) |
 | `internal/voip/media` | RTP, SRTP, SSRC, PCM helpers, key derivation |

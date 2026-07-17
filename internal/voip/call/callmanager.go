@@ -21,7 +21,7 @@ import (
 const signalingSendTimeout = 10 * time.Second
 
 type CallManager struct {
-	sock     core.VoipSocket
+	sock     signaling.Socket
 	log      *slog.Logger
 	observer core.CallObserver
 
@@ -78,7 +78,7 @@ type CallManager struct {
 	OnMark        func(callID string, mark string, elapsedMs int64)
 }
 
-func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
+func NewCallManager(sock signaling.Socket, log *slog.Logger, exts ...engine.Extension) *CallManager {
 	if log == nil {
 		log = slog.Default()
 	}
