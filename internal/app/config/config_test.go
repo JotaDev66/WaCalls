@@ -63,6 +63,7 @@ func TestLoadConfigReadsEnv(t *testing.T) {
 	t.Setenv("WACALLS_CORS_ORIGINS", "https://a.example.com")
 	t.Setenv("WACALLS_WEBRTC_UDP_PORT", "7881")
 	t.Setenv("WACALLS_PUBLIC_IP", " 203.0.113.10 , , 198.51.100.7 ")
+	t.Setenv("WACALLS_STUN_SERVER", " stun.example.com:3478 , ,stun2.example.com:19302 ")
 	t.Setenv("WACALLS_RATE_LIMIT", "12.5")
 
 	cfg := LoadConfig(":9000", "x.db", "static", true, 5)
@@ -79,6 +80,9 @@ func TestLoadConfigReadsEnv(t *testing.T) {
 	if !reflect.DeepEqual(cfg.PublicIPs, []string{"203.0.113.10", "198.51.100.7"}) {
 		t.Fatalf("PublicIPs = %v, want trimmed split", cfg.PublicIPs)
 	}
+	if !reflect.DeepEqual(cfg.STUNServers, []string{"stun.example.com:3478", "stun2.example.com:19302"}) {
+		t.Fatalf("STUNServers = %v, want trimmed split", cfg.STUNServers)
+	}
 	if cfg.RateLimit != 12.5 {
 		t.Fatalf("RateLimit = %v, want 12.5", cfg.RateLimit)
 	}
@@ -90,6 +94,7 @@ func TestLoadConfigDefaultsWhenUnset(t *testing.T) {
 	t.Setenv("WACALLS_CORS_ORIGINS", "")
 	t.Setenv("WACALLS_WEBRTC_UDP_PORT", "")
 	t.Setenv("WACALLS_PUBLIC_IP", "")
+	t.Setenv("WACALLS_STUN_SERVER", "")
 	t.Setenv("WACALLS_RATE_LIMIT", "")
 
 	cfg := LoadConfig(":8080", "wacalls.db", "", false, 8)
@@ -98,6 +103,9 @@ func TestLoadConfigDefaultsWhenUnset(t *testing.T) {
 	}
 	if len(cfg.PublicIPs) != 0 {
 		t.Fatalf("PublicIPs = %v, want empty", cfg.PublicIPs)
+	}
+	if !reflect.DeepEqual(cfg.STUNServers, []string{"stun.l.google.com:19302", "stun.cloudflare.com:3478"}) {
+		t.Fatalf("STUNServers = %v, want public defaults when unset", cfg.STUNServers)
 	}
 	if cfg.RateLimit != 20 {
 		t.Fatalf("RateLimit = %v, want default 20 when unset", cfg.RateLimit)

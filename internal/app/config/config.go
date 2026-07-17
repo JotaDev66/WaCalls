@@ -26,6 +26,7 @@ type Config struct {
 	WebhookSecret  string
 	TrustedProxies string
 	DiagDir        string
+	STUNServers    []string
 }
 
 func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config {
@@ -47,6 +48,7 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 		WebhookSecret:  os.Getenv("WACALLS_WEBHOOK_SECRET"),
 		TrustedProxies: os.Getenv("WACALLS_TRUSTED_PROXIES"),
 		DiagDir:        strings.TrimSpace(os.Getenv("WACALLS_DIAG_DIR")),
+		STUNServers:    parseSTUNServers(os.Getenv("WACALLS_STUN_SERVER")),
 	}
 }
 
@@ -88,6 +90,16 @@ func parsePublicIPs(raw string) []string {
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)
 		}
+	}
+	return out
+}
+
+var defaultSTUNServers = []string{"stun.l.google.com:19302", "stun.cloudflare.com:3478"}
+
+func parseSTUNServers(raw string) []string {
+	out := parsePublicIPs(raw)
+	if len(out) == 0 {
+		return defaultSTUNServers
 	}
 	return out
 }
