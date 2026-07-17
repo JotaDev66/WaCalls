@@ -78,6 +78,7 @@ type RelayEndpoint struct {
 	RelayName    string
 	AddressBytes []byte
 	AuthTokenID  string
+	IsFNA        bool
 }
 
 type RelayData struct {

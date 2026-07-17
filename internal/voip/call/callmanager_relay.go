@@ -173,6 +173,28 @@ func (m *CallManager) retryReconnect() {
 	}()
 }
 
+// prioritizeFNA returns the endpoints with the is_fna=1 relays moved to the front,
+// preserving the RTT order among the rest. An inbound call's peer uplink RTP only
+// arrives on the relay the offer marked is_fna=1; with maxDialRelays capping the
+// dialed set, that endpoint must never be sorted out of it.
+func prioritizeFNA(endpoints []core.RelayEndpoint) []core.RelayEndpoint {
+	out := make([]core.RelayEndpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		if ep.IsFNA {
+			out = append(out, ep)
+		}
+	}
+	if len(out) == 0 {
+		return endpoints
+	}
+	for _, ep := range endpoints {
+		if !ep.IsFNA {
+			out = append(out, ep)
+		}
+	}
+	return out
+}
+
 func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {
 	seen := map[string]bool{}
 	var relays []transport.RelayConfig
@@ -202,6 +224,12 @@ func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {
 }
 
 func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
+	m.mu.Lock()
+	incoming := m.currentCall != nil && m.currentCall.Direction == core.CallDirectionIncoming
+	m.mu.Unlock()
+	if incoming {
+		endpoints = prioritizeFNA(endpoints)
+	}
 	relays := buildRelayConfigs(endpoints)
 	if len(relays) == 0 {
 		m.log.Error("no usable relay configs")
