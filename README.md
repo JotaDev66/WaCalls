@@ -265,6 +265,7 @@ candidate the browser can actually reach. Configure it in `.env`:
 | `HTTP_PORT` | `8080` | Host port for the HTTP API + UI |
 | `WEBRTC_UDP_PORT` | `7881` | Fixed UDP port all browser media is funneled through (single mux) |
 | `WACALLS_PUBLIC_IP` | _(empty)_ | IP/host the browser uses to reach the server; published as the host candidate (1:1 NAT) |
+| `WACALLS_STUN_SERVER` | _(Google, Cloudflare)_ | STUN servers `-doctor` queries to discover/verify the external IP |
 
 On bridge networking set **both** `WACALLS_PUBLIC_IP` and `WEBRTC_UDP_PORT`. The
 UDP port is published 1:1 (`7881:7881/udp`) so the advertised candidate matches the

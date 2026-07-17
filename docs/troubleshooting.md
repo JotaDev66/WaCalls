@@ -22,6 +22,8 @@ address is offered, and the 1:1 NAT rewrite advertises `WACALLS_PUBLIC_IP`. If y
 still see this:
 
 - Confirm `WACALLS_PUBLIC_IP` is set to the real public IP.
+- Run `wacalls -doctor`: the `external ip (stun)` line prints the IP the internet
+  actually sees and warns when it differs from `WACALLS_PUBLIC_IP`.
 - Confirm the published UDP port matches `WEBRTC_UDP_PORT` exactly (`7881:7881/udp`).
 - Confirm inbound UDP on that port is open in every firewall, including any cloud
   firewall in front of the host. Verify packets arrive:
