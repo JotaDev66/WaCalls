@@ -263,9 +263,10 @@ func (m *CallManager) cleanupMedia() {
 			endReason = string(c.StateData.EndReason)
 		}
 	}
-	callID := ""
+	callID, codec := "", ""
 	if c := m.currentCall; c != nil {
 		callID = c.CallID
+		codec = c.Codec
 	}
 	if m.srtp != nil {
 		m.srtp.Close()
@@ -289,7 +290,7 @@ func (m *CallManager) cleanupMedia() {
 	var qArgs []any
 	if m.recvStats != nil {
 		q := m.recvStats.QualitySnapshot(uint64(time.Now().UnixMilli()))
-		qArgs = []any{"call_id", callID, "jitter_ms", q.JitterMs, "loss", q.LossFraction, "rtt_samples", m.recvStats.RttSamples()}
+		qArgs = []any{"call_id", callID, "codec", codec, "jitter_ms", q.JitterMs, "loss", q.LossFraction, "rtt_samples", m.recvStats.RttSamples()}
 		if q.HasRtt {
 			qArgs = append(qArgs, "rtt_ms", q.RttMs)
 		}

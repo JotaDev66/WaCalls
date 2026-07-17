@@ -17,6 +17,25 @@ func NodeChildren(n *waBinary.Node) []waBinary.Node {
 	return nil
 }
 
+// FindChildByTag walks the node tree depth-first and returns the first node with
+// the given tag, or nil. Unlike GetOptionalChildByTag it is not limited to direct
+// children: acks nest interesting nodes under the echoed offer.
+func FindChildByTag(n *waBinary.Node, tag string) *waBinary.Node {
+	if n == nil {
+		return nil
+	}
+	if n.Tag == tag {
+		return n
+	}
+	children := NodeChildren(n)
+	for i := range children {
+		if r := FindChildByTag(&children[i], tag); r != nil {
+			return r
+		}
+	}
+	return nil
+}
+
 func NodeBytes(n *waBinary.Node) []byte {
 	if n == nil {
 		return nil
