@@ -35,10 +35,15 @@ type Session struct {
 
 	bridgeMu sync.Mutex
 	bridges  map[string]*Bridge
+	grace    *graceKeeper
 
 	mu   sync.Mutex
 	auth events.AuthSnapshot
 }
+
+// browserGraceWindow is how long a call is held after its browser leg drops (e.g. a
+// page refresh) before it is terminated, giving a reloaded page time to re-attach.
+const browserGraceWindow = 30 * time.Second
 
 func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Session {
 	s := &Session{
@@ -50,6 +55,10 @@ func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Sessio
 		auth:    events.AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
 	}
+	s.grace = newGraceKeeper(browserGraceWindow, func(callID string) {
+		s.log.Warn("call ended: browser did not return within the grace window", "call_id", callID)
+		s.terminateCall(callID, core.EndCallReasonUserEnded)
+	})
 	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, mgr.newObserver)
 	client.AddEventHandler(s.handleEvent)
 	return s
@@ -249,16 +258,35 @@ func (s *Session) setBridge(callID string, b *Bridge) {
 		return
 	}
 	s.bridges[callID] = b
+	// A fresh browser leg re-attached: cancel any pending grace countdown so the call
+	// is no longer waiting for the old (refreshed-away) leg to return.
+	s.grace.cancel(callID)
 	s.bridgeMu.Unlock()
 	if old != nil {
 		old.Close()
 	}
 }
 
+// onBridgeDetached runs when a browser leg's peer connection fails or closes. If it
+// is still the current leg (not superseded by a re-attach and not already removed),
+// it starts the grace countdown instead of ending the call immediately, so a page
+// refresh can re-attach. Closing the superseded leg during setBridge/removeCall lands
+// here too, but the identity check makes those a no-op.
+func (s *Session) onBridgeDetached(callID string, bridge *Bridge) {
+	s.bridgeMu.Lock()
+	defer s.bridgeMu.Unlock()
+	if s.bridges[callID] != bridge {
+		return
+	}
+	s.log.Info("browser leg detached; holding the call for the grace window", "call_id", callID)
+	s.grace.arm(callID)
+}
+
 func (s *Session) removeCall(callID string) {
 	s.bridgeMu.Lock()
 	b := s.bridges[callID]
 	delete(s.bridges, callID)
+	s.grace.cancel(callID)
 	s.bridgeMu.Unlock()
 	if b != nil {
 		b.Close()
@@ -274,6 +302,7 @@ func (s *Session) teardownAllCalls() {
 	for _, cm := range s.calls.Drain() {
 		_ = cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
 	}
+	s.grace.stopAll()
 	s.bridgeMu.Lock()
 	bridges := s.bridges
 	s.bridges = map[string]*Bridge{}

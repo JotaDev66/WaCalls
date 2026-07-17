@@ -83,7 +83,7 @@ func (s *Session) AttachBrowser(callID, offerSDP string) (string, error) {
 		return "", err
 	}
 	bridge.OnBrowserPCM = func(pcm []float32) { cm.FeedCapturedPCM(pcm) }
-	bridge.OnTerminalICE = func() { go s.terminateCall(callID, core.EndCallReasonUserEnded) }
+	bridge.OnTerminalICE = func() { go s.onBridgeDetached(callID, bridge) }
 	s.setBridge(callID, bridge)
 	return answer, nil
 }
