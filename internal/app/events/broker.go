@@ -43,6 +43,7 @@ type Broker struct {
 	calls    map[string]*CallRecord
 	records  core.CallRecordStore
 	webhooks *webhookDispatcher
+	diag     *Recorder
 	log      *slog.Logger
 
 	SnapshotFn func() []any
@@ -86,10 +87,19 @@ func (b *Broker) unsubscribe(s *subscriber) {
 	close(s.ch)
 }
 
+// SetRecorder wires an opt-in diagnostic recorder that mirrors every broadcast event
+// to disk. Passing nil (the default) keeps diagnostics off at zero cost.
+func (b *Broker) SetRecorder(r *Recorder) {
+	b.diag = r
+}
+
 func (b *Broker) broadcast(ev any) {
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return
+	}
+	if m, ok := ev.(map[string]any); ok {
+		b.diag.Offer(m)
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()

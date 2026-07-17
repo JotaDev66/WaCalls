@@ -22,6 +22,14 @@ func TestLoadConfigTrustedProxies(t *testing.T) {
 	}
 }
 
+func TestLoadConfigDiagDir(t *testing.T) {
+	t.Setenv("WACALLS_DIAG_DIR", "  /var/wacalls/diag  ")
+	cfg := LoadConfig(":0", "db", "", false, 0)
+	if cfg.DiagDir != "/var/wacalls/diag" {
+		t.Fatalf("diag dir not trimmed/loaded: %q", cfg.DiagDir)
+	}
+}
+
 func TestValidateConfigWebhook(t *testing.T) {
 	if err := Validate(Config{WebhookURL: "https://x", WebhookSecret: ""}); err == nil {
 		t.Fatal("url without secret must fail the boot")
