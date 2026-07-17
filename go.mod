@@ -7,6 +7,7 @@ require (
 	github.com/mdp/qrterminal/v3 v3.2.1
 	github.com/pion/ice/v4 v4.2.7
 	github.com/pion/opus v0.1.0
+	github.com/pion/stun/v3 v3.1.5
 	github.com/pion/webrtc/v4 v4.2.15
 	github.com/rs/zerolog v1.35.1
 	go.mau.fi/whatsmeow v0.0.0-20260713112832-d8960d9575d2
@@ -55,7 +56,6 @@ require (
 	github.com/pion/sctp v1.10.0 // indirect
 	github.com/pion/sdp/v3 v3.0.18 // indirect
 	github.com/pion/srtp/v3 v3.0.11 // indirect
-	github.com/pion/stun/v3 v3.1.5 // indirect
 	github.com/pion/transport/v4 v4.0.2 // indirect
 	github.com/pion/turn/v5 v5.0.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
