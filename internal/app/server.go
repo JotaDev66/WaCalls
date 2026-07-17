@@ -109,6 +109,17 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 	})
 	broker.SnapshotFn = mgr.SnapshotEvents
 
+	if cfg.DiagDir != "" {
+		rec, err := events.NewRecorder(cfg.DiagDir, log)
+		if err != nil {
+			return nil, err
+		}
+		broker.SetRecorder(rec)
+		context.AfterFunc(ctx, func() { _ = rec.Close() })
+		log.Warn("call diagnostics recorder enabled; the directory stores per-call metadata (including peer numbers) on disk",
+			"dir", cfg.DiagDir)
+	}
+
 	if broker.EnableWebhooks(ctx, cfg.WebhookURL, cfg.WebhookSecret) {
 		log.Info("webhook delivery enabled", "url", cfg.WebhookURL)
 	}

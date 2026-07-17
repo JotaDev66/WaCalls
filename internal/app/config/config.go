@@ -25,6 +25,7 @@ type Config struct {
 	WebhookURL     string
 	WebhookSecret  string
 	TrustedProxies string
+	DiagDir        string
 }
 
 func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config {
@@ -45,6 +46,7 @@ func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config
 		WebhookURL:     strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
 		WebhookSecret:  os.Getenv("WACALLS_WEBHOOK_SECRET"),
 		TrustedProxies: os.Getenv("WACALLS_TRUSTED_PROXIES"),
+		DiagDir:        strings.TrimSpace(os.Getenv("WACALLS_DIAG_DIR")),
 	}
 }
 

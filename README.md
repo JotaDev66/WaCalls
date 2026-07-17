@@ -353,6 +353,16 @@ const ok = crypto.timingSafeEqual(
 
 Reject requests whose timestamp is older than a few minutes to prevent replays.
 
+### Call diagnostics recorder
+
+Set `WACALLS_DIAG_DIR` to a writable directory to mirror each call's event timeline
+to `call-<id>.jsonl` (one JSON line per event: status, quality, setup marks, relay,
+mute, end). This is an opt-in support tool: off by default, non-blocking (a full
+buffer drops events, never stalls a call), and it records the same structured
+metadata the SSE stream carries, which includes peer numbers but never keys,
+secrets, or media. The directory grows unbounded, so enable it while reproducing an
+issue and prune it yourself afterward.
+
 ---
 
 ## Tests
