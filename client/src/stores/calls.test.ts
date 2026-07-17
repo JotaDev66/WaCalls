@@ -52,6 +52,15 @@ const markEv = (id: string, mark: string, elapsedMs: number) => ({
   elapsedMs,
 });
 
+const relayEv = (id: string, relayName: string, rttMs: number) => ({
+  type: "call-relay" as const,
+  sessionId: "s1",
+  id,
+  relayName,
+  rttMs,
+  hasRtt: true,
+});
+
 ensureCallsWired();
 
 describe("calls store event handlers", () => {
@@ -62,6 +71,7 @@ describe("calls store event handlers", () => {
       incoming: null,
       quality: new Map(),
       marks: new Map(),
+      relays: new Map(),
     });
   });
 
@@ -149,6 +159,42 @@ describe("calls store event handlers", () => {
     emit({ type: "call-list", calls: [row("c1")] });
     emit(markEv("ghost", "transport.ice", 12));
     expect(useCalls.getState().marks.has("ghost")).toBe(false);
+  });
+
+  it("tracks the relay sample for a live call and the latest event wins", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(relayEv("c1", "sfo1", 80));
+    emit(relayEv("c1", "gru1", 24));
+    expect(useCalls.getState().relays.get("c1")).toEqual({
+      relayName: "gru1",
+      rttMs: 24,
+      hasRtt: true,
+    });
+  });
+
+  it("ignores a relay sample for a call not in the live list", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(relayEv("ghost", "gru1", 24));
+    expect(useCalls.getState().relays.has("ghost")).toBe(false);
+  });
+
+  it("call-list prunes orphaned relay samples and call-ended clears them", () => {
+    emit({ type: "call-list", calls: [row("c1")] });
+    emit(relayEv("c1", "gru1", 24));
+    emit({ type: "call-list", calls: [] });
+    expect(useCalls.getState().relays.size).toBe(0);
+
+    emit({ type: "call-list", calls: [row("c2")] });
+    emit(relayEv("c2", "gru1", 24));
+    emit({
+      type: "call-ended",
+      sessionId: "s1",
+      id: "c2",
+      owner: "op-A",
+      reason: "user_ended",
+      endedAt: 2,
+    });
+    expect(useCalls.getState().relays.size).toBe(0);
   });
 
   it("call-list prunes orphaned marks and call-ended clears them", () => {

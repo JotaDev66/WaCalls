@@ -152,6 +152,16 @@ func (b *Broker) EmitCallMark(sessionID, callID, mark string, elapsedMs int64) {
 	})
 }
 
+// EmitCallRelay broadcasts which relay the call's media transport connected to, with the
+// server-declared client-to-relay RTT when known. Transient live-only signal like call-quality:
+// never persisted, feeding the client's relay pill.
+func (b *Broker) EmitCallRelay(sessionID, callID, relayName string, rttMs int, hasRtt bool) {
+	b.broadcast(map[string]any{
+		"type": "call-relay", "sessionId": sessionID, "id": callID,
+		"relayName": relayName, "rttMs": rttMs, "hasRtt": hasRtt,
+	})
+}
+
 func (b *Broker) ServeSSE(w http.ResponseWriter, r *http.Request, clientID string) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {

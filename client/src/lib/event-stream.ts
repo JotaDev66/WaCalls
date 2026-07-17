@@ -70,6 +70,14 @@ export type BrokerEvent =
       id: string;
       mark: string;
       elapsedMs: number;
+    }
+  | {
+      type: "call-relay";
+      sessionId: string;
+      id: string;
+      relayName: string;
+      rttMs: number;
+      hasRtt: boolean;
     };
 
 type Listener = (ev: BrokerEvent) => void;

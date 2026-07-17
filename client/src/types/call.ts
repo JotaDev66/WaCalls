@@ -33,3 +33,9 @@ export type SetupMark = {
   mark: string;
   elapsedMs: number;
 };
+
+export type RelaySample = {
+  relayName: string;
+  rttMs: number;
+  hasRtt: boolean;
+};

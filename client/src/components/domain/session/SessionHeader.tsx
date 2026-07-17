@@ -19,6 +19,7 @@ import {
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { deleteSession, logoutSession, pairSession } from "@/services/sessions";
 import { openRenameSession } from "@/stores/session-name-dialog";
+import { useCalls } from "@/stores/calls";
 import { useNav } from "@/stores/nav";
 import { sessionStateTone, sessionStatePulse } from "@/lib/status";
 import { initials } from "@/lib/initials";
@@ -31,6 +32,15 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const view = useNav((s) => s.view);
   const setView = useNav((s) => s.setView);
+  const relay = useCalls((s) => {
+    const live = s.calls.find(
+      (c) =>
+        c.sessionId === session.id &&
+        c.status !== "ended" &&
+        s.relays.has(c.callId),
+    );
+    return live ? s.relays.get(live.callId) : undefined;
+  });
   const t = useT();
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -72,6 +82,12 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
               >
                 {t.sessions.status[session.state]}
               </StatusBadge>
+              {relay && (
+                <StatusBadge tone="ok">
+                  relay {relay.relayName}
+                  {relay.hasRtt && ` · ${relay.rttMs}ms`}
+                </StatusBadge>
+              )}
             </div>
             {phone && (
               <p className="truncate font-mono text-xs text-muted-foreground">

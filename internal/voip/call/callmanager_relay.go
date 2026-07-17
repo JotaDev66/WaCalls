@@ -35,7 +35,7 @@ type RelayTransport interface {
 
 var _ RelayTransport = (*transport.SctpRelayManager)(nil)
 
-func (m *CallManager) onRelayConnected() {
+func (m *CallManager) onRelayConnected(ip string, port int) {
 	m.mu.Lock()
 	call := m.currentCall
 	if call != nil && call.StateData.State == core.CallStateConnecting {
@@ -45,7 +45,26 @@ func (m *CallManager) onRelayConnected() {
 			m.log.Info("relay connected → active", "call_id", call.CallID)
 		}
 	}
+	callID, relayName, rttMs, hasRtt := "", "", 0, false
+	if call != nil && call.RelayData != nil {
+		callID = call.CallID
+		relayName = ip
+		for _, ep := range call.RelayData.Endpoints {
+			if ep.IP == ip && (port == 0 || ep.Port == port) {
+				if ep.RelayName != "" {
+					relayName = ep.RelayName
+				}
+				if ep.C2RRtt != nil {
+					rttMs, hasRtt = *ep.C2RRtt, true
+				}
+				break
+			}
+		}
+	}
 	m.mu.Unlock()
+	if m.OnRelay != nil && callID != "" {
+		go m.OnRelay(callID, relayName, rttMs, hasRtt)
+	}
 }
 
 func (m *CallManager) onRelayUsableChange(usable int) {
