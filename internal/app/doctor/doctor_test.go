@@ -78,4 +78,24 @@ func TestDoctorReport(t *testing.T) {
 	if out := b.String(); !strings.Contains(out, "database") || !strings.Contains(out, "relay") {
 		t.Fatalf("report missing lines:\n%s", out)
 	}
+	if out := b.String(); !strings.Contains(out, "external ip (stun)") {
+		t.Fatalf("report missing stun line:\n%s", out)
+	}
+}
+
+func TestDoctorReportSTUNConfirmed(t *testing.T) {
+	shortSTUNTimeout(t)
+	srv := startFakeSTUN(t, net.ParseIP("203.0.113.9"), 4242)
+	cfg := config.Config{
+		DBPath:      filepath.Join(t.TempDir(), "doctor.db"),
+		PublicIPs:   []string{"203.0.113.9"},
+		STUNServers: []string{srv},
+	}
+	var b strings.Builder
+	if ok := Doctor(context.Background(), cfg, &b); !ok {
+		t.Fatalf("want ok=true\n%s", b.String())
+	}
+	if out := b.String(); !strings.Contains(out, "confirmed via stun") {
+		t.Fatalf("stun line not confirmed:\n%s", out)
+	}
 }
