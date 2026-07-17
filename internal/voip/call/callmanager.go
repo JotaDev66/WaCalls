@@ -41,6 +41,7 @@ type CallManager struct {
 	outgoingPreacceptSent bool
 	observerEnded         bool
 	acceptedByJid         string
+	calleeDevices         []types.JID
 	debeEnabled           bool
 
 	timeouts      Timeouts
@@ -145,7 +146,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
-	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
+	offer, calleeDevices, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
 	if err != nil {
 		return err
 	}
@@ -155,6 +156,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	}
 
 	m.mu.Lock()
+	m.calleeDevices = calleeDevices
 	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionOfferSent})
 	m.emitState()
 	m.mu.Unlock()

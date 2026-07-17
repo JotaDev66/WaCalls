@@ -1,0 +1,286 @@
+package call
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"testing"
+
+	"wacalls/internal/voip/signaling"
+	"wacalls/internal/voip/wanode"
+
+	waBinary "go.mau.fi/whatsmeow/binary"
+	"go.mau.fi/whatsmeow/types"
+)
+
+type sentStanza struct {
+	tag    string
+	to     string
+	reason string
+	dests  []string
+}
+
+type elsewhereSock struct {
+	recordSock
+	devices []types.JID
+}
+
+func (s *elsewhereSock) GetUSyncDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	return s.devices, nil
+}
+
+func (s *elsewhereSock) sentStanzas() []sentStanza {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []sentStanza
+	for i := range s.sent {
+		node := &s.sent[i]
+		children := wanode.NodeChildren(node)
+		if len(children) == 0 {
+			continue
+		}
+		inner := children[0]
+		st := sentStanza{
+			tag:    inner.Tag,
+			to:     wanode.AttrString(node.Attrs, "to"),
+			reason: wanode.AttrString(inner.Attrs, "reason"),
+		}
+		if dst := wanode.FindChildByTag(&inner, "destination"); dst != nil {
+			for _, to := range wanode.NodeChildren(dst) {
+				st.dests = append(st.dests, wanode.AttrString(to.Attrs, "jid"))
+			}
+		}
+		out = append(out, st)
+	}
+	return out
+}
+
+func acceptNode(callID string, from types.JID) *waBinary.Node {
+	return &waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"from": from},
+		Content: []waBinary.Node{{
+			Tag:   "accept",
+			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": "caller@lid"},
+		}},
+	}
+}
+
+func terminateNode(callID string, from types.JID) *waBinary.Node {
+	return &waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"from": from},
+		Content: []waBinary.Node{{
+			Tag:   "terminate",
+			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": "caller@lid"},
+		}},
+	}
+}
+
+func outgoingRingingManager(t *testing.T, sock signaling.Socket) *CallManager {
+	t.Helper()
+	cm := NewCallManager(sock, slog.Default())
+	cm.relay = &fakeRelay{noConn: true}
+	peer := types.NewJID("62440234549366", types.HiddenUserServer)
+	if err := cm.StartCall(context.Background(), "CALL1", peer); err != nil {
+		t.Fatalf("start call: %v", err)
+	}
+	t.Cleanup(cm.cleanupMedia)
+	return cm
+}
+
+func lidDevice(user string, device uint16) types.JID {
+	j := types.NewJID(user, types.HiddenUserServer)
+	j.Device = device
+	return j
+}
+
+func TestStartCallPersistsCalleeDevices(t *testing.T) {
+	devs := []types.JID{lidDevice("62440234549366", 0), lidDevice("62440234549366", 33)}
+	sock := &elsewhereSock{devices: devs}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.mu.Lock()
+	got := len(cm.calleeDevices)
+	cm.mu.Unlock()
+	if got != 2 {
+		t.Fatalf("calleeDevices = %d, want 2", got)
+	}
+}
+
+func TestCompanionAcceptStopsSiblingDevices(t *testing.T) {
+	primary := lidDevice("62440234549366", 0)
+	companion := lidDevice("62440234549366", 33)
+	sock := &elsewhereSock{devices: []types.JID{primary, companion}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+
+	var elsewhere *sentStanza
+	for _, st := range sock.sentStanzas() {
+		if st.tag == "terminate" && st.reason == "accepted_elsewhere" {
+			s := st
+			elsewhere = &s
+		}
+	}
+	if elsewhere == nil {
+		t.Fatalf("no accepted_elsewhere terminate sent; stanzas: %+v", sock.sentStanzas())
+	}
+	if len(elsewhere.dests) != 1 || elsewhere.dests[0] != primary.String() {
+		t.Fatalf("destination must list only the non-answering primary %s, got %v", primary, elsewhere.dests)
+	}
+}
+
+func TestAcceptWithoutSiblingsSendsNoElsewhere(t *testing.T) {
+	only := lidDevice("62440234549366", 0)
+	sock := &elsewhereSock{devices: []types.JID{only}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", only), only)
+
+	for _, st := range sock.sentStanzas() {
+		if st.reason == "accepted_elsewhere" {
+			t.Fatalf("single-device callee must not receive an elsewhere terminate: %+v", st)
+		}
+	}
+}
+
+func TestSecondAcceptFromAnotherDeviceIsIgnored(t *testing.T) {
+	primary := lidDevice("62440234549366", 0)
+	companion := lidDevice("62440234549366", 33)
+	sock := &elsewhereSock{devices: []types.JID{primary, companion}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+	before := len(sock.sentStanzas())
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", primary), primary)
+
+	cm.mu.Lock()
+	accepted := cm.acceptedByJid
+	cm.mu.Unlock()
+	if accepted != companion.String() {
+		t.Fatalf("first accept must win: acceptedByJid = %q, want %q", accepted, companion)
+	}
+	if after := len(sock.sentStanzas()); after != before {
+		t.Fatalf("duplicate accept must not send stanzas: %d -> %d", before, after)
+	}
+}
+
+type decryptStep struct {
+	key []byte
+	err error
+}
+
+type repairSock struct {
+	recordSock
+	devices  []types.JID
+	steps    []decryptStep
+	decrypts int
+}
+
+func (s *repairSock) GetUSyncDevices(ctx context.Context, jids []types.JID) ([]types.JID, error) {
+	return s.devices, nil
+}
+
+func (s *repairSock) DecryptCallKey(ctx context.Context, from types.JID, encChild *waBinary.Node) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	i := min(s.decrypts, len(s.steps)-1)
+	s.decrypts++
+	return s.steps[i].key, s.steps[i].err
+}
+
+func acceptNodeWithEnc(callID string, from types.JID) *waBinary.Node {
+	return &waBinary.Node{
+		Tag:   "call",
+		Attrs: waBinary.Attrs{"from": from},
+		Content: []waBinary.Node{{
+			Tag:   "accept",
+			Attrs: waBinary.Attrs{"call-id": callID, "call-creator": "caller@lid"},
+			Content: []waBinary.Node{{
+				Tag:   "enc",
+				Attrs: waBinary.Attrs{"v": "2", "type": "pkmsg"},
+			}},
+		}},
+	}
+}
+
+// A retransmitted accept from the device that already answered must reach the
+// decrypt/rekey path again: the first accept's call key can fail to decrypt on a
+// transient signal-session desync, and the retry is the only chance to repair it.
+func TestSameDeviceAcceptRetryRepairsKey(t *testing.T) {
+	companion := lidDevice("62440234549366", 33)
+	peerKey := make([]byte, 32)
+	for i := range peerKey {
+		peerKey[i] = byte(i + 1)
+	}
+	sock := &repairSock{
+		devices: []types.JID{companion},
+		steps: []decryptStep{
+			{nil, errors.New("no signal session")},
+			{peerKey, nil},
+		},
+	}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNodeWithEnc("CALL1", companion), companion)
+	cm.mu.Lock()
+	srtpAfterFirst := cm.srtp
+	cm.mu.Unlock()
+
+	cm.HandleCallAccept(context.Background(), acceptNodeWithEnc("CALL1", companion), companion)
+	cm.mu.Lock()
+	decrypts := sock.decrypts
+	srtpAfterRetry := cm.srtp
+	accepted := cm.acceptedByJid
+	cm.mu.Unlock()
+
+	if decrypts != 2 {
+		t.Fatalf("same-device accept retry must reach the decrypt path again, decrypts=%d", decrypts)
+	}
+	if srtpAfterRetry == srtpAfterFirst {
+		t.Fatal("successful decrypt on retry must re-arm srtp")
+	}
+	if accepted != companion.String() {
+		t.Fatalf("acceptedByJid = %q, want %q", accepted, companion)
+	}
+}
+
+func TestSameDeviceAcceptRetryDoesNotRepeatElsewhereFanout(t *testing.T) {
+	primary := lidDevice("62440234549366", 0)
+	companion := lidDevice("62440234549366", 33)
+	sock := &elsewhereSock{devices: []types.JID{primary, companion}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+
+	elsewheres := 0
+	for _, st := range sock.sentStanzas() {
+		if st.reason == "accepted_elsewhere" {
+			elsewheres++
+		}
+	}
+	if elsewheres != 1 {
+		t.Fatalf("elsewhere fanout must go out exactly once, got %d", elsewheres)
+	}
+}
+
+func TestLateRejectFromNonAnsweringDeviceKeepsCall(t *testing.T) {
+	primary := lidDevice("62440234549366", 0)
+	companion := lidDevice("62440234549366", 33)
+	sock := &elsewhereSock{devices: []types.JID{primary, companion}}
+	cm := outgoingRingingManager(t, sock)
+
+	cm.HandleCallAccept(context.Background(), acceptNode("CALL1", companion), companion)
+	cm.HandleCallTerminate(terminateNode("CALL1", primary))
+
+	if cm.CurrentCall().IsEnded() {
+		t.Fatal("terminate from the non-answering device must not end an accepted call")
+	}
+
+	cm.HandleCallTerminate(terminateNode("CALL1", companion))
+	if !cm.CurrentCall().IsEnded() {
+		t.Fatal("terminate from the answering device must end the call")
+	}
+}
