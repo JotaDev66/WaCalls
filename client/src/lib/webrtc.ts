@@ -8,15 +8,18 @@ export type OpenCall = {
   close: () => void;
 };
 
-export const openCall = async (
-  sid: string,
-  callId: string,
-  micDeviceId: string | null,
-): Promise<OpenCall> => {
-  const localStream = await navigator.mediaDevices.getUserMedia({
+export const acquireMic = (micDeviceId: string | null): Promise<MediaStream> =>
+  navigator.mediaDevices.getUserMedia({
     audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
     video: false,
   });
+
+export const openCall = async (
+  sid: string,
+  callId: string,
+  micStream: MediaStream,
+): Promise<OpenCall> => {
+  const localStream = micStream;
 
   const pc = new RTCPeerConnection({ iceServers: [] });
   const audio = await setupAudioChannel(pc, localStream);

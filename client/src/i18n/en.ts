@@ -77,6 +77,10 @@ export const en: Messages = {
     reconnectWhy: "Why isn't this connecting?",
     reconnectHint:
       "Media may be blocked by NAT. Set WACALLS_PUBLIC_IP to the server's public IP, then run wacalls -doctor to verify.",
+    micBusy:
+      "Microphone is in use by another app or tab. Close WhatsApp Web in this browser and try again.",
+    micDenied: "Microphone permission denied in the browser.",
+    micNotFound: "No microphone available. Check the selected device.",
     measuringQuality: "Measuring quality…",
     connectedIn: "Connected in",
     connection: "Connection",

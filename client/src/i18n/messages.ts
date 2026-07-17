@@ -72,6 +72,9 @@ export type Messages = {
     reconnectingMedia: string;
     reconnectWhy: string;
     reconnectHint: string;
+    micBusy: string;
+    micDenied: string;
+    micNotFound: string;
     measuringQuality: string;
     connectedIn: string;
     connection: string;
