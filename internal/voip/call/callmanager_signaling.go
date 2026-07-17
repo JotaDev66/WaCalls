@@ -90,6 +90,13 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
 	m.mu.Lock()
 	call := m.currentCall
+	// First accept wins: a later accept from a sibling device (or a retransmission)
+	// must not swap acceptedByJid and rekey SRTP under an established media path.
+	if m.acceptedByJid != "" {
+		m.mu.Unlock()
+		m.log.Info("duplicate accept ignored", "accepted_by", m.acceptedByJid, "from", peerJid.String())
+		return
+	}
 	m.mu.Unlock()
 	if call == nil {
 		return
@@ -131,6 +138,13 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	m.initSrtpKeysLocked()
 	hasConn := m.relay.HasConnection()
 	relayData := call.RelayData
+	var siblings []types.JID
+	for _, dev := range m.calleeDevices {
+		if dev.String() != peerJid.String() {
+			siblings = append(siblings, dev)
+		}
+	}
+	basePeer := call.PeerJid
 	m.mu.Unlock()
 
 	m.log.Info("remote accepted call", "call_id", call.CallID, "peer", peerJid.String(),
@@ -140,6 +154,15 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 
 	callID := call.CallID
 	creator := wanode.MustJID(call.CallCreator)
+	if len(siblings) > 0 {
+		elsewhere := signaling.BuildTerminateElsewhereStanza(wanode.MustJID(basePeer), callID, creator, siblings)
+		if err := m.sock.SendNode(ctx, elsewhere); err != nil {
+			m.log.Warn("accepted_elsewhere fanout failed; sibling devices may keep ringing",
+				"call_id", callID, "err", err)
+		} else {
+			m.log.Info("accepted_elsewhere sent to non-answering devices", "call_id", callID, "devices", len(siblings))
+		}
+	}
 	m.sendTransportUpdate(ctx, peerJid, creator, callID)
 	_ = m.sock.SendNode(ctx, signaling.BuildMuteV2Stanza(peerJid, callID, creator, 0))
 	if acceptMsgID := wanode.AttrString(node.Attrs, "id"); acceptMsgID != "" {
@@ -359,6 +382,16 @@ func (m *CallManager) HandleCallTerminate(node *waBinary.Node) {
 	call := m.currentCall
 	if call == nil {
 		m.mu.Unlock()
+		return
+	}
+	// After an accept, only the answering device may end the call. A sibling that
+	// kept ringing eventually times out and sends its own reject/terminate, which
+	// must not tear down the live call.
+	sender := wanode.AttrString(node.Attrs, "from")
+	if m.acceptedByJid != "" && sender != "" && sender != m.acceptedByJid && !call.IsEnded() {
+		m.mu.Unlock()
+		m.log.Info("terminate from non-answering device ignored",
+			"call_id", call.CallID, "from", sender, "accepted_by", m.acceptedByJid)
 		return
 	}
 	info := signaling.ExtractNodeInfo(node)
