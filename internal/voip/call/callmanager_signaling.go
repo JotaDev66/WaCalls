@@ -375,3 +375,21 @@ func (m *CallManager) HandleCallTerminate(node *waBinary.Node) {
 	}
 	m.cleanupMedia()
 }
+
+func (m *CallManager) HandleCallMute(node *waBinary.Node) {
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil || info.Tag != "mute_v2" {
+		return
+	}
+	m.mu.Lock()
+	call := m.currentCall
+	live := call != nil && call.CallID == info.CallID && !call.IsEnded()
+	m.mu.Unlock()
+	if !live {
+		return
+	}
+	muted := wanode.AttrString(info.InnerNode.Attrs, "mute-state") == "1"
+	if m.OnPeerMute != nil {
+		m.OnPeerMute(info.CallID, muted)
+	}
+}

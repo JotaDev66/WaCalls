@@ -18,6 +18,7 @@ type State = {
   quality: Map<string, QualitySample>;
   marks: Map<string, SetupMark[]>;
   relays: Map<string, RelaySample>;
+  peerMuted: Map<string, boolean>;
 };
 
 export const useCalls = create<State>(() => ({
@@ -27,6 +28,7 @@ export const useCalls = create<State>(() => ({
   quality: new Map(),
   marks: new Map(),
   relays: new Map(),
+  peerMuted: new Map(),
 }));
 
 let wired = false;
@@ -42,7 +44,10 @@ export const ensureCallsWired = (): void => {
         const quality = new Map([...s.quality].filter(([id]) => ids.has(id)));
         const marks = new Map([...s.marks].filter(([id]) => ids.has(id)));
         const relays = new Map([...s.relays].filter(([id]) => ids.has(id)));
-        return { calls: ev.calls, quality, marks, relays };
+        const peerMuted = new Map(
+          [...s.peerMuted].filter(([id]) => ids.has(id)),
+        );
+        return { calls: ev.calls, quality, marks, relays, peerMuted };
       });
     } else if (ev.type === "call-status") {
       useCalls.setState((s) => ({
@@ -98,6 +103,14 @@ export const ensureCallsWired = (): void => {
         });
         return { relays: next };
       });
+    } else if (ev.type === "call-peer-mute") {
+      useCalls.setState((s) => {
+        // Same straggler discipline as call-quality: only track a live call's peer state.
+        if (!s.calls.some((c) => c.callId === ev.id)) return s;
+        const next = new Map(s.peerMuted);
+        next.set(ev.id, ev.muted);
+        return { peerMuted: next };
+      });
     } else if (ev.type === "call-ended") {
       useCalls.setState((s) => {
         const conn = s.ownConnections.get(ev.id);
@@ -110,12 +123,15 @@ export const ensureCallsWired = (): void => {
         nextMarks.delete(ev.id);
         const nextRelays = new Map(s.relays);
         nextRelays.delete(ev.id);
+        const nextPeerMuted = new Map(s.peerMuted);
+        nextPeerMuted.delete(ev.id);
         return {
           calls: s.calls.filter((c) => c.callId !== ev.id),
           ownConnections: next,
           quality: nextQuality,
           marks: nextMarks,
           relays: nextRelays,
+          peerMuted: nextPeerMuted,
           incoming: s.incoming?.callId === ev.id ? null : s.incoming,
         };
       });

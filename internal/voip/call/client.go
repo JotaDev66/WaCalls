@@ -167,6 +167,16 @@ func (c *Client) HandleTerminate(node *waBinary.Node) {
 	}
 }
 
+func (c *Client) HandleMute(node *waBinary.Node) {
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	if cm, ok := c.get(info.CallID); ok {
+		cm.HandleCallMute(node)
+	}
+}
+
 func (c *Client) AcceptCall(ctx context.Context, callID string) error {
 	if cm, ok := c.get(callID); ok {
 		return cm.AcceptCall(ctx, callID)
@@ -186,4 +196,11 @@ func (c *Client) EndCall(ctx context.Context, callID string, reason core.EndCall
 		return cm.EndCall(ctx, reason)
 	}
 	return nil
+}
+
+func (c *Client) SetMute(ctx context.Context, callID string, muted bool) error {
+	if cm, ok := c.get(callID); ok {
+		return cm.SetMute(ctx, muted)
+	}
+	return &CallError{"no call with id " + callID}
 }

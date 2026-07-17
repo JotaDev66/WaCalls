@@ -92,6 +92,9 @@ export const ptBR: Messages = {
     jitter: "Jitter",
     loss: "Perda",
     endCall: "Encerrar chamada",
+    mute: "Silenciar microfone",
+    unmute: "Reativar microfone",
+    peerMuted: "Mic do remoto silenciado",
   },
   dialer: {
     title: "Discador",

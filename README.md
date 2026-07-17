@@ -313,6 +313,7 @@ tagged with the originating `sessionId`.
 | `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP |
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |
+| `POST` | `/api/sessions/{sid}/calls/{id}/mute` | Set the mic mute state (`{ muted }`), signaled to the peer |
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | End an active call |
 | `GET` | `/api/sessions/{sid}/history` | Ended calls, keyset-paginated (`limit` + opaque `cursor`, envelope `calls` + `nextCursor`) |
 | `GET` | `/api/sessions/{sid}/history/export` | Full history as CSV (RFC 3339 timestamps) |

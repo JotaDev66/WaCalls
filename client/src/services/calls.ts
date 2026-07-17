@@ -17,5 +17,10 @@ export const rejectCall = (sid: string, callId: string) =>
     {},
   );
 
+export const setMute = (sid: string, callId: string, muted: boolean) =>
+  apiPost<{ status: string }>(`/api/sessions/${sid}/calls/${callId}/mute`, {
+    muted,
+  });
+
 export const endCall = (sid: string, callId: string) =>
   apiDelete(`/api/sessions/${sid}/calls/${callId}`);

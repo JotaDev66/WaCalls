@@ -18,9 +18,10 @@ import (
 )
 
 type queriedStanza struct {
-	tag    string
-	to     string
-	ctxErr error
+	tag        string
+	to         string
+	ctxErr     error
+	childAttrs waBinary.Attrs
 }
 
 type ctxQuerySock struct {
@@ -36,15 +37,17 @@ func newCtxQuerySock() *ctxQuerySock {
 
 func (s *ctxQuerySock) Query(ctx context.Context, node waBinary.Node) (*waBinary.Node, error) {
 	tag := ""
+	var childAttrs waBinary.Attrs
 	if children := wanode.NodeChildren(&node); len(children) > 0 {
 		tag = children[0].Tag
+		childAttrs = children[0].Attrs
 	}
 	to := ""
 	if j, ok := node.Attrs["to"].(types.JID); ok {
 		to = j.String()
 	}
 	s.mu.Lock()
-	s.queries = append(s.queries, queriedStanza{tag: tag, to: to, ctxErr: ctx.Err()})
+	s.queries = append(s.queries, queriedStanza{tag: tag, to: to, ctxErr: ctx.Err(), childAttrs: childAttrs})
 	s.mu.Unlock()
 	s.done <- struct{}{}
 	return nil, nil
