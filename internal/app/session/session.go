@@ -41,6 +41,12 @@ type Session struct {
 	// offlineReplaying is set while WhatsApp is replaying events buffered during downtime, so
 	// stale call offers from that window are dropped instead of surfacing as ghost ringing calls.
 	offlineReplaying atomic.Bool
+	// replayGen tags each replay window with a generation so a backstop timer armed by an
+	// earlier OfflineSyncPreview cannot close the window opened by a later one when reconnects
+	// land in quick succession.
+	replayGen atomic.Int64
+	// replayWindow overrides offlineReplayMaxWindow when non-zero; test-only knob.
+	replayWindow time.Duration
 
 	mu   sync.Mutex
 	auth events.AuthSnapshot
@@ -169,8 +175,7 @@ func (s *Session) handleEvent(rawEvt any) {
 	case *waevents.OfflineSyncPreview:
 		// The server is about to replay events missed while offline; drop call offers until it
 		// finishes. A backstop timer clears the window if OfflineSyncCompleted is never seen.
-		s.offlineReplaying.Store(true)
-		time.AfterFunc(offlineReplayMaxWindow, func() { s.offlineReplaying.Store(false) })
+		s.armReplayWindow()
 	case *waevents.OfflineSyncCompleted:
 		s.offlineReplaying.Store(false)
 	case *waevents.CallOffer:

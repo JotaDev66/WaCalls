@@ -27,3 +27,22 @@ func isStaleOffer(offerTS time.Time, offlineReplaying bool, now time.Time) bool 
 	}
 	return false
 }
+
+// armReplayWindow opens the offline-replay window and schedules its backstop closure. The
+// closure is tagged with the generation current at arm-time so a timer armed by an earlier
+// OfflineSyncPreview cannot close the window opened by a later one. With reconnects in quick
+// succession (the exact scenario where offline replay matters most), the first window's timer
+// would otherwise fire mid-way through the second window and reopen the ghost-ring hole.
+func (s *Session) armReplayWindow() {
+	gen := s.replayGen.Add(1)
+	s.offlineReplaying.Store(true)
+	window := s.replayWindow
+	if window <= 0 {
+		window = offlineReplayMaxWindow
+	}
+	time.AfterFunc(window, func() {
+		if s.replayGen.Load() == gen {
+			s.offlineReplaying.Store(false)
+		}
+	})
+}
