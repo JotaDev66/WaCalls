@@ -45,10 +45,10 @@ func waitForBool(t *testing.T, get func() bool, want bool, timeout time.Duration
 }
 
 // A stale backstop timer from an earlier OfflineSyncPreview must not close the replay window
-// opened by a later, still-active one — reconnections in quick succession (the exact scenario
+// opened by a later, still-active one: reconnections in quick succession (the exact scenario
 // where offline replay matters most) must not reopen the ghost-ring hole.
 func TestReplayWindowGenerationTokenSurvivesConsecutivePreviews(t *testing.T) {
-	// Generous margins to keep this deterministic under CI scheduling pressure — a flaky
+	// Generous margins to keep this deterministic under CI scheduling pressure; a flaky
 	// wall-clock test is worse than a slightly slower one.
 	s := &Session{replayWindow: 300 * time.Millisecond}
 
