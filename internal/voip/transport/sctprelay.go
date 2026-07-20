@@ -22,8 +22,6 @@ const (
 	peerConnectionBytes = 64 * 1024
 	dataChannelBytes    = 16 * 1024
 
-	maxOpenRelays = 2
-
 	maxDialRelays = 3
 
 	iceDisconnectedTimeout = 5 * time.Second
@@ -242,12 +240,6 @@ func (m *SctpRelayManager) connectToRelay(info RelayConfig) {
 
 	channel.OnOpen(func() {
 		m.mu.Lock()
-		if m.countOpenLocked() >= maxOpenRelays {
-			m.mu.Unlock()
-			m.log.Info("relay over cap; closing loser", "id", id, "cap", maxOpenRelays)
-			go m.closeConnection(id)
-			return
-		}
 		conn.setState(relayStateOpen)
 		m.mu.Unlock()
 		m.recomputeHealth()
@@ -514,16 +506,6 @@ func (m *SctpRelayManager) recomputeHealth() {
 	if changed && fn != nil {
 		fn(usable)
 	}
-}
-
-func (m *SctpRelayManager) countOpenLocked() int {
-	n := 0
-	for _, c := range m.connections {
-		if c.getState() == relayStateOpen {
-			n++
-		}
-	}
-	return n
 }
 
 func (m *SctpRelayManager) HasConnection() bool {
