@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Phone, Plus } from "lucide-react";
-import { toast } from "sonner";
 import {
   CommandDialog,
   CommandEmpty,
@@ -11,8 +10,8 @@ import {
 import { setActiveSession, useSessions } from "@/stores/sessions";
 import { useDevices } from "@/stores/devices";
 import { useStartCall } from "@/hooks/useStartCall";
-import { createSession } from "@/services/sessions";
-import { omniboxItems, type OmniItem } from "@/lib/omnibox";
+import { openCreateSession } from "@/stores/session-name-dialog";
+import { looksLikePhone, omniboxItems, type OmniItem } from "@/lib/omnibox";
 import { useT } from "@/hooks/useT";
 
 export const Omnibox = () => {
@@ -52,9 +51,9 @@ export const Omnibox = () => {
     } else if (item.kind === "session") {
       setActiveSession(item.id);
     } else if (item.kind === "new-session") {
-      createSession("WhatsApp")
-        .then(({ id }) => setActiveSession(id))
-        .catch((e) => toast.error((e as Error).message));
+      const prefill =
+        query.trim() && !looksLikePhone(query) ? query.trim() : "";
+      openCreateSession(prefill);
     }
     close();
   };

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, PhoneOff, WifiOff } from "lucide-react";
+import { Check, Mic, MicOff, PhoneOff, RotateCcw, WifiOff } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,9 @@ import { attachMeter } from "@/lib/audio-meter";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
+import { useSetMute } from "@/hooks/useSetMute";
+import { useResumeCall } from "@/hooks/useResumeCall";
+import { needsAudioResume } from "@/lib/resume";
 import { useT } from "@/hooks/useT";
 import { callStatusTone, callStatusPulse } from "@/lib/status";
 import { PeerAvatar } from "@/components/domain/contacts/PeerAvatar";
@@ -246,18 +249,60 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
   const quality = useCalls((s) => s.quality.get(call.callId));
   const marks = useCalls((s) => s.marks.get(call.callId));
+  const peerMuted = useCalls((s) => s.peerMuted.get(call.callId) ?? false);
   const outDeviceId = useDevices((s) => s.outId);
+  const micId = useDevices((s) => s.micId);
   const endCall = useEndCall();
+  const setMute = useSetMute();
+  const resume = useResumeCall(call.sessionId, micId);
   const t = useT();
+  // A CallCard only renders for calls this browser owns (CallsPage filters by isMine),
+  // so a detached (no local connection) established call is one whose bridge a refresh
+  // dropped here. Another browser's call never reaches this card.
+  const detached = needsAudioResume(call.status, !!conn);
+  const autoResumed = useRef(false);
   const [, force] = useState(0);
   const [micDb, setMicDb] = useState(-60);
   const [peerDb, setPeerDb] = useState(-60);
+  // Mute lives on the mic track (enabled=false keeps zeroed frames flowing so the
+  // peer's media watchdog stays fed); re-derive it on mount so a card remount
+  // during a muted call does not desync the button.
+  const [muted, setMutedState] = useState(
+    () => conn?.micStream.getAudioTracks().some((tr) => !tr.enabled) ?? false,
+  );
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const toggleMute = () => {
+    if (!conn) return;
+    const next = !muted;
+    conn.micStream.getAudioTracks().forEach((tr) => (tr.enabled = !next));
+    setMutedState(next);
+    setMute.mutate(
+      { sid: call.sessionId, callId: call.callId, muted: next },
+      {
+        onError: () => {
+          conn.micStream.getAudioTracks().forEach((tr) => (tr.enabled = next));
+          setMutedState(!next);
+        },
+      },
+    );
+  };
 
   useEffect(() => {
     const timer = setInterval(() => force((n) => n + 1), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Auto-resume the audio once when the call comes back detached (e.g. after a
+  // refresh). A single attempt avoids re-prompting for the mic in a loop; a failure
+  // surfaces the manual "Reconnect call" button below.
+  useEffect(() => {
+    if (detached && !autoResumed.current && !resume.isPending) {
+      autoResumed.current = true;
+      resume.mutate({ callId: call.callId });
+    }
+    if (!detached) autoResumed.current = false;
+  }, [detached, resume, call.callId]);
 
   useEffect(() => {
     if (!conn) return;
@@ -309,28 +354,82 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
               </StatusBadge>
             </div>
           </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={() =>
-                  endCall.mutate({ sid: call.sessionId, callId: call.callId })
-                }
-                aria-label={t.calls.endCall}
-              >
-                <PhoneOff className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{t.calls.endCall}</TooltipContent>
-          </Tooltip>
+          <div className="flex items-center gap-2">
+            {call.status === "connected" && conn && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={muted ? "secondary" : "outline"}
+                    size="icon"
+                    onClick={toggleMute}
+                    aria-label={muted ? t.calls.unmute : t.calls.mute}
+                    aria-pressed={muted}
+                  >
+                    {muted ? (
+                      <MicOff className="h-4 w-4" />
+                    ) : (
+                      <Mic className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {muted ? t.calls.unmute : t.calls.mute}
+                </TooltipContent>
+              </Tooltip>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  onClick={() =>
+                    endCall.mutate({ sid: call.sessionId, callId: call.callId })
+                  }
+                  aria-label={t.calls.endCall}
+                >
+                  <PhoneOff className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{t.calls.endCall}</TooltipContent>
+            </Tooltip>
+          </div>
         </div>
         {call.status === "reconnecting" && <ReconnectingNotice />}
         {marks && marks.length > 0 && (
           <ConnectionTimeline marks={marks} status={call.status} />
         )}
-        <Meter label={t.calls.mic} db={micDb} />
-        <Meter label={t.calls.peer} db={peerDb} />
+        {detached ? (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <RotateCcw
+                className={`h-3.5 w-3.5 ${resume.isPending ? "animate-spin" : ""}`}
+              />
+              {resume.isPending
+                ? t.calls.reconnectingAudio
+                : t.calls.reconnectDropped}
+            </span>
+            {!resume.isPending && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => resume.mutate({ callId: call.callId })}
+              >
+                {t.calls.reconnectCall}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <>
+            <Meter label={t.calls.mic} db={micDb} />
+            <Meter label={t.calls.peer} db={peerDb} />
+          </>
+        )}
+        {peerMuted && (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <MicOff className="h-3.5 w-3.5" />
+            {t.calls.peerMuted}
+          </div>
+        )}
         {call.status === "connected" && <QualityPanel q={quality} />}
         <audio ref={audioRef} autoPlay />
       </CardContent>

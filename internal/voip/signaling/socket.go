@@ -1,4 +1,4 @@
-package core
+package signaling
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"go.mau.fi/whatsmeow/types"
 )
 
-type VoipSocket interface {
+type Socket interface {
 	OwnPN() types.JID
 
 	OwnLID() types.JID

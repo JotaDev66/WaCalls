@@ -21,7 +21,7 @@ import (
 const signalingSendTimeout = 10 * time.Second
 
 type CallManager struct {
-	sock     core.VoipSocket
+	sock     signaling.Socket
 	log      *slog.Logger
 	observer core.CallObserver
 
@@ -41,6 +41,7 @@ type CallManager struct {
 	outgoingPreacceptSent bool
 	observerEnded         bool
 	acceptedByJid         string
+	calleeDevices         []types.JID
 	debeEnabled           bool
 
 	timeouts      Timeouts
@@ -76,9 +77,11 @@ type CallManager struct {
 	OnPeerAudio   func([]float32)
 	OnQuality     func(callID string, q core.CallQuality)
 	OnMark        func(callID string, mark string, elapsedMs int64)
+	OnRelay       func(callID, relayName string, rttMs int, hasRtt bool)
+	OnPeerMute    func(callID string, muted bool)
 }
 
-func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Extension) *CallManager {
+func NewCallManager(sock signaling.Socket, log *slog.Logger, exts ...engine.Extension) *CallManager {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -97,7 +100,7 @@ func NewCallManager(sock core.VoipSocket, log *slog.Logger, exts ...engine.Exten
 		declaredSelf: map[uint32]bool{},
 	}
 	relay := transport.NewSctpRelayManager(log)
-	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected() })
+	relay.SetOnConnected(func(ip string, port int) { m.onRelayConnected(ip, port) })
 	relay.SetOnReceive(func(data []byte) { m.onRelayData(data) })
 	relay.SetOnUsableChange(func(usable int) { m.onRelayUsableChange(usable) })
 	m.relay = relay
@@ -143,7 +146,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.mu.Unlock()
 
-	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
+	offer, calleeDevices, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved)
 	if err != nil {
 		return err
 	}
@@ -153,6 +156,7 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	}
 
 	m.mu.Lock()
+	m.calleeDevices = calleeDevices
 	_ = m.currentCall.ApplyTransition(Transition{Type: TransitionOfferSent})
 	m.emitState()
 	m.mu.Unlock()
@@ -278,6 +282,34 @@ func (m *CallManager) EndCall(ctx context.Context, reason core.EndCallReason) er
 		m.OnEnded(ended)
 	}
 	m.cleanupMedia()
+	return nil
+}
+
+func (m *CallManager) SetMute(ctx context.Context, muted bool) error {
+	m.mu.Lock()
+	call := m.currentCall
+	if call == nil || call.IsEnded() {
+		m.mu.Unlock()
+		return &CallError{"no active call"}
+	}
+	if err := call.ApplyTransition(Transition{Type: TransitionAudioMuteChanged, Muted: muted}); err != nil {
+		m.mu.Unlock()
+		return err
+	}
+	// In-call signaling targets the device that answered, like the terminate path.
+	dest := call.PeerJid
+	if m.acceptedByJid != "" {
+		dest = m.acceptedByJid
+	}
+	state := 0
+	if muted {
+		state = 1
+	}
+	node := signaling.BuildMuteV2Stanza(wanode.MustJID(dest), call.CallID, wanode.MustJID(call.CallCreator), state)
+	m.emitState()
+	m.mu.Unlock()
+
+	m.sendSignaling(ctx, node)
 	return nil
 }
 

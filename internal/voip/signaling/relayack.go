@@ -142,6 +142,7 @@ func parseRelayBlock(child *waBinary.Node, res *ParsedRelayAck, addParticipant f
 			v := wanode.AttrInt(rc.Attrs, "c2r_rtt", 0)
 			ep.C2RRtt = &v
 		}
+		ep.IsFNA = wanode.AttrString(rc.Attrs, "is_fna") == "1"
 
 		if len(addrBytes) == 6 {
 			ep.IP = ipv4String(addrBytes[:4])

@@ -18,6 +18,7 @@ var apiRoutes = []struct {
 	{"GET", "/sessions", (*Server).handleSessionList},
 	{"POST", "/sessions", (*Server).handleSessionCreate},
 	{"DELETE", "/sessions/{sid}", (*Server).handleSessionDelete},
+	{"PATCH", "/sessions/{sid}", (*Server).handleSessionRename},
 	{"POST", "/sessions/{sid}/logout", (*Server).handleSessionLogout},
 	{"POST", "/sessions/{sid}/pair", (*Server).handleSessionPair},
 	{"POST", "/sessions/{sid}/calls", (*Server).handleStartCall},
@@ -26,6 +27,7 @@ var apiRoutes = []struct {
 	{"POST", "/sessions/{sid}/calls/{id}/webrtc", (*Server).handleWebRTC},
 	{"POST", "/sessions/{sid}/calls/{id}/accept", (*Server).handleAccept},
 	{"POST", "/sessions/{sid}/calls/{id}/reject", (*Server).handleReject},
+	{"POST", "/sessions/{sid}/calls/{id}/mute", (*Server).handleMute},
 	{"DELETE", "/sessions/{sid}/calls/{id}", (*Server).handleEndCall},
 	{"GET", "/sessions/{sid}/history", (*Server).handleHistory},
 	{"GET", "/sessions/{sid}/history/export", (*Server).handleHistoryExport},
@@ -116,7 +118,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 		origin := r.Header.Get("Origin")
 		if _, ok := s.allowedOrigins[origin]; ok && origin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id, Authorization")
 			w.Header().Set("Vary", "Origin")
 		}

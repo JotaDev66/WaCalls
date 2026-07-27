@@ -34,7 +34,7 @@ func TestParseRelayFromAck(t *testing.T) {
 						Attrs: waBinary.Attrs{
 							"token_id": "0", "auth_token_id": "1",
 							"relay_name": "relay-A", "protocol": "0",
-							"relay_id": "2", "c2r_rtt": "7",
+							"relay_id": "2", "c2r_rtt": "7", "is_fna": "1",
 						},
 						Content: addr,
 					},
@@ -84,6 +84,9 @@ func TestParseRelayFromAck(t *testing.T) {
 	}
 	if ep.C2RRtt == nil || *ep.C2RRtt != rtt {
 		t.Errorf("c2r_rtt = %v", ep.C2RRtt)
+	}
+	if !ep.IsFNA {
+		t.Errorf("is_fna = %v, want true", ep.IsFNA)
 	}
 	if len(ep.RawToken) != 2 || ep.RawToken[0] != 0xAA {
 		t.Errorf("raw token = %v", ep.RawToken)

@@ -169,18 +169,23 @@ func IsStunPacket(data []byte) bool {
 	return data[0]&0xc0 == 0
 }
 
+// RTP and RTCP share the version bits; the discriminator is the second byte:
+// RTCP packet types live in 192-223, while an RTP payload type never reaches
+// that range even with the marker bit set (WhatsApp audio caps at 0x78|0x80).
+func inRtcpTypeRange(b byte) bool { return b >= 192 && b <= 223 }
+
 func IsRtpPacket(data []byte) bool {
 	if len(data) < 2 {
 		return false
 	}
-	return data[0]&0xc0 == 0x80
+	return data[0]&0xc0 == 0x80 && !inRtcpTypeRange(data[1])
 }
 
 func IsRtcpPacket(data []byte) bool {
 	if len(data) < 2 {
 		return false
 	}
-	return data[0] == 0x80 || data[0] == 0x81
+	return data[0]&0xc0 != 0 && inRtcpTypeRange(data[1])
 }
 
 type StunAttribute struct {

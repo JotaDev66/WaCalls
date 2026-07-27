@@ -135,7 +135,8 @@ see [troubleshooting.md](./troubleshooting.md#webrtc-ice-fails-no-audio).
 
 ## Verify before going live
 
-Run the built-in preflight (binds the UDP port, checks the public IP, opens the
+Run the built-in preflight (binds the UDP port, checks the public IP, discovers the
+external IP via STUN and cross-checks it against `WACALLS_PUBLIC_IP`, opens the
 database):
 
 ```bash
@@ -153,6 +154,11 @@ docker compose exec wacalls wacalls -doctor
 
 - Image tags: `ghcr.io/jotadev66/wacalls:latest` is production, `:develop` is the
   beta channel. Pick one with `WACALLS_IMAGE` in `.env`.
+- Codec variants: the default tags ship the native MLow encoder (`nativemlow`
+  build tag, ~5x faster encode for high call density); the `-pure` suffixed tags
+  (`:latest-pure`, `:develop-pure`) are the `CGO_ENABLED=0` pure-Go build. Both
+  decode with the same pure-Go decoder. Self-builders choose with
+  `docker build --build-arg VARIANT=native .` (default `pure` = pure Go).
 - Removing the data volume (`docker compose down -v`) unpairs every account.
 - Switching an existing SQLite deploy to Postgres starts empty; accounts re-pair.
 - Use a dedicated browser or profile for the WaCalls operator: a WhatsApp Web tab

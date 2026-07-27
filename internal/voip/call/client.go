@@ -16,7 +16,7 @@ import (
 )
 
 type Client struct {
-	sock           core.VoipSocket
+	sock           signaling.Socket
 	log            *slog.Logger
 	makeExtensions func() []engine.Extension
 	newObserver    func(callID string) core.CallObserver
@@ -26,7 +26,7 @@ type Client struct {
 	calls          map[string]*CallManager
 }
 
-func NewClient(sock core.VoipSocket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager), newObserver func(callID string) core.CallObserver) *Client {
+func NewClient(sock signaling.Socket, log *slog.Logger, makeExtensions func() []engine.Extension, maxCalls int, onCall func(callID string, cm *CallManager), newObserver func(callID string) core.CallObserver) *Client {
 	if newObserver == nil {
 		newObserver = func(string) core.CallObserver { return core.NopObserver{} }
 	}
@@ -81,6 +81,7 @@ func (c *Client) StartCall(ctx context.Context, peer types.JID) (string, error) 
 	callID := signaling.GenerateCallID()
 	cm := c.createCall(callID)
 	if err := cm.StartCall(ctx, callID, peer); err != nil {
+		cm.cleanupMedia()
 		c.Remove(callID)
 		return "", err
 	}
@@ -166,6 +167,16 @@ func (c *Client) HandleTerminate(node *waBinary.Node) {
 	}
 }
 
+func (c *Client) HandleMute(node *waBinary.Node) {
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil {
+		return
+	}
+	if cm, ok := c.get(info.CallID); ok {
+		cm.HandleCallMute(node)
+	}
+}
+
 func (c *Client) AcceptCall(ctx context.Context, callID string) error {
 	if cm, ok := c.get(callID); ok {
 		return cm.AcceptCall(ctx, callID)
@@ -185,4 +196,11 @@ func (c *Client) EndCall(ctx context.Context, callID string, reason core.EndCall
 		return cm.EndCall(ctx, reason)
 	}
 	return nil
+}
+
+func (c *Client) SetMute(ctx context.Context, callID string, muted bool) error {
+	if cm, ok := c.get(callID); ok {
+		return cm.SetMute(ctx, muted)
+	}
+	return &CallError{"no call with id " + callID}
 }

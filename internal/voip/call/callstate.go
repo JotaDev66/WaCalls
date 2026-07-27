@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/signaling"
 )
 
 type CallStateData struct {
@@ -25,6 +26,7 @@ type CallInfo struct {
 	CallCreator     string
 	Direction       core.CallDirection
 	MediaType       core.CallMediaType
+	Codec           string
 	StateData       CallStateData
 	CreatedAt       time.Time
 	GroupJid        string
@@ -42,6 +44,7 @@ func NewOutgoingCall(callID, peerJid, ourJid string, mediaType core.CallMediaTyp
 		CallCreator: ourJid,
 		Direction:   core.CallDirectionOutgoing,
 		MediaType:   mediaType,
+		Codec:       signaling.CodecMLow,
 		CreatedAt:   time.Now(),
 		StateData: CallStateData{
 			State:      core.CallStateInitiating,
@@ -58,6 +61,7 @@ func NewIncomingCall(callID, peerJid, callCreator, callerPn string, mediaType co
 		CallCreator: callCreator,
 		Direction:   core.CallDirectionIncoming,
 		MediaType:   mediaType,
+		Codec:       signaling.CodecMLow,
 		CreatedAt:   time.Now(),
 		CallerPn:    callerPn,
 		StateData: CallStateData{

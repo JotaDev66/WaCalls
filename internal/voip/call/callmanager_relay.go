@@ -35,7 +35,7 @@ type RelayTransport interface {
 
 var _ RelayTransport = (*transport.SctpRelayManager)(nil)
 
-func (m *CallManager) onRelayConnected() {
+func (m *CallManager) onRelayConnected(ip string, port int) {
 	m.mu.Lock()
 	call := m.currentCall
 	if call != nil && call.StateData.State == core.CallStateConnecting {
@@ -45,7 +45,26 @@ func (m *CallManager) onRelayConnected() {
 			m.log.Info("relay connected → active", "call_id", call.CallID)
 		}
 	}
+	callID, relayName, rttMs, hasRtt := "", "", 0, false
+	if call != nil && call.RelayData != nil {
+		callID = call.CallID
+		relayName = ip
+		for _, ep := range call.RelayData.Endpoints {
+			if ep.IP == ip && (port == 0 || ep.Port == port) {
+				if ep.RelayName != "" {
+					relayName = ep.RelayName
+				}
+				if ep.C2RRtt != nil {
+					rttMs, hasRtt = *ep.C2RRtt, true
+				}
+				break
+			}
+		}
+	}
 	m.mu.Unlock()
+	if m.OnRelay != nil && callID != "" {
+		go m.OnRelay(callID, relayName, rttMs, hasRtt)
+	}
 }
 
 func (m *CallManager) onRelayUsableChange(usable int) {
@@ -154,6 +173,28 @@ func (m *CallManager) retryReconnect() {
 	}()
 }
 
+// prioritizeFNA returns the endpoints with the is_fna=1 relays moved to the front,
+// preserving the RTT order among the rest. An inbound call's peer uplink RTP only
+// arrives on the relay the offer marked is_fna=1; with maxDialRelays capping the
+// dialed set, that endpoint must never be sorted out of it.
+func prioritizeFNA(endpoints []core.RelayEndpoint) []core.RelayEndpoint {
+	out := make([]core.RelayEndpoint, 0, len(endpoints))
+	for _, ep := range endpoints {
+		if ep.IsFNA {
+			out = append(out, ep)
+		}
+	}
+	if len(out) == 0 {
+		return endpoints
+	}
+	for _, ep := range endpoints {
+		if !ep.IsFNA {
+			out = append(out, ep)
+		}
+	}
+	return out
+}
+
 func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {
 	seen := map[string]bool{}
 	var relays []transport.RelayConfig
@@ -183,6 +224,12 @@ func buildRelayConfigs(endpoints []core.RelayEndpoint) []transport.RelayConfig {
 }
 
 func (m *CallManager) connectRelays(endpoints []core.RelayEndpoint) {
+	m.mu.Lock()
+	incoming := m.currentCall != nil && m.currentCall.Direction == core.CallDirectionIncoming
+	m.mu.Unlock()
+	if incoming {
+		endpoints = prioritizeFNA(endpoints)
+	}
 	relays := buildRelayConfigs(endpoints)
 	if len(relays) == 0 {
 		m.log.Error("no usable relay configs")
@@ -216,9 +263,10 @@ func (m *CallManager) cleanupMedia() {
 			endReason = string(c.StateData.EndReason)
 		}
 	}
-	callID := ""
+	callID, codec := "", ""
 	if c := m.currentCall; c != nil {
 		callID = c.CallID
+		codec = c.Codec
 	}
 	if m.srtp != nil {
 		m.srtp.Close()
@@ -242,7 +290,7 @@ func (m *CallManager) cleanupMedia() {
 	var qArgs []any
 	if m.recvStats != nil {
 		q := m.recvStats.QualitySnapshot(uint64(time.Now().UnixMilli()))
-		qArgs = []any{"call_id", callID, "jitter_ms", q.JitterMs, "loss", q.LossFraction, "rtt_samples", m.recvStats.RttSamples()}
+		qArgs = []any{"call_id", callID, "codec", codec, "jitter_ms", q.JitterMs, "loss", q.LossFraction, "rtt_samples", m.recvStats.RttSamples()}
 		if q.HasRtt {
 			qArgs = append(qArgs, "rtt_ms", q.RttMs)
 		}

@@ -58,7 +58,7 @@ concurrent 1:1 calls** at once - one per browser operator - routed independently
 │  Broker           SSE hub (sessions, auth, call lifecycle fan-out)          │
 │  Bridge           pion WebRTC bridge (16 kHz PCM data channel ⇄ call core)  │
 │                                                                            │
-│  internal/wa      VoipSocket adapter over whatsmeow                        │
+│  internal/wa      signaling.Socket adapter over whatsmeow                  │
 │  internal/voip    call · signaling · media · transport · core · wanode     │
 └───────────────┬──────────────────────────────────────┬────────────────────┘
                 │ <call> signaling (Signal/USync)       │ SRTP media
@@ -74,8 +74,8 @@ concurrent 1:1 calls** at once - one per browser operator - routed independently
 | Path | Responsibility |
 |---|---|
 | `cmd/server` | HTTP/SSE broker, session manager + store, WebRTC bridge, process lifecycle |
-| `internal/wa` | `VoipSocket` - sends/receives `<call>` stanzas via whatsmeow |
-| `internal/voip/core` | Domain types, constants, the `VoipSocket` interface |
+| `internal/wa` | `signaling.Socket` impl - sends/receives `<call>` stanzas via whatsmeow |
+| `internal/voip/core` | Domain types and constants (whatsmeow-free, lint-enforced) |
 | `internal/voip/wanode` | Shared WhatsApp-node and JID helpers |
 | `internal/voip/codec` | Audio codecs: vendored pure-Go MLow (`mlow/`) and the standard-Opus recv fallback (`opus/`) |
 | `internal/voip/media` | RTP, SRTP, SSRC, PCM helpers, key derivation |
@@ -149,7 +149,23 @@ go run ./cmd/server -addr :8080          # add -debug for verbose logs
 ```
 
 Live audio works out of the box - the MLow codec is pure Go, so a plain build
-includes it. No build tags, no `CGO_ENABLED`, no DLLs.
+includes it. No build tags, no `CGO_ENABLED`, no DLLs by default.
+
+#### Native codec (optional)
+
+For high call density the encoder can run on
+[opus_mlow](https://github.com/edgardmessias/opus_mlow) (a libopus fork with the
+SMPL/MLow codec, ~5x faster encode than the pure-Go port). It is enabled by the
+`nativemlow` build tag plus CGO and is what the default Docker images ship with;
+source builds stay pure Go unless you opt in:
+
+```bash
+CGO_ENABLED=1 CGO_CFLAGS=-I<opus_mlow>/include CGO_LDFLAGS=-L<opus_mlow>/build \
+  go build -tags nativemlow ./cmd/server
+```
+
+The decode path always stays on the byte-exact pure-Go decoder; the native
+frames are continuously validated against it in CI.
 
 Open `http://localhost:8080`, click **New session**, and scan the QR shown in the browser
 (it is also printed in the terminal) with **WhatsApp → Linked devices**. Add more accounts
@@ -198,8 +214,18 @@ SQLite (see [PostgreSQL backend](#postgresql-backend-optional)). Leaving it unse
 ## Docker
 
 The server and the React client ship as a single self-contained image - a static
-(`CGO_ENABLED=0`) Go binary plus the built `client/dist` on Alpine, ~30 MB. Images
-are published to **[ghcr.io/jotadev66/wacalls](https://github.com/JotaDev66?tab=packages&repo_name=WaCalls)**.
+Go binary plus the built `client/dist` on Alpine, ~30 MB. Images are published to
+**[ghcr.io/jotadev66/wacalls](https://github.com/JotaDev66?tab=packages&repo_name=WaCalls)**
+in two variants:
+
+| Tags | Variant |
+|---|---|
+| `:latest`, `:develop`, `:vX.Y.Z` | native MLow encoder (`nativemlow` tag, static CGO build) |
+| `:latest-pure`, `:develop-pure`, `:vX.Y.Z-pure` | pure-Go build (`CGO_ENABLED=0`, today's default source build) |
+
+Self-builders pick the variant with the `VARIANT` build arg
+(`docker build --build-arg VARIANT=native .`; default `pure` = pure Go, which
+never clones or compiles the native toolchain).
 
 ### Run with Docker Compose
 
@@ -239,6 +265,7 @@ candidate the browser can actually reach. Configure it in `.env`:
 | `HTTP_PORT` | `8080` | Host port for the HTTP API + UI |
 | `WEBRTC_UDP_PORT` | `7881` | Fixed UDP port all browser media is funneled through (single mux) |
 | `WACALLS_PUBLIC_IP` | _(empty)_ | IP/host the browser uses to reach the server; published as the host candidate (1:1 NAT) |
+| `WACALLS_STUN_SERVER` | _(Google, Cloudflare)_ | STUN servers `-doctor` queries to discover/verify the external IP |
 
 On bridge networking set **both** `WACALLS_PUBLIC_IP` and `WEBRTC_UDP_PORT`. The
 UDP port is published 1:1 (`7881:7881/udp`) so the advertised candidate matches the
@@ -278,6 +305,7 @@ tagged with the originating `sessionId`.
 | `GET` | `/api/sessions` | List accounts (id, name, jid, status, paired) |
 | `POST` | `/api/sessions` | Create an account and begin QR pairing |
 | `DELETE` | `/api/sessions/{sid}` | Log out and remove an account |
+| `PATCH` | `/api/sessions/{sid}` | Rename an account (`{ name }`) |
 | `POST` | `/api/sessions/{sid}/logout` | Disconnect an account (keep it for re-pairing) |
 | `POST` | `/api/sessions/{sid}/pair` | Re-pair an account (emit a fresh QR) |
 | `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone }`) |
@@ -286,6 +314,7 @@ tagged with the originating `sessionId`.
 | `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP |
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |
+| `POST` | `/api/sessions/{sid}/calls/{id}/mute` | Set the mic mute state (`{ muted }`), signaled to the peer |
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | End an active call |
 | `GET` | `/api/sessions/{sid}/history` | Ended calls, keyset-paginated (`limit` + opaque `cursor`, envelope `calls` + `nextCursor`) |
 | `GET` | `/api/sessions/{sid}/history/export` | Full history as CSV (RFC 3339 timestamps) |
@@ -324,6 +353,16 @@ const ok = crypto.timingSafeEqual(
 ```
 
 Reject requests whose timestamp is older than a few minutes to prevent replays.
+
+### Call diagnostics recorder
+
+Set `WACALLS_DIAG_DIR` to a writable directory to mirror each call's event timeline
+to `call-<id>.jsonl` (one JSON line per event: status, quality, setup marks, relay,
+mute, end). This is an opt-in support tool: off by default, non-blocking (a full
+buffer drops events, never stalls a call), and it records the same structured
+metadata the SSE stream carries, which includes peer numbers but never keys,
+secrets, or media. The directory grows unbounded, so enable it while reproducing an
+issue and prune it yourself afterward.
 
 ---
 

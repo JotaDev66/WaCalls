@@ -5,12 +5,14 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"wacalls/internal/app/events"
 	"wacalls/internal/telemetry"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/codec/mlow"
+	"wacalls/internal/voip/codec/nativemlow"
 	"wacalls/internal/voip/codec/opus"
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/engine"
@@ -34,10 +36,25 @@ type Session struct {
 
 	bridgeMu sync.Mutex
 	bridges  map[string]*Bridge
+	grace    *graceKeeper
+
+	// offlineReplaying is set while WhatsApp is replaying events buffered during downtime, so
+	// stale call offers from that window are dropped instead of surfacing as ghost ringing calls.
+	offlineReplaying atomic.Bool
+	// replayGen tags each replay window with a generation so a backstop timer armed by an
+	// earlier OfflineSyncPreview cannot close the window opened by a later one when reconnects
+	// land in quick succession.
+	replayGen atomic.Int64
+	// replayWindow overrides offlineReplayMaxWindow when non-zero; test-only knob.
+	replayWindow time.Duration
 
 	mu   sync.Mutex
 	auth events.AuthSnapshot
 }
+
+// browserGraceWindow is how long a call is held after its browser leg drops (e.g. a
+// page refresh) before it is terminated, giving a reloaded page time to re-attach.
+const browserGraceWindow = 30 * time.Second
 
 func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Session {
 	s := &Session{
@@ -49,6 +66,10 @@ func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Sessio
 		auth:    events.AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
 	}
+	s.grace = newGraceKeeper(browserGraceWindow, func(callID string) {
+		s.log.Warn("call ended: browser did not return within the grace window", "call_id", callID)
+		s.terminateCall(callID, core.EndCallReasonUserEnded)
+	})
 	s.calls = call.NewClient(wa.NewSocket(client), s.log, s.makeExtensions, mgr.maxCalls, s.wireCall, mgr.newObserver)
 	client.AddEventHandler(s.handleEvent)
 	return s
@@ -57,7 +78,12 @@ func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Sessio
 func (s *Session) makeExtensions() []engine.Extension {
 	var exts []engine.Extension
 	if codec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions); err == nil {
-		exts = append(exts, audio.New(opus.WithFallback(codec)))
+		wrapped, mode := nativemlow.WrapEncoder(codec)
+		if nativemlow.Available() && mode != "native" {
+			s.log.Warn("native mlow encoder unavailable; call uses the pure-Go encoder")
+		}
+		s.log.Debug("audio codec ready", "encoder", mode)
+		exts = append(exts, audio.New(opus.WithFallback(wrapped)))
 	} else {
 		s.log.Warn("MLow codec unavailable; call runs without audio", "err", err)
 	}
@@ -127,6 +153,12 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 	cm.OnMark = func(callID string, mark string, elapsedMs int64) {
 		s.mgr.broker.EmitCallMark(s.id, callID, mark, elapsedMs)
 	}
+	cm.OnRelay = func(callID, relayName string, rttMs int, hasRtt bool) {
+		s.mgr.broker.EmitCallRelay(s.id, callID, relayName, rttMs, hasRtt)
+	}
+	cm.OnPeerMute = func(callID string, muted bool) {
+		s.mgr.broker.EmitCallPeerMute(s.id, callID, muted)
+	}
 }
 
 func (s *Session) handleEvent(rawEvt any) {
@@ -136,10 +168,22 @@ func (s *Session) handleEvent(rawEvt any) {
 		if id := s.client.Store.ID; id != nil {
 			_ = s.mgr.store.SetJID(s.mgr.appCtx, s.id, id.String())
 		}
+		go s.fetchOwnPhoto()
 		s.setAuth(events.AuthSnapshot{State: "open", Paired: true})
 	case *waevents.LoggedOut:
 		s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
+	case *waevents.OfflineSyncPreview:
+		// The server is about to replay events missed while offline; drop call offers until it
+		// finishes. A backstop timer clears the window if OfflineSyncCompleted is never seen.
+		s.armReplayWindow()
+	case *waevents.OfflineSyncCompleted:
+		s.offlineReplaying.Store(false)
 	case *waevents.CallOffer:
+		if isStaleOffer(evt.Timestamp, s.offlineReplaying.Load(), time.Now()) {
+			s.log.Info("dropping stale call offer replayed from offline buffer",
+				"call_id", evt.CallID, "offer_ts", evt.Timestamp)
+			return
+		}
 		s.calls.HandleOffer(ctx, wrapCall(evt.From, evt.Data), evt.From)
 	case *waevents.CallAccept:
 		s.calls.HandleAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
@@ -151,6 +195,10 @@ func (s *Session) handleEvent(rawEvt any) {
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
 	case *waevents.CallReject:
 		s.calls.HandleTerminate(wrapCall(evt.From, evt.Data))
+	case *waevents.UnknownCallEvent:
+		if _, ok := evt.Node.GetOptionalChildByTag("mute_v2"); ok {
+			s.calls.HandleMute(evt.Node)
+		}
 	}
 }
 
@@ -198,15 +246,23 @@ func (s *Session) setAuth(a events.AuthSnapshot) {
 	s.mgr.broker.EmitSessionList(s.mgr.Infos())
 }
 
+func (s *Session) rename(name string) {
+	s.mu.Lock()
+	s.name = name
+	s.mu.Unlock()
+}
+
 func (s *Session) info() events.SessionInfo {
 	s.mu.Lock()
 	a := s.auth
+	name := s.name
 	s.mu.Unlock()
-	jid := ""
+	jid, photo := "", ""
 	if id := s.client.Store.ID; id != nil {
 		jid = id.String()
+		photo = cachedPhotoURL(context.Background(), s.mgr.photos, s.id, id.ToNonAD().String())
 	}
-	return events.SessionInfo{ID: s.id, Name: s.name, JID: jid, State: a.State, Paired: a.Paired || jid != ""}
+	return events.SessionInfo{ID: s.id, Name: name, JID: jid, State: a.State, Paired: a.Paired || jid != "", PhotoURL: photo}
 }
 
 func (s *Session) getBridge(callID string) *Bridge {
@@ -224,16 +280,35 @@ func (s *Session) setBridge(callID string, b *Bridge) {
 		return
 	}
 	s.bridges[callID] = b
+	// A fresh browser leg re-attached: cancel any pending grace countdown so the call
+	// is no longer waiting for the old (refreshed-away) leg to return.
+	s.grace.cancel(callID)
 	s.bridgeMu.Unlock()
 	if old != nil {
 		old.Close()
 	}
 }
 
+// onBridgeDetached runs when a browser leg's peer connection fails or closes. If it
+// is still the current leg (not superseded by a re-attach and not already removed),
+// it starts the grace countdown instead of ending the call immediately, so a page
+// refresh can re-attach. Closing the superseded leg during setBridge/removeCall lands
+// here too, but the identity check makes those a no-op.
+func (s *Session) onBridgeDetached(callID string, bridge *Bridge) {
+	s.bridgeMu.Lock()
+	defer s.bridgeMu.Unlock()
+	if s.bridges[callID] != bridge {
+		return
+	}
+	s.log.Info("browser leg detached; holding the call for the grace window", "call_id", callID)
+	s.grace.arm(callID)
+}
+
 func (s *Session) removeCall(callID string) {
 	s.bridgeMu.Lock()
 	b := s.bridges[callID]
 	delete(s.bridges, callID)
+	s.grace.cancel(callID)
 	s.bridgeMu.Unlock()
 	if b != nil {
 		b.Close()
@@ -249,6 +324,7 @@ func (s *Session) teardownAllCalls() {
 	for _, cm := range s.calls.Drain() {
 		_ = cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
 	}
+	s.grace.stopAll()
 	s.bridgeMu.Lock()
 	bridges := s.bridges
 	s.bridges = map[string]*Bridge{}

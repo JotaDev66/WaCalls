@@ -78,3 +78,27 @@ func TestManagerRegistry(t *testing.T) {
 		t.Fatal("expected 1 session after unregister")
 	}
 }
+
+func TestManagerRename(t *testing.T) {
+	m := newTestManager(t)
+	s := m.addUnconnected(t, "Account A")
+
+	if err := m.Rename(context.Background(), s.id, "Sales"); err != nil {
+		t.Fatal(err)
+	}
+	infos := m.Infos()
+	if len(infos) != 1 || infos[0].Name != "Sales" {
+		t.Fatalf("rename not reflected in Infos: %+v", infos)
+	}
+	rows, err := m.store.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Name != "Sales" {
+		t.Fatalf("rename not persisted: %+v", rows)
+	}
+
+	if err := m.Rename(context.Background(), "missing", "X"); err == nil {
+		t.Fatal("rename of unknown session must error")
+	}
+}

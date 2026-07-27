@@ -13,6 +13,7 @@ import (
 	"wacalls/internal/voip/engine"
 	"wacalls/internal/voip/extension/audio"
 	"wacalls/internal/voip/media"
+	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/transport"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
@@ -21,7 +22,7 @@ import (
 
 type fakeSock struct{}
 
-var _ core.VoipSocket = fakeSock{}
+var _ signaling.Socket = fakeSock{}
 
 func (fakeSock) OwnPN() types.JID                                 { return types.JID{} }
 func (fakeSock) OwnLID() types.JID                                { return types.JID{} }
@@ -143,6 +144,12 @@ func TestMediaRoundtripThroughEngine(t *testing.T) {
 	if len(got) == 0 {
 		t.Fatal("peer audio was not delivered through the extracted engine path")
 	}
+	recv.mu.Lock()
+	bootstrapped := recv.actualPeerSet
+	recv.mu.Unlock()
+	if !bootstrapped {
+		t.Fatal("authenticated audio must still bootstrap the peer subscription")
+	}
 }
 
 // One real 20 ms CELT-FB mono frame (TOC 0xF8) of a 440 Hz tone, encoded with
@@ -211,12 +218,12 @@ func TestInboundRtcpNotTreatedAsAudio(t *testing.T) {
 	recv.ensureExtensionsAttachedLocked("our.0", "peer.0")
 	defer recv.cleanupMedia()
 
-	// RTCP framing (first byte 0x80) with a second byte 0xF8 whose masked PT
-	// (0xF8 & 0x7f = 120) collides with the audio payload type. Before the fix
-	// this reached the RTP path and mutated peer subscription state.
+	// A receiver report with two blocks (first byte 0x82, packet type 0xC9): the
+	// old first-byte-exact classifier misrouted it to the RTP path, where its
+	// bytes mutated peer subscription state.
 	pkt := make([]byte, 28)
-	pkt[0] = 0x80
-	pkt[1] = 0xF8
+	pkt[0] = 0x82
+	pkt[1] = 0xC9
 	recv.onRelayData(pkt)
 
 	if recv.actualPeerSet {
@@ -224,5 +231,36 @@ func TestInboundRtcpNotTreatedAsAudio(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatal("inbound rtcp must not be delivered as audio")
+	}
+}
+
+// An RTP-shaped packet (marker bit + PT 120) that fails SRTP auth must not flip
+// the peer subscription: the bootstrap only runs after Unprotect succeeds.
+func TestUnauthenticatedRtpDoesNotMutateSubscription(t *testing.T) {
+	k1, k2 := km(1), km(9)
+	recvCodec, err := mlow.NewMLowCodec(mlow.DefaultCodecOptions)
+	if err != nil {
+		t.Fatalf("recv codec: %v", err)
+	}
+	recv := NewCallManager(fakeSock{}, slog.Default(), audio.New(opus.WithFallback(recvCodec)))
+	recv.relay = &fakeRelay{}
+	recv.srtp = engine.NewSrtpManager(k2, k1, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+	recv.selfSsrc = 2000
+	recv.currentCall = NewIncomingCall("c1", "peer@lid", "creator@lid", "", core.CallMediaTypeAudio)
+	var got []float32
+	recv.OnPeerAudio = func(pcm []float32) { got = pcm }
+	recv.ensureExtensionsAttachedLocked("our.0", "peer.0")
+	defer recv.cleanupMedia()
+
+	pkt := make([]byte, 28)
+	pkt[0] = 0x80
+	pkt[1] = 0xF8
+	recv.onRelayData(pkt)
+
+	if recv.actualPeerSet {
+		t.Fatal("unauthenticated rtp must not set peer subscription state")
+	}
+	if got != nil {
+		t.Fatal("unauthenticated rtp must not be delivered as audio")
 	}
 }

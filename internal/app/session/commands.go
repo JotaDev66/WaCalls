@@ -63,6 +63,10 @@ func (s *Session) RejectCall(ctx context.Context, callID string) error {
 	return nil
 }
 
+func (s *Session) SetMute(ctx context.Context, callID string, muted bool) error {
+	return s.calls.SetMute(ctx, callID, muted)
+}
+
 func (s *Session) EndCall(ctx context.Context, callID string) error {
 	err := s.calls.EndCall(ctx, callID, core.EndCallReasonUserEnded)
 	s.removeCall(callID)
@@ -79,7 +83,7 @@ func (s *Session) AttachBrowser(callID, offerSDP string) (string, error) {
 		return "", err
 	}
 	bridge.OnBrowserPCM = func(pcm []float32) { cm.FeedCapturedPCM(pcm) }
-	bridge.OnTerminalICE = func() { go s.terminateCall(callID, core.EndCallReasonUserEnded) }
+	bridge.OnTerminalICE = func() { go s.onBridgeDetached(callID, bridge) }
 	s.setBridge(callID, bridge)
 	return answer, nil
 }

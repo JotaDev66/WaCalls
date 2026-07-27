@@ -180,6 +180,54 @@ func TestEmitCallMark(t *testing.T) {
 	}
 }
 
+func TestEmitCallRelay(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	sub := b.subscribe("r")
+	defer b.unsubscribe(sub)
+
+	b.EmitCallRelay("s1", "c1", "gru1", 24, true)
+
+	select {
+	case data := <-sub.ch:
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev["type"] != "call-relay" || ev["sessionId"] != "s1" || ev["id"] != "c1" {
+			t.Fatalf("bad envelope: %v", ev)
+		}
+		if ev["relayName"] != "gru1" || ev["rttMs"].(float64) != 24 || ev["hasRtt"] != true {
+			t.Fatalf("bad relay fields: %v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no call-relay event received")
+	}
+}
+
+func TestEmitCallPeerMute(t *testing.T) {
+	b := NewBroker(nil, slog.Default())
+	sub := b.subscribe("pm")
+	defer b.unsubscribe(sub)
+
+	b.EmitCallPeerMute("s1", "c1", true)
+
+	select {
+	case data := <-sub.ch:
+		var ev map[string]any
+		if err := json.Unmarshal(data, &ev); err != nil {
+			t.Fatal(err)
+		}
+		if ev["type"] != "call-peer-mute" || ev["sessionId"] != "s1" || ev["id"] != "c1" {
+			t.Fatalf("bad envelope: %v", ev)
+		}
+		if ev["muted"] != true {
+			t.Fatalf("bad muted field: %v", ev)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("no call-peer-mute event received")
+	}
+}
+
 func TestServeSSESendsSnapshotToNewSubscriber(t *testing.T) {
 	b := NewBroker(nil, slog.Default())
 	b.SnapshotFn = func() []any {

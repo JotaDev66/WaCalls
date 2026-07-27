@@ -70,6 +70,8 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, peerJid.String(), 0)}
 	m.mu.Unlock()
 
+	m.applyVoipSettings(info.InnerNode, callID)
+
 	preaccept := signaling.BuildPreacceptStanza(peerJid, callID, wanode.MustJID(creator))
 	if err := m.sock.SendNode(ctx, preaccept); err != nil {
 		m.log.Error("send preaccept", "err", err)
@@ -88,6 +90,16 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
 	m.mu.Lock()
 	call := m.currentCall
+	// First accept wins: a later accept from a SIBLING device must not swap
+	// acceptedByJid and rekey SRTP under an established media path. A retry from
+	// the same device passes through: its first accept may have carried a call key
+	// we could not decrypt (signal-session desync), and the retransmission is the
+	// only chance to repair the keying.
+	if accepted := m.acceptedByJid; accepted != "" && accepted != peerJid.String() {
+		m.mu.Unlock()
+		m.log.Info("accept from another device ignored", "accepted_by", accepted, "from", peerJid.String())
+		return
+	}
 	m.mu.Unlock()
 	if call == nil {
 		return
@@ -120,6 +132,7 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	}
 	_ = call.ApplyTransition(Transition{Type: TransitionRemoteAccepted})
 	m.emitState()
+	firstAccept := m.acceptedByJid == ""
 	m.acceptedByJid = peerJid.String()
 	if m.peerSsrcs == nil || !m.actualPeerSet {
 		peerDeviceJid := ensureDeviceJid(peerJid.String())
@@ -129,6 +142,15 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 	m.initSrtpKeysLocked()
 	hasConn := m.relay.HasConnection()
 	relayData := call.RelayData
+	var siblings []types.JID
+	if firstAccept {
+		for _, dev := range m.calleeDevices {
+			if dev.String() != peerJid.String() {
+				siblings = append(siblings, dev)
+			}
+		}
+	}
+	basePeer := call.PeerJid
 	m.mu.Unlock()
 
 	m.log.Info("remote accepted call", "call_id", call.CallID, "peer", peerJid.String(),
@@ -138,6 +160,15 @@ func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node,
 
 	callID := call.CallID
 	creator := wanode.MustJID(call.CallCreator)
+	if len(siblings) > 0 {
+		elsewhere := signaling.BuildTerminateElsewhereStanza(wanode.MustJID(basePeer), callID, creator, siblings)
+		if err := m.sock.SendNode(ctx, elsewhere); err != nil {
+			m.log.Warn("accepted_elsewhere fanout failed; sibling devices may keep ringing",
+				"call_id", callID, "err", err)
+		} else {
+			m.log.Info("accepted_elsewhere sent to non-answering devices", "call_id", callID, "devices", len(siblings))
+		}
+	}
 	m.sendTransportUpdate(ctx, peerJid, creator, callID)
 	_ = m.sock.SendNode(ctx, signaling.BuildMuteV2Stanza(peerJid, callID, creator, 0))
 	if acceptMsgID := wanode.AttrString(node.Attrs, "id"); acceptMsgID != "" {
@@ -344,6 +375,8 @@ func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
 	endpoints := parsed.Relays
 	m.mu.Unlock()
 
+	m.applyVoipSettings(node, callID)
+
 	if sendPreaccept {
 		_ = m.sock.SendNode(ctx, signaling.BuildPreacceptStanza(peer, callID, creator))
 	}
@@ -355,6 +388,16 @@ func (m *CallManager) HandleCallTerminate(node *waBinary.Node) {
 	call := m.currentCall
 	if call == nil {
 		m.mu.Unlock()
+		return
+	}
+	// After an accept, only the answering device may end the call. A sibling that
+	// kept ringing eventually times out and sends its own reject/terminate, which
+	// must not tear down the live call.
+	sender := wanode.AttrString(node.Attrs, "from")
+	if m.acceptedByJid != "" && sender != "" && sender != m.acceptedByJid && !call.IsEnded() {
+		m.mu.Unlock()
+		m.log.Info("terminate from non-answering device ignored",
+			"call_id", call.CallID, "from", sender, "accepted_by", m.acceptedByJid)
 		return
 	}
 	info := signaling.ExtractNodeInfo(node)
@@ -374,4 +417,51 @@ func (m *CallManager) HandleCallTerminate(node *waBinary.Node) {
 		m.OnEnded(ended)
 	}
 	m.cleanupMedia()
+}
+
+// applyVoipSettings records the codec the server selected for the call from the
+// <voip_settings> blob (inbound offer or outbound offer ack). Absent or malformed
+// settings keep the MLow default. Decode of inbound standard Opus is already
+// handled per-frame by the codec fallback; the Warn flags that our MLow encode may
+// not be decodable by the peer.
+func (m *CallManager) applyVoipSettings(node *waBinary.Node, callID string) {
+	vsNode := wanode.FindChildByTag(node, "voip_settings")
+	if vsNode == nil {
+		return
+	}
+	vs, err := signaling.ParseVoipSettings(wanode.NodeBytes(vsNode))
+	if err != nil {
+		m.log.Debug("voip_settings parse failed; keeping mlow", "call_id", callID, "err", err)
+		return
+	}
+	codec := vs.CodecName()
+	m.mu.Lock()
+	if call := m.currentCall; call != nil && call.CallID == callID {
+		call.Codec = codec
+	}
+	m.mu.Unlock()
+	m.log.Info("voip_settings parsed", "call_id", callID, "codec", codec,
+		"use_mlow_codec_v1", vs.UseMlowCodecV1, "frame_ms", vs.FrameMs, "target_bitrate", vs.TargetBitrate)
+	if codec == signaling.CodecOpus {
+		m.log.Warn("server selected standard opus; wacalls encodes mlow and the peer may not decode our audio",
+			"call_id", callID)
+	}
+}
+
+func (m *CallManager) HandleCallMute(node *waBinary.Node) {
+	info := signaling.ExtractNodeInfo(node)
+	if info == nil || info.Tag != "mute_v2" {
+		return
+	}
+	m.mu.Lock()
+	call := m.currentCall
+	live := call != nil && call.CallID == info.CallID && !call.IsEnded()
+	m.mu.Unlock()
+	if !live {
+		return
+	}
+	muted := wanode.AttrString(info.InnerNode.Attrs, "mute-state") == "1"
+	if m.OnPeerMute != nil {
+		m.OnPeerMute(info.CallID, muted)
+	}
 }

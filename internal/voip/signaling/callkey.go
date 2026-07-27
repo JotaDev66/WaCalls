@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strings"
-	"wacalls/internal/voip/core"
 
 	waBinary "go.mau.fi/whatsmeow/binary"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -35,7 +34,7 @@ func EncodeCallKeyMessage(callKey []byte) ([]byte, error) {
 	return proto.Marshal(msg)
 }
 
-func DecryptCallKeyInNode(ctx context.Context, sock core.VoipSocket, inner *waBinary.Node, peerJid types.JID) ([]byte, error) {
+func DecryptCallKeyInNode(ctx context.Context, sock Socket, inner *waBinary.Node, peerJid types.JID) ([]byte, error) {
 	encNode := findEncNode(inner)
 	if encNode == nil {
 		return nil, nil

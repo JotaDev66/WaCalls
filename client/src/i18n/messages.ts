@@ -2,6 +2,7 @@ export type Messages = {
   app: {
     noAccountsTitle: string;
     noAccountsDescription: string;
+    createFirst: string;
     selectAccountTitle: string;
     selectAccountDescription: string;
   };
@@ -33,6 +34,13 @@ export type Messages = {
     deleteDescription: (name: string) => string;
     disconnect: string;
     reactivate: string;
+    rename: string;
+    renameTitle: string;
+    createTitle: string;
+    create: string;
+    save: string;
+    nameLabel: string;
+    moreActions: string;
     status: {
       open: string;
       qr: string;
@@ -41,9 +49,12 @@ export type Messages = {
     };
   };
   pairing: {
-    title: (name: string) => string;
-    description: string;
-    disconnectedBadge: string;
+    stepsTitle: string;
+    step1: string;
+    step2: string;
+    step3: string;
+    autoRenews: string;
+    disconnectedBody: string;
     waitingQr: string;
   };
   calls: {
@@ -61,6 +72,9 @@ export type Messages = {
     reconnectingMedia: string;
     reconnectWhy: string;
     reconnectHint: string;
+    micBusy: string;
+    micDenied: string;
+    micNotFound: string;
     measuringQuality: string;
     connectedIn: string;
     connection: string;
@@ -70,6 +84,12 @@ export type Messages = {
     jitter: string;
     loss: string;
     endCall: string;
+    mute: string;
+    unmute: string;
+    peerMuted: string;
+    reconnectDropped: string;
+    reconnectingAudio: string;
+    reconnectCall: string;
   };
   dialer: {
     title: string;

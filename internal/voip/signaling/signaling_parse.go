@@ -60,6 +60,7 @@ func ExtractRelayEndpoints(node *waBinary.Node) []core.RelayEndpoint {
 			v := wanode.AttrInt(n.Attrs, "c2r-rtt", 0)
 			ep.C2RRtt = &v
 		}
+		ep.IsFNA = wanode.AttrString(n.Attrs, "is_fna") == "1"
 		relays = append(relays, ep)
 	}
 

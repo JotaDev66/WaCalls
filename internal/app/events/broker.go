@@ -22,11 +22,12 @@ type AuthSnapshot struct {
 }
 
 type SessionInfo struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	JID    string `json:"jid"`
-	State  string `json:"state"`
-	Paired bool   `json:"paired"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	JID      string `json:"jid"`
+	State    string `json:"state"`
+	Paired   bool   `json:"paired"`
+	PhotoURL string `json:"photoUrl,omitempty"`
 }
 
 type subscriber struct {
@@ -42,6 +43,7 @@ type Broker struct {
 	calls    map[string]*CallRecord
 	records  core.CallRecordStore
 	webhooks *webhookDispatcher
+	diag     *Recorder
 	log      *slog.Logger
 
 	SnapshotFn func() []any
@@ -85,10 +87,19 @@ func (b *Broker) unsubscribe(s *subscriber) {
 	close(s.ch)
 }
 
+// SetRecorder wires an opt-in diagnostic recorder that mirrors every broadcast event
+// to disk. Passing nil (the default) keeps diagnostics off at zero cost.
+func (b *Broker) SetRecorder(r *Recorder) {
+	b.diag = r
+}
+
 func (b *Broker) broadcast(ev any) {
 	data, err := json.Marshal(ev)
 	if err != nil {
 		return
+	}
+	if m, ok := ev.(map[string]any); ok {
+		b.diag.Offer(m)
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -148,6 +159,25 @@ func (b *Broker) EmitCallMark(sessionID, callID, mark string, elapsedMs int64) {
 	b.broadcast(map[string]any{
 		"type": "call-mark", "sessionId": sessionID, "id": callID,
 		"mark": mark, "elapsedMs": elapsedMs,
+	})
+}
+
+// EmitCallRelay broadcasts which relay the call's media transport connected to, with the
+// server-declared client-to-relay RTT when known. Transient live-only signal like call-quality:
+// never persisted, feeding the client's relay pill.
+func (b *Broker) EmitCallRelay(sessionID, callID, relayName string, rttMs int, hasRtt bool) {
+	b.broadcast(map[string]any{
+		"type": "call-relay", "sessionId": sessionID, "id": callID,
+		"relayName": relayName, "rttMs": rttMs, "hasRtt": hasRtt,
+	})
+}
+
+// EmitCallPeerMute broadcasts the remote party's microphone state parsed from in-call
+// mute_v2 signaling. Transient live-only signal like call-quality: never persisted.
+func (b *Broker) EmitCallPeerMute(sessionID, callID string, muted bool) {
+	b.broadcast(map[string]any{
+		"type": "call-peer-mute", "sessionId": sessionID, "id": callID,
+		"muted": muted,
 	})
 }
 
