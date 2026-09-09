@@ -117,6 +117,20 @@ func (m *CallManager) onRelayData(data []byte) {
 		return
 	}
 	pt := data[1] & 0x7f
+	if pt == core.PayloadTypeWhatsAppH264 {
+		m.mu.Lock()
+		srtp, depay, selfV := m.srtpSession, m.h264Depay, m.selfVideoSsrc
+		m.mu.Unlock()
+		if depay == nil {
+			return
+		}
+		ssrc := uint32(data[8])<<24 | uint32(data[9])<<16 | uint32(data[10])<<8 | uint32(data[11])
+		if ssrc == selfV {
+			return
+		}
+		m.deliverPeerVideo(srtp, depay, data)
+		return
+	}
 	if pt != core.PayloadTypeWhatsAppOpus {
 		return
 	}

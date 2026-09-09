@@ -8,19 +8,35 @@ import {
   PLAYBACK_WORKLET_URL,
   SAMPLE_RATE,
 } from "../constants/audio";
+import { VIDEO_CHANNEL_LABEL } from "../constants/video";
+import { startVideoPipe, videoCallSupported, type VideoPipe } from "./video-pipe";
 
 export type OpenCall = {
   pc: RTCPeerConnection;
   micStream: MediaStream;
   remoteStream: MediaStream | null;
+  // Set only on a video call: the local camera and the decoded peer video.
+  localVideoStream: MediaStream | null;
+  remoteVideoStream: MediaStream | null;
   close: () => void;
+};
+
+export type OpenCallOpts = {
+  video?: boolean;
+  camDeviceId?: string | null;
 };
 
 export const openCall = async (
   sid: string,
   callId: string,
   micDeviceId: string | null,
+  opts: OpenCallOpts = {},
 ): Promise<OpenCall> => {
+  const wantVideo = !!opts.video;
+  if (wantVideo && !videoCallSupported()) {
+    throw new Error("This browser can't do video calls (needs WebCodecs / Chrome).");
+  }
+
   const micStream = await navigator.mediaDevices.getUserMedia({
     audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true,
   });
@@ -29,6 +45,36 @@ export const openCall = async (
 
   const dc = pc.createDataChannel(PCM_CHANNEL_LABEL, { ordered: true });
   dc.binaryType = "arraybuffer";
+
+  // O canal "vp8" tem que existir antes do createOffer para entrar no SDP.
+  let videoPipe: VideoPipe | null = null;
+  let videoDc: RTCDataChannel | null = null;
+  if (wantVideo) {
+    videoDc = pc.createDataChannel(VIDEO_CHANNEL_LABEL, { ordered: true });
+    videoDc.binaryType = "arraybuffer";
+    const vdc = videoDc;
+    let sendErrors = 0;
+    try {
+      videoPipe = await startVideoPipe({
+        camDeviceId: opts.camDeviceId ?? null,
+        onEncoded: (msg) => {
+          if (vdc.readyState !== "open") return; // quadros antes do canal abrir são descartados
+          try {
+            vdc.send(msg);
+          } catch (e) {
+            sendErrors += 1;
+            if (sendErrors <= 3) console.error("[video] falha no vdc.send", e);
+          }
+        },
+      });
+      const pipe = videoPipe;
+      videoDc.onmessage = (e: MessageEvent<ArrayBuffer>) => pipe.pushEncodedFrame(e.data);
+    } catch (err) {
+      micStream.getTracks().forEach((t) => t.stop());
+      pc.close();
+      throw err instanceof Error ? err : new Error("câmera indisponível");
+    }
+  }
 
   const ctx = new AudioContext({ sampleRate: SAMPLE_RATE });
   await ctx.audioWorklet.addModule(CAPTURE_WORKLET_URL);
@@ -70,7 +116,12 @@ export const openCall = async (
     pc,
     micStream,
     remoteStream: streamDest.stream,
+    localVideoStream: videoPipe?.localStream ?? null,
+    remoteVideoStream: videoPipe?.remoteStream ?? null,
     close: () => {
+      try {
+        videoPipe?.close();
+      } catch {}
       try {
         micStream.getTracks().forEach((t) => t.stop());
       } catch {}

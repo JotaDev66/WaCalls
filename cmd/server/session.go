@@ -9,6 +9,7 @@ import (
 
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
+	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/signaling"
 	"wacalls/internal/voip/wanode"
 	"wacalls/internal/wa"
@@ -58,9 +59,9 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 	cm.OnIncoming = func(c *call.CallInfo) {
 		s.mgr.broker.upsertCall(CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
-			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
+			Media: mediaKind(c), StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid)
+		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid, mediaKind(c))
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
@@ -75,7 +76,7 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		existing, _ := s.mgr.broker.getCall(c.CallID)
 		rec := CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: dir, Peer: c.PeerJid,
-			StartedAt: time.Now().UnixMilli(), Status: mapStatus(c.StateData.State),
+			Media: mediaKind(c), StartedAt: time.Now().UnixMilli(), Status: mapStatus(c.StateData.State),
 		}
 		if existing != nil {
 			rec.Owner = existing.Owner
@@ -94,6 +95,22 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		}
 		_ = ac.bridge.WritePCM(pcm16)
 	}
+	cm.OnPeerVideo = func(f media.VideoFrame) {
+		ac, ok := s.reg.get(callID)
+		if !ok || ac.bridge == nil {
+			return
+		}
+		_ = ac.bridge.WriteVideo(f)
+	}
+}
+
+// mediaKind returns "video" for a video call and "audio" otherwise, for the
+// broker records and SSE events.
+func mediaKind(c *call.CallInfo) string {
+	if c.MediaType == core.CallMediaTypeVideo {
+		return "video"
+	}
+	return "audio"
 }
 
 func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {

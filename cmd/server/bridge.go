@@ -13,16 +13,25 @@ import (
 // Int16 LE PCM in both directions. The browser side must create it with this label.
 const pcmChannelLabel = "pcm"
 
-// Bridge is the browser-leg adapter: it carries raw PCM between the browser and
-// the CallManager over a WebRTC data channel. The call core only ever sees
-// []float32 PCM, so it stays unaware of the transport (no Opus here anymore).
+// videoChannelLabel is the data channel the browser opens for a video call to
+// carry encoded VP8 frames (WebCodecs) in both directions, each prefixed with
+// media.VideoFrame's 5-byte header. Absent on audio-only calls.
+const videoChannelLabel = "vp8"
+
+// Bridge is the browser-leg adapter: it carries raw PCM (and, on a video call,
+// encoded VP8 frames) between the browser and the CallManager over WebRTC data
+// channels. The call core only ever sees []float32 PCM and media.VideoFrame, so
+// it stays unaware of the transport.
 type Bridge struct {
-	pc  *webrtc.PeerConnection
-	dc  atomic.Pointer[webrtc.DataChannel]
-	log *slog.Logger
+	pc      *webrtc.PeerConnection
+	dc      atomic.Pointer[webrtc.DataChannel]
+	videoDC atomic.Pointer[webrtc.DataChannel]
+	log     *slog.Logger
 
 	// OnBrowserPCM is invoked with decoded 16 kHz mono PCM captured from the browser mic.
 	OnBrowserPCM func(pcm []float32)
+	// OnBrowserVideo is invoked with each encoded VP8 frame captured from the browser camera.
+	OnBrowserVideo func(f media.VideoFrame)
 	// OnTerminalICE fires when the peer connection fails or closes.
 	OnTerminalICE func()
 }
@@ -35,15 +44,26 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 	br := &Bridge{pc: pc, log: log}
 
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		if dc.Label() != pcmChannelLabel {
-			return
+		switch dc.Label() {
+		case pcmChannelLabel:
+			br.dc.Store(dc)
+			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+				if cb := br.OnBrowserPCM; cb != nil && len(msg.Data) > 0 {
+					cb(media.PCMInt16LEToFloat32(msg.Data))
+				}
+			})
+		case videoChannelLabel:
+			br.videoDC.Store(dc)
+			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+				cb := br.OnBrowserVideo
+				if cb == nil {
+					return
+				}
+				if f, ok := media.DecodeVideoFrame(msg.Data); ok {
+					cb(f)
+				}
+			})
 		}
-		br.dc.Store(dc)
-		dc.OnMessage(func(msg webrtc.DataChannelMessage) {
-			if cb := br.OnBrowserPCM; cb != nil && len(msg.Data) > 0 {
-				cb(media.PCMInt16LEToFloat32(msg.Data))
-			}
-		})
 	})
 
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
@@ -82,6 +102,17 @@ func (b *Bridge) WritePCM(pcm []float32) error {
 		return nil
 	}
 	return dc.Send(media.PCMFloat32ToInt16LE(pcm))
+}
+
+// WriteVideo sends one encoded VP8 frame from the peer to the browser over the
+// "vp8" data channel. It is a no-op until that channel is open (audio-only
+// calls never open it).
+func (b *Bridge) WriteVideo(f media.VideoFrame) error {
+	dc := b.videoDC.Load()
+	if dc == nil || len(f.Data) == 0 {
+		return nil
+	}
+	return dc.Send(media.EncodeVideoFrame(f))
 }
 
 func (b *Bridge) Close() {

@@ -190,8 +190,8 @@ originating `sessionId`.
 | `DELETE` | `/api/sessions/{sid}` | Log out and remove an account |
 | `POST` | `/api/sessions/{sid}/logout` | Disconnect an account (keep it for re-pairing) |
 | `POST` | `/api/sessions/{sid}/pair` | Re-pair an account (emit a fresh QR) |
-| `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone, duration_ms?, record? }`) |
-| `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP |
+| `POST` | `/api/sessions/{sid}/calls` | Start an outgoing call (`{ phone, duration_ms?, record?, video? }`) |
+| `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | Exchange the browser WebRTC SDP (a video call also opens a `vp8` data channel) |
 | `POST` | `/api/sessions/{sid}/calls/{id}/accept` | Accept an incoming call |
 | `POST` | `/api/sessions/{sid}/calls/{id}/reject` | Reject an incoming call |
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | End an active call |

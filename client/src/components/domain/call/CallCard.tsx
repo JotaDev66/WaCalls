@@ -38,6 +38,9 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
   const [micDb, setMicDb] = useState(-60);
   const [peerDb, setPeerDb] = useState(-60);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const isVideo = call.media === "video";
 
   useEffect(() => {
     const t = setInterval(() => force((n) => n + 1), 1000);
@@ -61,6 +64,18 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
       offPeer?.();
       clearInterval(wait);
     };
+  }, [conn]);
+
+  useEffect(() => {
+    if (!conn) return;
+    if (remoteVideoRef.current && conn.remoteVideoStream) {
+      remoteVideoRef.current.srcObject = conn.remoteVideoStream;
+      remoteVideoRef.current.play().catch(() => {});
+    }
+    if (localVideoRef.current && conn.localVideoStream) {
+      localVideoRef.current.srcObject = conn.localVideoStream;
+      localVideoRef.current.play().catch(() => {});
+    }
   }, [conn]);
 
   useEffect(() => {
@@ -93,6 +108,23 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
             <TooltipContent>End call</TooltipContent>
           </Tooltip>
         </div>
+        {isVideo && (
+          <div className="relative overflow-hidden rounded-md bg-black">
+            <video
+              ref={remoteVideoRef}
+              className="aspect-video w-full object-cover"
+              autoPlay
+              playsInline
+            />
+            <video
+              ref={localVideoRef}
+              className="absolute bottom-2 right-2 w-1/3 max-w-[140px] -scale-x-100 rounded border border-white/20 bg-black object-cover"
+              autoPlay
+              playsInline
+              muted
+            />
+          </div>
+        )}
         <Meter label="Mic" db={micDb} />
         <Meter label="Peer" db={peerDb} />
         <audio ref={audioRef} autoPlay />

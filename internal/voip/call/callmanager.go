@@ -30,6 +30,14 @@ type CallManager struct {
 	peerSsrcs     []uint32
 	actualPeerSet bool
 
+	// Video plane, populated only for MediaTypeVideo calls. The browser runs
+	// the H264 encode/decode (WebCodecs); the CallManager only packetizes into
+	// RTP and hands inbound frames back. See callmanager_video.go.
+	selfVideoSsrc uint32
+	peerVideoSsrc uint32
+	h264Pay       *media.H264Payloader
+	h264Depay     *media.H264Depacketizer
+
 	firstPacketSent       bool
 	initialTransportSent  bool
 	outgoingPreacceptSent bool
@@ -46,6 +54,7 @@ type CallManager struct {
 	OnIncoming    func(*CallInfo)
 	OnEnded       func(*CallInfo)
 	OnPeerAudio   func([]float32)
+	OnPeerVideo   func(media.VideoFrame)
 }
 
 func NewCallManager(sock core.VoipSocket, log *slog.Logger) *CallManager {
@@ -105,6 +114,9 @@ func (m *CallManager) StartCall(ctx context.Context, callID string, peerJid type
 	m.rtpSession = media.NewWhatsAppOpusSession(m.selfSsrc)
 	m.peerSsrcs = []uint32{media.GenerateSecureSsrc(callID, resolved.String(), 0)}
 	m.initCodec()
+	if isVideo {
+		m.initVideoLocked(callID, selfJid, resolved.String())
+	}
 	m.mu.Unlock()
 
 	offer, err := signaling.BuildOfferStanza(ctx, m.sock, callID, callKey, resolved, isVideo)
@@ -184,6 +196,17 @@ func (m *CallManager) setupIncomingMedia(call *CallInfo, relayData *core.RelayDa
 		}
 	}
 	m.relay.SetSubscriptionSsrc(firstSsrc(m.peerSsrcs))
+	if call.MediaType == core.CallMediaTypeVideo {
+		if m.h264Pay == nil {
+			m.initVideoLocked(call.CallID, m.ownCredJid(), call.PeerJid)
+		}
+		if len(relayData.ParticipantJids) > 0 {
+			ourBase := wanode.CleanJID(m.ownCredJid())
+			selfDev := ensureDeviceJid(findOurDevice(relayData.ParticipantJids, ourBase, m.ownCredJid()))
+			peerDev := firstPeerDevice(relayData.ParticipantJids, ourBase)
+			m.refineVideoSsrcLocked(call.CallID, selfDev, peerDev)
+		}
+	}
 	m.initSrtpKeysLocked()
 }
 
