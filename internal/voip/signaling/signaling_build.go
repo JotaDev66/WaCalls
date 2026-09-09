@@ -11,11 +11,11 @@ import (
 )
 
 var (
-	// Captured from a real WhatsApp client's video <offer> (2026-09-09):
-	// <capability ver="1">0105ff09e0fa53</capability>. The old audio-only blob
-	// (0105f709e4bb07) made WhatsApp answer <accept> with no <video> node.
-	capabilityOffer     = []byte{0x01, 0x05, 0xff, 0x09, 0xe0, 0xfa, 0x53}
-	capabilityPreaccept = []byte{0x01, 0x05, 0xff, 0x09, 0xe0, 0xfa, 0x53}
+	// Blob de capacidade do <offer> de vídeo, capturado de um WhatsApp Business
+	// real (2026-09-09): 0105f509e0bb53. O blob de iPhone consumidor
+	// (0105ff09e0fa53) fazia o app Business não tocar em videochamada de entrada.
+	capabilityOffer     = []byte{0x01, 0x05, 0xf5, 0x09, 0xe0, 0xbb, 0x53}
+	capabilityPreaccept = []byte{0x01, 0x05, 0xf5, 0x09, 0xe0, 0xbb, 0x53}
 )
 
 func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid types.JID, isVideo bool) (waBinary.Node, error) {
@@ -48,17 +48,15 @@ func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, 
 		waBinary.Node{Tag: "audio", Attrs: waBinary.Attrs{"enc": "opus", "rate": "16000"}},
 	)
 	if isVideo {
-		// Shape captured from a real WhatsApp client's video <offer> (2026-09-09):
-		// besides <video>, the real offer also carries <userrate/>,
-		// <uploadfieldstat/> and <voip_settings>. WhatsApp tolerates a missing
-		// <video> on an audio call but <terminate>s a video call whose offer is
-		// missing these siblings.
+		// Forma capturada do <offer> de vídeo de um WhatsApp Business real
+		// (2026-09-09): <video enc="h.264" dec="H264" screen_width="0"
+		// screen_height="0">, sem <userrate/>, com <uploadfieldstat/> e
+		// <voip_settings>. Sem esses nós o WhatsApp encerra a videochamada.
 		offerContent = append(offerContent,
 			waBinary.Node{Tag: "uploadfieldstat"},
-			waBinary.Node{Tag: "userrate"},
 			waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
-				"enc": "h.264", "dec": "H264,H265,AV1", "device_orientation": "0",
-				"screen_width": "1280", "screen_height": "720",
+				"enc": "h.264", "dec": "H264", "device_orientation": "0",
+				"screen_width": "0", "screen_height": "0",
 			}},
 			waBinary.Node{Tag: "voip_settings", Attrs: waBinary.Attrs{"uncompressed": "1"}, Content: []byte("{}")},
 		)
@@ -113,14 +111,13 @@ func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string,
 		}
 	}
 	if isVideo {
-		// Mesmos nós que o <offer> de vídeo precisa: sem eles o WhatsApp aceita
-		// a chamada mas não abre o caminho de recepção de vídeo do outro lado.
+		// Mesma forma do <offer> de vídeo Business: sem esses nós o WhatsApp
+		// aceita a chamada mas não abre o caminho de recepção de vídeo do outro lado.
 		acceptContent = append(acceptContent,
 			waBinary.Node{Tag: "uploadfieldstat"},
-			waBinary.Node{Tag: "userrate"},
 			waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
-				"enc": "h.264", "dec": "H264,H265,AV1", "device_orientation": "0",
-				"screen_width": "1280", "screen_height": "720",
+				"enc": "h.264", "dec": "H264", "device_orientation": "0",
+				"screen_width": "0", "screen_height": "0",
 			}},
 			waBinary.Node{Tag: "voip_settings", Attrs: waBinary.Attrs{"uncompressed": "1"}, Content: []byte("{}")},
 		)

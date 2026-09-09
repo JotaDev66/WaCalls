@@ -22,6 +22,9 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 		creator = peerJid.String()
 	}
 	isVideo := hasChildTag(info.InnerNode, "video")
+	if VideoDump {
+		m.log.Info("VDUMP offer", "call_id", callID, "is_video", isVideo, "from", peerJid.String(), "xml", node.String())
+	}
 
 	callKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
 	if err != nil {

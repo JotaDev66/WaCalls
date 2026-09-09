@@ -110,6 +110,9 @@ func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsStunPacket(data) {
 		return
 	}
+	if VideoDump {
+		m.dumpInboundRelayPacket(data)
+	}
 	if !transport.IsRtpPacket(data) {
 		return
 	}

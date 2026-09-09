@@ -58,7 +58,11 @@ func (m *CallManager) FeedCapturedVideo(f media.VideoFrame) {
 		return
 	}
 	ts := media.VideoTimestamp(f.TimestampMS)
-	for _, pkt := range m.h264Pay.Packetize(f.Data, ts) {
+	pkts := m.h264Pay.Packetize(f.Data, ts)
+	if VideoDump {
+		m.dumpOutboundPackets(pkts, f.Data, f.Keyframe)
+	}
+	for _, pkt := range pkts {
 		enc, err := m.srtpSession.Protect(pkt)
 		if err != nil {
 			m.log.Debug("erro ao proteger vídeo com SRTP", "err", err)
@@ -85,6 +89,9 @@ func (m *CallManager) deliverPeerVideo(srtp *media.SrtpSession, depay *media.H26
 	frame, keyframe, ok := depay.Push(pkt)
 	if !ok {
 		return
+	}
+	if VideoDump {
+		m.dumpInboundAccessUnit(frame, keyframe, pkt.Header.Timestamp)
 	}
 	if m.OnPeerVideo != nil {
 		m.OnPeerVideo(media.VideoFrame{

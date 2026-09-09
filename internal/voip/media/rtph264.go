@@ -24,20 +24,41 @@ const (
 
 var annexBStartCode = []byte{0x00, 0x00, 0x00, 0x01}
 
-// cvoExtNoRotation é o bloco de extensão RTP de um byte (profile 0xDEBE) com só
-// o elemento CVO (id 3) = 0 (câmera na vertical). Um cliente WhatsApp real anexa
-// esse bloco a todo pacote de vídeo; sem ele o receptor pode ignorar o stream.
-var cvoExtNoRotation = []byte{0x30, 0x00, 0x00, 0x00}
+// videoExtBlock monta o bloco de extensão RTP de um byte (profile 0xDEBE) que um
+// cliente WhatsApp real anexa a TODO pacote de vídeo. Capturado (2026-09-09):
+//
+//	30 0b     id 3 = CVO (orientação)
+//	51 15 2b  id 5 = 2 bytes  (uso não confirmado — placeholder zerado)
+//	61 00 30  id 6 = 2 bytes  (uso não confirmado — placeholder zerado)
+//	91 0c c5  id 9 = 2 bytes  → contador que incrementa (seq transport-wide/TWCC)
+//
+// Sem esse bloco o receptor do WhatsApp parece descartar o vídeo (roda congestion
+// control e precisa do seq id 9). Total 11 bytes de elementos + 1 de padding = 12
+// (3 words de 32 bits).
+func videoExtBlock(cvo byte, twcc uint16) []byte {
+	return []byte{
+		0x30, cvo, // id 3, len 1
+		0x51, 0x00, 0x00, // id 5, len 2
+		0x61, 0x00, 0x00, // id 6, len 2
+		0x91, byte(twcc >> 8), byte(twcc), // id 9, len 2
+		0x00, // padding p/ múltiplo de 4
+	}
+}
 
 // H264Payloader splits encoded H264 access units into RTP packets for one
 // outbound video stream. Not safe for concurrent use; the call owns one.
 type H264Payloader struct {
 	ssrc uint32
 	seq  uint16
+	twcc uint16 // contador do elemento de extensão id 9 (seq transport-wide)
 }
 
 func NewH264Payloader(ssrc uint32) *H264Payloader {
-	return &H264Payloader{ssrc: ssrc, seq: uint16(randUint(1 << 16))}
+	return &H264Payloader{
+		ssrc: ssrc,
+		seq:  uint16(randUint(1 << 16)),
+		twcc: uint16(randUint(1 << 16)),
+	}
 }
 
 // Packetize returns the RTP packets for one Annex-B access unit. Every packet
@@ -92,9 +113,10 @@ func (p *H264Payloader) Packetize(frame []byte, ts uint32) []*RtpPacket {
 		h.Marker = i == len(payloads)-1
 		h.Extension = true
 		h.ExtensionProfile = 0xDEBE
-		h.ExtensionData = cvoExtNoRotation
+		h.ExtensionData = videoExtBlock(0x00, p.twcc)
 		pkts = append(pkts, &RtpPacket{Header: h, Payload: pl})
 		p.seq++
+		p.twcc++
 	}
 	return pkts
 }
@@ -239,6 +261,9 @@ func (d *H264Depacketizer) reset() {
 	d.fuActive = false
 	d.fuBuf = d.fuBuf[:0]
 }
+
+// SplitAnnexBForDump expõe splitAnnexB para a instrumentação de debug.
+func SplitAnnexBForDump(data []byte) [][]byte { return splitAnnexB(data) }
 
 // splitAnnexB slices an Annex-B bitstream into its NALUs (no start codes,
 // trailing zero bytes trimmed).
