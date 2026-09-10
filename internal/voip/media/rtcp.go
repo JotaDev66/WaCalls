@@ -139,6 +139,38 @@ func ParseREMB(pkt []byte) (bitrate uint64, ssrcs []uint32, ok bool) {
 	return bitrate, ssrcs, true
 }
 
+// ParseNACK extrai os sequence numbers pedidos num RTPFB/NACK genérico (RFC 4585
+// §6.2.1). pkt é o sub-pacote inteiro, começando no byte de versão. ok=false se
+// não for um NACK. mediaSSRC é o SSRC do stream que o remetente do NACK está
+// recebendo (o nosso stream de vídeo, do ponto de vista do WhatsApp).
+func ParseNACK(pkt []byte) (mediaSSRC uint32, seqs []uint16, ok bool) {
+	if len(pkt) < 16 || pkt[1] != RTCPTypeRTPFB || (pkt[0]&0x1f) != 1 {
+		return 0, nil, false
+	}
+	mediaSSRC = binary.BigEndian.Uint32(pkt[8:12])
+	for off := 12; off+4 <= len(pkt); off += 4 {
+		pid := binary.BigEndian.Uint16(pkt[off:])
+		blp := binary.BigEndian.Uint16(pkt[off+2:])
+		seqs = append(seqs, pid)
+		for b := 0; b < 16; b++ {
+			if blp&(1<<uint(b)) != 0 {
+				seqs = append(seqs, pid+uint16(b)+1)
+			}
+		}
+	}
+	return mediaSSRC, seqs, true
+}
+
+// IsPLIOrFIR reconhece um pedido de refresh de quadro: PSFB/PLI (FMT 1) ou
+// PSFB/FIR (FMT 4). Os dois querem a mesma coisa da nossa parte — um keyframe já.
+func IsPLIOrFIR(pkt []byte) bool {
+	if len(pkt) < 12 || pkt[1] != RTCPTypePSFB {
+		return false
+	}
+	fmt := pkt[0] & 0x1f
+	return fmt == 1 || fmt == 4
+}
+
 // splitCompound devolve os sub-pacotes RTCP crus de um compound em claro.
 func splitCompound(data []byte) [][]byte {
 	var out [][]byte

@@ -17,6 +17,7 @@ func (m *CallManager) initVideoLocked(callID, selfJid, peerJid string) {
 	m.peerVideoSsrc = media.GenerateSecureSsrc(callID, peerJid, core.VideoSsrcCounter)
 	m.h264Pay = media.NewH264Payloader(m.selfVideoSsrc)
 	m.h264Depay = media.NewH264Depacketizer()
+	m.videoTxHist = newVideoTxHistory()
 	m.relay.SetVideoSsrc(m.selfVideoSsrc)
 	m.relay.SetVideoSubscriptionSsrc(m.peerVideoSsrc)
 }
@@ -33,6 +34,7 @@ func (m *CallManager) refineVideoSsrcLocked(callID, selfDeviceJid, peerDeviceJid
 		if s := media.GenerateSecureSsrc(callID, ensureDeviceJid(selfDeviceJid), core.VideoSsrcCounter); s != m.selfVideoSsrc {
 			m.selfVideoSsrc = s
 			m.h264Pay = media.NewH264Payloader(s)
+			m.videoTxHist = newVideoTxHistory() // SSRC/seq novos: histórico antigo não serve
 			m.relay.SetVideoSsrc(s)
 		}
 	}
@@ -72,6 +74,9 @@ func (m *CallManager) FeedCapturedVideo(f media.VideoFrame) {
 		if err != nil {
 			m.log.Debug("erro ao proteger vídeo com SRTP", "err", err)
 			continue
+		}
+		if m.videoTxHist != nil {
+			m.videoTxHist.put(pkt.Header.SequenceNumber, enc)
 		}
 		m.relay.Broadcast(enc)
 	}
@@ -119,10 +124,12 @@ func (m *CallManager) cleanupVideoLocked() {
 	m.peerVideoSsrc = 0
 	m.h264Pay = nil
 	m.h264Depay = nil
+	m.videoTxHist = nil
 	m.srtcpSend = nil
 	m.srtcpRecv = nil
 	m.videoTxPkts = 0
 	m.videoTxOctets = 0
 	m.videoRxPkts = 0
 	m.videoRxHighSeq = 0
+	m.videoRtxResent = 0
 }

@@ -47,6 +47,11 @@ type CallManager struct {
 	videoTxOctets  uint32
 	videoRxPkts    uint32
 	videoRxHighSeq uint32
+	// histórico dos pacotes de vídeo já protegidos, para retransmitir quando o
+	// WhatsApp pede via RTCP NACK; sem isso um keyframe fragmentado nunca fecha
+	// no decodificador dele. Ver videotxhistory.go / handleVideoNack.
+	videoTxHist    *videoTxHistory
+	videoRtxResent uint32
 	// último RTP timestamp de vídeo que mandamos + quando, para extrapolar o
 	// RTP timestamp do Sender Report (RFC 3550: precisa corresponder ao stream).
 	lastVideoTxTS   uint32
@@ -69,6 +74,10 @@ type CallManager struct {
 	OnEnded       func(*CallInfo)
 	OnPeerAudio   func([]float32)
 	OnPeerVideo   func(media.VideoFrame)
+	// OnKeyframeRequest é chamado quando o peer manda PLI/FIR pedindo um quadro
+	// de refresh; quem liga (o servidor HTTP) avisa o navegador para emitir um
+	// keyframe imediato. Pode ser nil (o client já força keyframe periódico).
+	OnKeyframeRequest func()
 }
 
 func NewCallManager(sock core.VoipSocket, log *slog.Logger) *CallManager {

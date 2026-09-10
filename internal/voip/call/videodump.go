@@ -52,7 +52,7 @@ func (m *CallManager) dumpInboundRelayPacket(data []byte) {
 		return
 	}
 	n := vdRxRtp.Add(1)
-	if n <= 20 || n%50 == 0 {
+	if n <= 60 || n%25 == 0 {
 		var payHead string
 		hl := h.Size()
 		if len(data) > hl {
@@ -61,7 +61,8 @@ func (m *CallManager) dumpInboundRelayPacket(data []byte) {
 		m.log.Info("VDUMP rx-rtp",
 			"n", n, "pt", h.PayloadType, "seq", h.SequenceNumber, "ts", h.Timestamp, "ssrc", h.Ssrc,
 			"marker", h.Marker, "ext", h.Extension, "ext_profile", fmt.Sprintf("%#x", h.ExtensionProfile),
-			"ext_data", fmt.Sprintf("%x", h.ExtensionData), "hdr_len", hl, "pay_head", payHead)
+			"ext_data", fmt.Sprintf("%x", h.ExtensionData), "ext_elems", describeRtpExt(h.ExtensionProfile, h.ExtensionData),
+			"hdr_len", hl, "pay_head", payHead)
 	}
 }
 
@@ -95,8 +96,44 @@ func (m *CallManager) dumpOutboundPackets(pkts []*media.RtpPacket, srcFrame []by
 		}
 		m.log.Info("VDUMP tx-rtp", "au", n, "i", i, "seq", p.Header.SequenceNumber, "ts", p.Header.Timestamp,
 			"marker", p.Header.Marker, "ext", p.Header.Extension, "ext_profile", fmt.Sprintf("%#x", p.Header.ExtensionProfile),
-			"ext_data", fmt.Sprintf("%x", p.Header.ExtensionData), "pay_len", len(p.Payload), "pay_head", head)
+			"ext_data", fmt.Sprintf("%x", p.Header.ExtensionData),
+			"ext_elems", describeRtpExt(p.Header.ExtensionProfile, p.Header.ExtensionData),
+			"pay_len", len(p.Payload), "pay_head", head)
 	}
+}
+
+// describeRtpExt decodifica um bloco de extensão RTP de cabeçalho de um byte
+// (RFC 8285, profile 0xBEDE — as capturas do WhatsApp chegam como 0xDEBE) numa
+// string tipo "id3=03 id5=152b id6=0030 id9=0cc5", para comparar byte a byte a
+// nossa extensão de saída com a de um cliente WhatsApp real recebida pela via de
+// entrada (que já funciona).
+func describeRtpExt(profile uint16, data []byte) string {
+	if profile != 0xBEDE && profile != 0xDEBE {
+		return "(perfil não 1-byte)"
+	}
+	out := ""
+	for i := 0; i < len(data); {
+		b := data[i]
+		if b == 0 { // padding entre elementos
+			i++
+			continue
+		}
+		id := b >> 4
+		length := int(b&0x0F) + 1
+		i++
+		if id == 15 || i+length > len(data) {
+			break
+		}
+		if out != "" {
+			out += " "
+		}
+		out += fmt.Sprintf("id%d=%x", id, data[i:i+length])
+		i += length
+	}
+	if out == "" {
+		return "(sem elementos)"
+	}
+	return out
 }
 
 // --- helpers -------------------------------------------------------------

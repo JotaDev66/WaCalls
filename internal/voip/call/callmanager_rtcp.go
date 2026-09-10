@@ -105,9 +105,24 @@ func (m *CallManager) handleInboundRtcp(data []byte) {
 	}
 	m.mu.Lock()
 	selfV := m.selfVideoSsrc
+	kfReq := m.OnKeyframeRequest
 	m.mu.Unlock()
 
 	for _, sub := range media.SplitRTCPCompound(plain) {
+		if mediaSSRC, seqs, ok := media.ParseNACK(sub); ok {
+			m.handleVideoNack(mediaSSRC, seqs, selfV)
+			continue
+		}
+		if media.IsPLIOrFIR(sub) {
+			if VideoDump {
+				m.log.Info("VDUMP rx-rtcp PLI/FIR — peer pediu keyframe", "tem_callback", kfReq != nil)
+			}
+			m.log.Debug("RTCP PLI/FIR recebido do peer — pedindo keyframe ao browser")
+			if kfReq != nil {
+				kfReq()
+			}
+			continue
+		}
 		if br, ssrcs, ok := media.ParseREMB(sub); ok {
 			forOurVideo := false
 			for _, s := range ssrcs {
@@ -130,9 +145,39 @@ func (m *CallManager) handleInboundRtcp(data []byte) {
 			m.log.Info("VDUMP rx-rtcp", "tipo", media.RTCPName(sub[1], rc), "pt", sub[1], "fmt", rc,
 				"bytes", len(sub), "hex", hexBytes(sub[:hexLen]))
 		}
-		if len(sub) >= 2 && sub[1] == media.RTCPTypePSFB && (sub[0]&0x1f == 1 || sub[0]&0x1f == 4) {
-			m.log.Debug("RTCP PLI/FIR recebido do peer")
+	}
+}
+
+// handleVideoNack retransmite os pacotes de vídeo que o peer pediu num RTCP NACK,
+// relendo-os do histórico já protegido (SRTP) e reenviando pelo relay sem tocar
+// no estado do payloader. Chamada sem m.mu travado.
+func (m *CallManager) handleVideoNack(mediaSSRC uint32, seqs []uint16, selfV uint32) {
+	m.mu.Lock()
+	hist := m.videoTxHist
+	m.mu.Unlock()
+	if hist == nil || len(seqs) == 0 {
+		return
+	}
+
+	var resent, missing int
+	for _, seq := range seqs {
+		pkt, ok := hist.get(seq)
+		if !ok {
+			missing++
+			continue
 		}
+		m.relay.Broadcast(pkt)
+		resent++
+	}
+
+	m.mu.Lock()
+	m.videoRtxResent += uint32(resent)
+	total := m.videoRtxResent
+	m.mu.Unlock()
+
+	if VideoDump {
+		m.log.Info("VDUMP rx-rtcp NACK", "media_ssrc", mediaSSRC, "self_video_ssrc", selfV,
+			"pedidos", len(seqs), "reenviados", resent, "fora_do_buffer", missing, "reenviados_total", total)
 	}
 }
 

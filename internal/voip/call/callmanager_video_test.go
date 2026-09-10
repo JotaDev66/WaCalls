@@ -2,6 +2,7 @@ package call
 
 import (
 	"bytes"
+	"encoding/binary"
 	"log/slog"
 	"testing"
 	"time"
@@ -89,6 +90,104 @@ func TestVideoLoopbackThroughSRTP(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("OnPeerVideo never fired")
+	}
+}
+
+// TestVideoNackRetransmit prova que um RTCP NACK do peer faz o CallManager
+// reenviar, byte a byte, os pacotes de vídeo já protegidos que ele guardou —
+// sem mexer no payloader. É a peça que faltava para um keyframe fragmentado
+// fechar no decodificador do WhatsApp quando um fragmento se perde.
+func TestVideoNackRetransmit(t *testing.T) {
+	m := &CallManager{log: slog.Default()}
+	fr := &fakeRelay{connected: true}
+	m.relay = fr
+	m.currentCall = NewOutgoingCall("CID", "peer@s.whatsapp.net", "me@s.whatsapp.net", core.CallMediaTypeVideo)
+	m.initVideoLocked("CID", "me@s.whatsapp.net", "peer@s.whatsapp.net")
+
+	km, err := media.DerivePerJidSrtpKey(make([]byte, 32), "dev:0@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("derive srtp key: %v", err)
+	}
+	m.srtpSession, err = media.NewSrtpSession(km, km, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	if err != nil {
+		t.Fatalf("new srtp session: %v", err)
+	}
+
+	sc := []byte{0x00, 0x00, 0x00, 0x01}
+	idr := append([]byte{0x65}, bytes.Repeat([]byte{0x42}, media.MaxH264PayloadSize*3)...)
+	m.FeedCapturedVideo(media.VideoFrame{Keyframe: true, TimestampMS: 40, Data: append(append([]byte{}, sc...), idr...)})
+
+	if len(fr.sent) < 3 {
+		t.Fatalf("esperava >=3 pacotes protegidos, veio %d", len(fr.sent))
+	}
+	// seq de cada pacote é o campo big-endian nos bytes 2:4 do SRTP.
+	seqOf := func(p []byte) uint16 { return uint16(p[2])<<8 | uint16(p[3]) }
+	first, last := fr.sent[0], fr.sent[len(fr.sent)-1]
+	sentBefore := len(fr.sent)
+
+	m.handleVideoNack(m.selfVideoSsrc, []uint16{seqOf(first), seqOf(last)}, m.selfVideoSsrc)
+
+	if got := len(fr.sent) - sentBefore; got != 2 {
+		t.Fatalf("NACK devia reenviar 2 pacotes, reenviou %d", got)
+	}
+	if !bytes.Equal(fr.sent[sentBefore], first) || !bytes.Equal(fr.sent[sentBefore+1], last) {
+		t.Fatal("pacote reenviado difere do original")
+	}
+	if m.videoRtxResent != 2 {
+		t.Errorf("videoRtxResent = %d, quer 2", m.videoRtxResent)
+	}
+
+	// Um seq que nunca existiu não gera reenvio nem panic.
+	sentBefore = len(fr.sent)
+	m.handleVideoNack(m.selfVideoSsrc, []uint16{seqOf(first) - 5000}, m.selfVideoSsrc)
+	if len(fr.sent) != sentBefore {
+		t.Error("seq desconhecido não devia reenviar nada")
+	}
+}
+
+// TestInboundPliRequestsKeyframe prova que um RTCP PLI de entrada (decifrado
+// pelo SRTCP) dispara OnKeyframeRequest — o gancho que faz o browser emitir um
+// keyframe fora do intervalo fixo.
+func TestInboundPliRequestsKeyframe(t *testing.T) {
+	m := &CallManager{log: slog.Default()}
+	m.relay = &fakeRelay{connected: true}
+	m.currentCall = NewOutgoingCall("CID", "peer@s.whatsapp.net", "me@s.whatsapp.net", core.CallMediaTypeVideo)
+	m.initVideoLocked("CID", "me@s.whatsapp.net", "peer@s.whatsapp.net")
+
+	km, err := media.DerivePerJidSrtpKey(make([]byte, 32), "dev:0@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("derive srtp key: %v", err)
+	}
+	sctx, err := media.NewSrtcpContext(km, media.SrtcpAuthTagLen)
+	if err != nil {
+		t.Fatalf("srtcp send: %v", err)
+	}
+	m.srtcpRecv, err = media.NewSrtcpContext(km, media.SrtcpAuthTagLen)
+	if err != nil {
+		t.Fatalf("srtcp recv: %v", err)
+	}
+
+	got := make(chan struct{}, 1)
+	m.OnKeyframeRequest = func() { got <- struct{}{} }
+
+	// PSFB/PLI: FMT=1, PT=206, length=2 (12 bytes); media ssrc = nosso vídeo.
+	pli := make([]byte, 12)
+	pli[0] = 0x81
+	pli[1] = 206
+	binary.BigEndian.PutUint16(pli[2:], 2)
+	binary.BigEndian.PutUint32(pli[4:], 0x1234)
+	binary.BigEndian.PutUint32(pli[8:], m.selfVideoSsrc)
+	enc, err := sctx.Protect(pli)
+	if err != nil {
+		t.Fatalf("srtcp protect: %v", err)
+	}
+
+	m.handleInboundRtcp(enc)
+
+	select {
+	case <-got:
+	case <-time.After(time.Second):
+		t.Fatal("OnKeyframeRequest não disparou com um PLI de entrada")
 	}
 }
 
