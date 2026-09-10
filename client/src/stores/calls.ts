@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { eventStream, type BrokerEvent } from "@/lib/event-stream";
+import { asCallMedia, eventStream, type BrokerEvent } from "@/lib/event-stream";
 import { getClientId } from "@/lib/client-id";
 import { queryClient, queryKeys } from "@/lib/query";
 import type { OpenCall } from "@/lib/webrtc";
@@ -23,12 +23,19 @@ export const ensureCallsWired = (): void => {
   wired = true;
   eventStream.on((ev: BrokerEvent) => {
     if (ev.type === "call-list") {
-      useCalls.setState({ calls: ev.calls });
+      useCalls.setState({ calls: ev.calls.map((c) => ({ ...c, media: asCallMedia(c.media) })) });
     } else if (ev.type === "call-status") {
       useCalls.setState((s) => ({
         calls: s.calls.map((c) =>
           c.callId === ev.id
-            ? { ...c, sessionId: ev.sessionId, status: ev.status, peer: ev.peer, startedAt: ev.startedAt }
+            ? {
+                ...c,
+                sessionId: ev.sessionId,
+                status: ev.status,
+                peer: ev.peer,
+                media: asCallMedia(ev.media),
+                startedAt: ev.startedAt,
+              }
             : c,
         ),
       }));
@@ -46,7 +53,15 @@ export const ensureCallsWired = (): void => {
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.history });
     } else if (ev.type === "incoming") {
-      useCalls.setState({ incoming: { sessionId: ev.sessionId, callId: ev.id, peer: ev.peer, offeredAt: ev.offeredAt } });
+      useCalls.setState({
+        incoming: {
+          sessionId: ev.sessionId,
+          callId: ev.id,
+          peer: ev.peer,
+          media: asCallMedia(ev.media),
+          offeredAt: ev.offeredAt,
+        },
+      });
     } else if (ev.type === "incoming-claimed") {
       useCalls.setState((s) => (s.incoming?.callId === ev.id ? { incoming: null } : s));
     }

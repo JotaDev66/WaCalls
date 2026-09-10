@@ -11,8 +11,11 @@ import (
 )
 
 var (
-	capabilityOffer     = []byte{0x01, 0x05, 0xf7, 0x09, 0xe4, 0xbb, 0x07}
-	capabilityPreaccept = []byte{0x01, 0x05, 0xff, 0x09, 0xe4, 0xbb, 0x07}
+	// Blob de capacidade do <offer> de vídeo, capturado de um WhatsApp Business
+	// real (2026-09-09): 0105f509e0bb53. O blob de iPhone consumidor
+	// (0105ff09e0fa53) fazia o app Business não tocar em videochamada de entrada.
+	capabilityOffer     = []byte{0x01, 0x05, 0xf5, 0x09, 0xe0, 0xbb, 0x53}
+	capabilityPreaccept = []byte{0x01, 0x05, 0xf5, 0x09, 0xe0, 0xbb, 0x53}
 )
 
 func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, callKey []byte, peerJid types.JID, isVideo bool) (waBinary.Node, error) {
@@ -45,10 +48,18 @@ func BuildOfferStanza(ctx context.Context, sock core.VoipSocket, callID string, 
 		waBinary.Node{Tag: "audio", Attrs: waBinary.Attrs{"enc": "opus", "rate": "16000"}},
 	)
 	if isVideo {
-		offerContent = append(offerContent, waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
-			"enc": "vp8", "dec": "vp8", "orientation": "0",
-			"screen_width": "1920", "screen_height": "1080", "device_orientation": "0",
-		}})
+		// Forma capturada do <offer> de vídeo de um WhatsApp Business real
+		// (2026-09-09): <video enc="h.264" dec="H264" screen_width="0"
+		// screen_height="0">, sem <userrate/>, com <uploadfieldstat/> e
+		// <voip_settings>. Sem esses nós o WhatsApp encerra a videochamada.
+		offerContent = append(offerContent,
+			waBinary.Node{Tag: "uploadfieldstat"},
+			waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
+				"enc": "h.264", "dec": "H264", "device_orientation": "0",
+				"screen_width": "0", "screen_height": "0",
+			}},
+			waBinary.Node{Tag: "voip_settings", Attrs: waBinary.Attrs{"uncompressed": "1"}, Content: []byte("{}")},
+		)
 	}
 	offerContent = append(offerContent,
 		waBinary.Node{Tag: "net", Attrs: waBinary.Attrs{"medium": "3"}},
@@ -100,7 +111,16 @@ func BuildAcceptStanza(ctx context.Context, sock core.VoipSocket, callID string,
 		}
 	}
 	if isVideo {
-		acceptContent = append(acceptContent, waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{"enc": "vp8"}})
+		// Mesma forma do <offer> de vídeo Business: sem esses nós o WhatsApp
+		// aceita a chamada mas não abre o caminho de recepção de vídeo do outro lado.
+		acceptContent = append(acceptContent,
+			waBinary.Node{Tag: "uploadfieldstat"},
+			waBinary.Node{Tag: "video", Attrs: waBinary.Attrs{
+				"enc": "h.264", "dec": "H264", "device_orientation": "0",
+				"screen_width": "0", "screen_height": "0",
+			}},
+			waBinary.Node{Tag: "voip_settings", Attrs: waBinary.Attrs{"uncompressed": "1"}, Content: []byte("{}")},
+		)
 	}
 
 	return waBinary.Node{

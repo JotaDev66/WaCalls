@@ -22,6 +22,7 @@ type CallRecord struct {
 	Owner     *string    `json:"owner"`
 	Direction string     `json:"direction"`
 	Peer      string     `json:"peer"`
+	Media     string     `json:"media,omitempty"` // "audio" (default) or "video"
 	StartedAt int64      `json:"startedAt"`
 	Status    CallStatus `json:"status"`
 	EndedAt   *int64     `json:"endedAt,omitempty"`
@@ -116,7 +117,7 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.broadcastCallList()
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
-		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
+		"status": r.Status, "peer": r.Peer, "media": r.Media, "startedAt": r.StartedAt,
 	})
 }
 
@@ -193,9 +194,10 @@ func (b *Broker) broadcastCallList() {
 	b.broadcast(map[string]any{"type": "call-list", "calls": list})
 }
 
-func (b *Broker) emitIncoming(sessionID, id, peer string) {
+func (b *Broker) emitIncoming(sessionID, id, peer, media string) {
 	b.broadcast(map[string]any{
-		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer, "offeredAt": time.Now().UnixMilli(),
+		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer, "media": media,
+		"offeredAt": time.Now().UnixMilli(),
 	})
 }
 

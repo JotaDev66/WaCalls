@@ -57,6 +57,12 @@ type SctpRelayManager struct {
 	audioSsrc        uint32
 	subscriptionSsrc uint32
 
+	// Video SSRCs, zero unless this is a video call. When set they are added to
+	// the sender subscriptions and the allocate SSRC list so the relay both
+	// accepts our outbound video stream and forwards the peer's.
+	videoSsrc             uint32
+	videoSubscriptionSsrc uint32
+
 	onConnected func(ip string, port int)
 
 	onReceive func(data []byte)
@@ -75,6 +81,10 @@ func NewSctpRelayManager(log *slog.Logger) *SctpRelayManager {
 func (m *SctpRelayManager) SetSsrc(ssrc uint32) { m.audioSsrc = ssrc }
 
 func (m *SctpRelayManager) SetSubscriptionSsrc(ssrc uint32) { m.subscriptionSsrc = ssrc }
+
+func (m *SctpRelayManager) SetVideoSsrc(ssrc uint32) { m.videoSsrc = ssrc }
+
+func (m *SctpRelayManager) SetVideoSubscriptionSsrc(ssrc uint32) { m.videoSubscriptionSsrc = ssrc }
 
 func (m *SctpRelayManager) SetOnConnected(fn func(ip string, port int)) { m.onConnected = fn }
 
@@ -273,7 +283,7 @@ func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
 		if ssrc == 0 {
 			return
 		}
-		subs := BuildSenderSubscriptions(ssrc)
+		subs := BuildSenderSubscriptionsMulti(ssrc, m.videoSubscriptionSsrc)
 
 		if localUfrag != "" {
 			username := []byte(remoteUfrag + ":" + localUfrag)
@@ -288,9 +298,16 @@ func (m *SctpRelayManager) sendStunRegistration(conn *relayConnection) {
 		if len(info.RawToken) > 0 {
 			var peerSsrcs []uint32
 			if m.subscriptionSsrc != 0 {
-				peerSsrcs = []uint32{m.subscriptionSsrc}
+				peerSsrcs = append(peerSsrcs, m.subscriptionSsrc)
 			}
-			ssrcList := BuildSSRCSubscriptionList([]uint32{m.audioSsrc}, peerSsrcs, 0, 0)
+			if m.videoSubscriptionSsrc != 0 {
+				peerSsrcs = append(peerSsrcs, m.videoSubscriptionSsrc)
+			}
+			selfSsrcs := []uint32{m.audioSsrc}
+			if m.videoSsrc != 0 {
+				selfSsrcs = append(selfSsrcs, m.videoSsrc)
+			}
+			ssrcList := BuildSSRCSubscriptionList(selfSsrcs, peerSsrcs, 0, 0)
 			m.sendRaw(conn, BuildAllocateForRelay(info.RawToken, ssrcList, hmacKey, info.IP, info.Port))
 		}
 	}
@@ -428,6 +445,8 @@ func (m *SctpRelayManager) Cleanup() {
 	m.connections = map[string]*relayConnection{}
 	m.audioSsrc = 0
 	m.subscriptionSsrc = 0
+	m.videoSsrc = 0
+	m.videoSubscriptionSsrc = 0
 	m.mu.Unlock()
 	for _, c := range conns {
 		m.teardown(c)

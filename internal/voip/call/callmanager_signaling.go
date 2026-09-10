@@ -22,6 +22,9 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 		creator = peerJid.String()
 	}
 	isVideo := hasChildTag(info.InnerNode, "video")
+	if VideoDump {
+		m.log.Info("VDUMP offer", "call_id", callID, "is_video", isVideo, "from", peerJid.String(), "xml", node.String())
+	}
 
 	callKey, err := signaling.DecryptCallKeyInNode(ctx, m.sock, info.InnerNode, peerJid)
 	if err != nil {
@@ -236,6 +239,13 @@ func (m *CallManager) HandleCallAck(ctx context.Context, node *waBinary.Node) {
 		}
 		if peer := firstPeerDevice(parsed.ParticipantJids, ourBase); peer != "" {
 			m.peerSsrcs = []uint32{media.GenerateSecureSsrc(call.CallID, ensureDeviceJid(peer), 0)}
+		}
+		// Vídeo de saída: refina os SSRCs de vídeo a partir dos device JIDs
+		// também, do mesmo jeito que o áudio faz logo acima. Sem isto o plano de
+		// vídeo fica no SSRC derivado do JID "cru" em initVideoLocked e o
+		// WhatsApp descarta o nosso RTP de vídeo.
+		if call.MediaType == core.CallMediaTypeVideo {
+			m.refineVideoSsrcLocked(call.CallID, ourDeviceJid, firstPeerDevice(parsed.ParticipantJids, ourBase))
 		}
 		if call.EncryptionKey != nil {
 			m.initSrtpKeysLocked()

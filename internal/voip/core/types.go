@@ -41,6 +41,18 @@ const (
 
 const (
 	PayloadTypeWhatsAppOpus = 120
+
+	// A videochamada do WhatsApp é H264 — o <offer> de um cliente real carrega
+	// <video enc="h.264" dec="H264,H265,AV1" ...> (capturado em 2026-09-09). O PT
+	// 97 espelha a branch upstream feat/video-calls; o VP8 (PT 96) fica só pelo
+	// rtpvp8.go (agora sem uso).
+	PayloadTypeWhatsAppVP8  = 96
+	PayloadTypeWhatsAppH264 = 97
+	WAVideoClockRate        = 90000
+
+	// VideoSsrcCounter is the stream index passed to GenerateSecureSsrc for the
+	// video stream (audio uses 0). Also provisional.
+	VideoSsrcCounter = 1
 )
 
 const (
