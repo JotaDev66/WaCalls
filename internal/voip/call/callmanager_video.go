@@ -1,6 +1,8 @@
 package call
 
 import (
+	"time"
+
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/media"
 )
@@ -58,7 +60,10 @@ func (m *CallManager) FeedCapturedVideo(f media.VideoFrame) {
 		return
 	}
 	ts := media.VideoTimestamp(f.TimestampMS)
+	m.lastVideoTxTS = ts
+	m.lastVideoTxWall = time.Now()
 	pkts := m.h264Pay.Packetize(f.Data, ts)
+	m.countVideoTxLocked(pkts)
 	if VideoDump {
 		m.dumpOutboundPackets(pkts, f.Data, f.Keyframe)
 	}
@@ -86,6 +91,9 @@ func (m *CallManager) deliverPeerVideo(srtp *media.SrtpSession, depay *media.H26
 		return
 	}
 	rot, _ := media.CVORotationDegrees(pkt.Header)
+	m.mu.Lock()
+	m.countVideoRxLocked(pkt.Header.SequenceNumber)
+	m.mu.Unlock()
 	frame, keyframe, ok := depay.Push(pkt)
 	if !ok {
 		return
@@ -106,8 +114,15 @@ func (m *CallManager) deliverPeerVideo(srtp *media.SrtpSession, depay *media.H26
 // cleanupVideoLocked descarta o plano de vídeo. Chamada com m.mu travado a
 // partir de cleanupMedia.
 func (m *CallManager) cleanupVideoLocked() {
+	m.stopVideoRtcpLocked()
 	m.selfVideoSsrc = 0
 	m.peerVideoSsrc = 0
 	m.h264Pay = nil
 	m.h264Depay = nil
+	m.srtcpSend = nil
+	m.srtcpRecv = nil
+	m.videoTxPkts = 0
+	m.videoTxOctets = 0
+	m.videoRxPkts = 0
+	m.videoRxHighSeq = 0
 }

@@ -38,6 +38,20 @@ type CallManager struct {
 	h264Pay       *media.H264Payloader
 	h264Depay     *media.H264Depacketizer
 
+	// Plano de RTCP/SRTCP para vídeo (SR/RR/REMB) — o WhatsApp roda estimativa
+	// de banda e não sustenta o vídeo sem esse retorno. Ver callmanager_rtcp.go.
+	srtcpSend      *media.SrtcpContext
+	srtcpRecv      *media.SrtcpContext
+	rtcpStop       chan struct{}
+	videoTxPkts    uint32
+	videoTxOctets  uint32
+	videoRxPkts    uint32
+	videoRxHighSeq uint32
+	// último RTP timestamp de vídeo que mandamos + quando, para extrapolar o
+	// RTP timestamp do Sender Report (RFC 3550: precisa corresponder ao stream).
+	lastVideoTxTS   uint32
+	lastVideoTxWall time.Time
+
 	firstPacketSent       bool
 	initialTransportSent  bool
 	outgoingPreacceptSent bool

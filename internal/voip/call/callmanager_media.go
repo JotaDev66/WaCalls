@@ -77,6 +77,9 @@ func (m *CallManager) sendOpusFrameLocked(opus []byte) {
 }
 
 func (m *CallManager) startSilenceKeepaliveLocked() {
+	if m.h264Pay != nil {
+		m.startVideoRtcpLocked()
+	}
 	if m.keepaliveStop != nil || m.codec == nil {
 		return
 	}
@@ -108,6 +111,10 @@ func (m *CallManager) startSilenceKeepaliveLocked() {
 
 func (m *CallManager) onRelayData(data []byte) {
 	if transport.IsStunPacket(data) {
+		return
+	}
+	if media.IsRTCP(data) {
+		m.handleInboundRtcp(data)
 		return
 	}
 	if VideoDump {
