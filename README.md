@@ -11,7 +11,7 @@ Built for native VoIP media, multi-account (multi-session) operation, and a mode
 [![pion](https://img.shields.io/badge/pion-WebRTC-FF6B6B)](https://github.com/pion/webrtc)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
 
-[Overview](#overview) · [Architecture](#architecture) · [Quick Start](#quick-start) · [API](#api) · [Security](#security)
+[Overview](#overview) · [Architecture](#architecture) · [Video calls](#video-calls-experimental) · [Quick Start](#quick-start) · [API](#api) · [Security](#security)
 
 </div>
 
@@ -35,9 +35,15 @@ Multiple WhatsApp accounts can be paired and operated side by side, each with it
 pairing QR, connection status, and history. A single account can also run **several
 concurrent 1:1 calls** at once — one per browser operator — routed independently by call ID.
 
-> **Status:** stable. Outgoing and incoming 1:1 calls reach `ACTIVE` with bidirectional
-> audio, and a single account can hold several of them concurrently. Sessions persist in
-> `wacalls.db` (pure-Go SQLite).
+**Video calls** are supported end to end for the **inbound** direction (the peer's H264
+video is decoded and shown in the browser); see [Video calls](#video-calls-experimental)
+for the current state of the outbound direction.
+
+> **Status:** voice is stable — outgoing and incoming 1:1 calls reach `ACTIVE` with
+> bidirectional audio, and a single account can hold several concurrently. Video RX and
+> call stability are working; video TX (browser → peer) still isn't rendered by WhatsApp
+> — see [Video calls](#video-calls-experimental). Sessions persist in `wacalls.db`
+> (pure-Go SQLite).
 
 ---
 
@@ -115,6 +121,35 @@ by tests in `internal/voip` (`go test ./...`).
 
 ---
 
+## Video calls (experimental)
+
+A video call adds a second **`vp8` data channel** between the browser and the Go server
+(the label is historical — the payload is **H264**). The browser owns the codec via
+**WebCodecs** (`VideoEncoder`/`VideoDecoder`, Annex-B, `avc1.42E01F`); the Go side only
+packetizes each access unit into RTP (`PT=97`, FU-A/STAP-A, `internal/voip/media/rtph264.go`)
+and hands inbound frames back for display.
+
+- **Signaling** (`internal/voip/signaling`): the `<offer>`/`<accept>` carry
+  `<video enc="h.264" dec="H264">` plus the `<capability>`, `<voip_settings>` and
+  `<uploadfieldstat/>` nodes a real WhatsApp Business client sends.
+- **RTP header extension**: every video packet carries the 4-element `0xDEBE` block a real
+  client uses (CVO orientation + a transport-wide sequence counter).
+- **RTCP / bandwidth estimation** (`internal/voip/call/callmanager_rtcp.go`,
+  `internal/voip/media/{rtcp,srtcp}.go`): an SR/RR/REMB compound is sent over SRTCP once a
+  second. Without it WhatsApp tears the video call down after ~7 s; with it the call is
+  stable.
+
+**Working:** inbound video (peer → browser), decoded and shown with the correct
+orientation; call stability.
+
+**Not working yet:** outbound video (browser → peer) is packetized and reaches WhatsApp
+(it NACKs our packets), but the peer does not render it. The two missing pieces are
+retransmission of NACKed packets (RTX) and fully decoding WhatsApp's non-standard
+("fast") inbound RTCP. Run the server with `-video-dump` to log the RTP/RTCP of both
+directions for comparison.
+
+---
+
 ## Requirements
 
 - **Go 1.26+**
@@ -175,6 +210,7 @@ go run ./cmd/server -static client/dist -addr :8080
 | `-static` | `client/dist` | Static client directory (optional) |
 | `-debug` | `false` | Verbose logging (includes whatsmeow's internal log) |
 | `-max-calls-per-session` | `8` | Max concurrent calls per session (`0` = unlimited) |
+| `-video-dump` | `false` | Log the RTP/RTCP of video calls in detail (debugging outbound video) |
 
 ---
 
