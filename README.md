@@ -266,8 +266,9 @@ Este projeto é construído sobre o trabalho de:
 <a href="https://github.com/jobasfernandes"><img src="https://github.com/jobasfernandes.png" width="72" height="72" style="border-radius:50%" alt="jobasfernandes"/></a>
 <a href="https://github.com/edgardmessias"><img src="https://github.com/edgardmessias.png" width="72" height="72" style="border-radius:50%" alt="edgardmessias"/></a>
 <a href="https://github.com/w3nder"><img src="https://github.com/w3nder.png" width="72" height="72" style="border-radius:50%" alt="w3nder"/></a>
+<a href="https://github.com/fabriciosprj"><img src="https://github.com/fabriciosprj.png" width="72" height="72" style="border-radius:50%" alt="fabriciosprj"/></a>
 
-[**@jotadev66**](https://github.com/jotadev66) · [**@jobasfernandes**](https://github.com/jobasfernandes) · [**@edgardmessias**](https://github.com/edgardmessias) · [**@w3nder**](https://github.com/w3nder)
+[**@jotadev66**](https://github.com/jotadev66) · [**@jobasfernandes**](https://github.com/jobasfernandes) · [**@edgardmessias**](https://github.com/edgardmessias) · [**@w3nder**](https://github.com/w3nder) · [**@fabriciosprj**](https://github.com/fabriciosprj) *(videochamada H264)*
 
 </div>
 
