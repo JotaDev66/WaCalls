@@ -56,7 +56,7 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 			br.videoDC.Store(dc)
 			dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 				cb := br.OnBrowserVideo
-				if cb == nil {
+				if cb == nil || media.IsVideoKeyframeRequest(msg.Data) {
 					return
 				}
 				if f, ok := media.DecodeVideoFrame(msg.Data); ok {
@@ -113,6 +113,17 @@ func (b *Bridge) WriteVideo(f media.VideoFrame) error {
 		return nil
 	}
 	return dc.Send(media.EncodeVideoFrame(f))
+}
+
+// RequestKeyframe asks the browser to emit an immediate keyframe, over the same
+// "vp8" data channel as a 1-byte control message. Fired when the peer sends a
+// RTCP PLI/FIR. No-op until the channel is open.
+func (b *Bridge) RequestKeyframe() error {
+	dc := b.videoDC.Load()
+	if dc == nil {
+		return nil
+	}
+	return dc.Send(media.VideoKeyframeRequestMsg())
 }
 
 func (b *Bridge) Close() {

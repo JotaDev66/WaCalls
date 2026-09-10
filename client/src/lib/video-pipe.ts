@@ -26,6 +26,9 @@ export type VideoPipe = {
   remoteStream: MediaStream;
   // pushEncodedFrame entrega uma mensagem do data channel "vp8" ao decoder.
   pushEncodedFrame: (msg: ArrayBuffer) => void;
+  // requestKeyframe força o próximo quadro capturado a ser um keyframe. Chamado
+  // quando o servidor repassa um PLI/FIR do peer pelo canal "vp8".
+  requestKeyframe: () => void;
   close: () => void;
 };
 
@@ -112,6 +115,9 @@ export const startVideoPipe = async ({ camDeviceId, onEncoded }: StartOpts): Pro
   });
 
   let lastKeyframeAt = 0;
+  // Pedido de keyframe fora de hora (PLI/FIR do peer, repassado pelo servidor):
+  // o próximo quadro capturado vira keyframe, independente do intervalo fixo.
+  let forceKeyframe = false;
   // Loop de captura por setInterval em vez de requestVideoFrameCallback: o rvfc
   // num <video> fora do DOM às vezes trava no Chrome e a câmera nunca é
   // codificada. O interval dispara sempre.
@@ -124,8 +130,12 @@ export const startVideoPipe = async ({ camDeviceId, onEncoded }: StartOpts): Pro
       scaleCtx.drawImage(captureEl, 0, 0, encW, encH);
       frame = new VideoFrame(scaleCanvas, { timestamp: Math.round(performance.now() * 1000) });
       const now = performance.now();
-      const keyFrame = lastKeyframeAt === 0 || now - lastKeyframeAt >= VIDEO_KEYFRAME_INTERVAL_MS;
-      if (keyFrame) lastKeyframeAt = now;
+      const keyFrame =
+        forceKeyframe || lastKeyframeAt === 0 || now - lastKeyframeAt >= VIDEO_KEYFRAME_INTERVAL_MS;
+      if (keyFrame) {
+        lastKeyframeAt = now;
+        forceKeyframe = false;
+      }
       encoder.encode(frame, { keyFrame });
     } catch (e) {
       console.error("[video] falha ao codificar", e);
@@ -226,5 +236,9 @@ export const startVideoPipe = async ({ camDeviceId, onEncoded }: StartOpts): Pro
     } catch {}
   };
 
-  return { localStream, remoteStream, pushEncodedFrame, close };
+  const requestKeyframe = (): void => {
+    forceKeyframe = true;
+  };
+
+  return { localStream, remoteStream, pushEncodedFrame, requestKeyframe, close };
 };

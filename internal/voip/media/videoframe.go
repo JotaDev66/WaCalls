@@ -60,6 +60,21 @@ func EncodeVideoFrame(f VideoFrame) []byte {
 	return out
 }
 
+// videoCtlKeyframeRequest é o corpo de uma mensagem de controle no data channel
+// "vp8" (server → browser) pedindo um keyframe imediato — disparada por um
+// RTCP PLI/FIR do peer. Toda mensagem de quadro tem >= videoFrameHeaderLen (5)
+// bytes, então uma mensagem de exatamente 1 byte nunca é confundida com quadro.
+const videoCtlKeyframeRequest = 0x01
+
+// VideoKeyframeRequestMsg devolve o corpo da mensagem de controle "manda um
+// keyframe agora" para o data channel "vp8".
+func VideoKeyframeRequestMsg() []byte { return []byte{videoCtlKeyframeRequest} }
+
+// IsVideoKeyframeRequest reconhece a mensagem de controle de pedido de keyframe.
+func IsVideoKeyframeRequest(b []byte) bool {
+	return len(b) == 1 && b[0] == videoCtlKeyframeRequest
+}
+
 // DecodeVideoFrame faz o parse de uma mensagem do data channel. ok é false
 // quando a mensagem é curta demais para o cabeçalho.
 func DecodeVideoFrame(b []byte) (f VideoFrame, ok bool) {

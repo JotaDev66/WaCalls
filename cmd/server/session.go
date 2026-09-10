@@ -102,6 +102,13 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		}
 		_ = ac.bridge.WriteVideo(f)
 	}
+	cm.OnKeyframeRequest = func() {
+		ac, ok := s.reg.get(callID)
+		if !ok || ac.bridge == nil {
+			return
+		}
+		_ = ac.bridge.RequestKeyframe()
+	}
 }
 
 // mediaKind returns "video" for a video call and "audio" otherwise, for the

@@ -24,6 +24,13 @@ export const VIDEO_BITRATE = 600_000;
 // the "vp8" data channel's SCTP maxMessageSize (which silently drops the send).
 export const VIDEO_MAX_EDGE = 640;
 
-// There is no PLI / keyframe-request back channel, so we just force a keyframe on
-// the first frame and then on this fixed interval.
+// Keyframe on the first frame and then on this fixed interval. Além disso, o
+// servidor pode pedir um keyframe fora de hora (ver VIDEO_CTL_KEYFRAME_REQUEST)
+// quando o WhatsApp manda um RTCP PLI/FIR.
 export const VIDEO_KEYFRAME_INTERVAL_MS = 2000;
+
+// Mensagem de controle de 1 byte no canal "vp8" (server → browser): "manda um
+// keyframe agora". Um quadro real sempre tem >= 5 bytes, então nunca há
+// ambiguidade. Espelha videoCtlKeyframeRequest em
+// internal/voip/media/videoframe.go.
+export const VIDEO_CTL_KEYFRAME_REQUEST = 0x01;

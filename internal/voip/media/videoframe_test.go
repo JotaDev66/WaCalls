@@ -37,3 +37,19 @@ func TestDecodeVideoFrameTooShort(t *testing.T) {
 		t.Fatal("a message shorter than the header must not decode")
 	}
 }
+
+func TestVideoKeyframeRequestMsg(t *testing.T) {
+	msg := VideoKeyframeRequestMsg()
+	if !IsVideoKeyframeRequest(msg) {
+		t.Fatal("a mensagem de pedido de keyframe devia ser reconhecida")
+	}
+	// Não pode ser confundida com um quadro real.
+	if _, ok := DecodeVideoFrame(msg); ok {
+		t.Fatal("o pedido de keyframe não pode decodificar como quadro")
+	}
+	// Um quadro real (>= 5 bytes) não é um pedido de keyframe.
+	frame := EncodeVideoFrame(VideoFrame{Keyframe: true, Data: []byte{9}})
+	if IsVideoKeyframeRequest(frame) {
+		t.Fatal("um quadro não é pedido de keyframe")
+	}
+}

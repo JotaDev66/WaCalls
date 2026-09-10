@@ -8,7 +8,7 @@ import {
   PLAYBACK_WORKLET_URL,
   SAMPLE_RATE,
 } from "../constants/audio";
-import { VIDEO_CHANNEL_LABEL } from "../constants/video";
+import { VIDEO_CHANNEL_LABEL, VIDEO_CTL_KEYFRAME_REQUEST } from "../constants/video";
 import { startVideoPipe, videoCallSupported, type VideoPipe } from "./video-pipe";
 
 export type OpenCall = {
@@ -68,7 +68,14 @@ export const openCall = async (
         },
       });
       const pipe = videoPipe;
-      videoDc.onmessage = (e: MessageEvent<ArrayBuffer>) => pipe.pushEncodedFrame(e.data);
+      videoDc.onmessage = (e: MessageEvent<ArrayBuffer>) => {
+        // Mensagem de controle de 1 byte: pedido de keyframe (PLI/FIR do peer).
+        if (e.data.byteLength === 1 && new Uint8Array(e.data)[0] === VIDEO_CTL_KEYFRAME_REQUEST) {
+          pipe.requestKeyframe();
+          return;
+        }
+        pipe.pushEncodedFrame(e.data);
+      };
     } catch (err) {
       micStream.getTracks().forEach((t) => t.stop());
       pc.close();
