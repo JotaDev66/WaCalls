@@ -52,6 +52,43 @@ func TestSrtcpRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSrtcpUnprotectRejectsTamperedTag(t *testing.T) {
+	km, err := DerivePerJidSrtpKey(make([]byte, 32), "dev:0@s.whatsapp.net")
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	send, err := NewSrtcpContext(km, core.SRTPSendAuthTagLen)
+	if err != nil {
+		t.Fatalf("send ctx: %v", err)
+	}
+	recv, err := NewSrtcpContext(km, core.SRTPRecvAuthTagLen)
+	if err != nil {
+		t.Fatalf("recv ctx: %v", err)
+	}
+
+	compound := append(BuildSenderReport(0xAABBCCDD, 12345, 10, 4000),
+		BuildREMB(0xAABBCCDD, 0x11223344, 900_000)...)
+
+	enc, err := send.Protect(compound)
+	if err != nil {
+		t.Fatalf("protect: %v", err)
+	}
+
+	tampered := append([]byte(nil), enc...)
+	tampered[len(tampered)-1] ^= 0xFF
+
+	if _, err := recv.Unprotect(tampered); err == nil {
+		t.Fatal("Unprotect must reject a packet with a tampered auth tag")
+	}
+
+	// UnprotectWithSSRC is the diagnostic bypass and must NOT verify the
+	// tag — it should still "succeed" (decrypt to garbage, no auth error)
+	// even on the tampered packet, by design.
+	if _, err := recv.UnprotectWithSSRC(tampered, 0, false); err != nil {
+		t.Fatalf("UnprotectWithSSRC must not enforce auth (diagnostic bypass), got: %v", err)
+	}
+}
+
 func TestBuildREMBBitrate(t *testing.T) {
 	// 1.5 Mbps deve caber e reconstruir aproximadamente.
 	b := BuildREMB(1, 2, 1_500_000)

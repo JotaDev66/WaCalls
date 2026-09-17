@@ -141,10 +141,28 @@ func (c *SrtcpContext) Protect(rtcp []byte) ([]byte, error) {
 	return out, nil
 }
 
-// Unprotect descifra um SRTCP e devolve o pacote RTCP composto em claro. Não
-// valida o tag de auth (o transporte já é confiável); só descifra.
+// Unprotect descifra um SRTCP e devolve o pacote RTCP composto em claro,
+// validando o tag de autenticação primeiro (rejeita se não bater).
+// UnprotectWithSSRC continua sem essa checagem — é ferramenta de
+// diagnóstico (-video-dump) que testa SSRCs candidatos de propósito.
 func (c *SrtcpContext) Unprotect(data []byte) ([]byte, error) {
+	if err := c.verifyAuthTag(data); err != nil {
+		return nil, err
+	}
 	return c.UnprotectWithSSRC(data, 0, false)
+}
+
+func (c *SrtcpContext) verifyAuthTag(data []byte) error {
+	if len(data) < c.authTagLen {
+		return errors.New("srtcp: pacote curto demais pro tag")
+	}
+	body := data[:len(data)-c.authTagLen]
+	wantTag := data[len(data)-c.authTagLen:]
+	gotTag := hmacSha1Trunc(c.authKey, body, c.authTagLen)
+	if !hmac.Equal(gotTag, wantTag) {
+		return errors.New("srtcp: auth tag inválido")
+	}
+	return nil
 }
 
 // UnprotectWithSSRC é igual a Unprotect, mas permite forçar o SSRC usado na

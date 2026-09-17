@@ -110,6 +110,16 @@ func (c *SrtpContext) Unprotect(data []byte) (*RtpPacket, error) {
 	}
 
 	c.updateRoc(header.SequenceNumber)
+
+	if c.authTagLen > 0 {
+		authData := data[:headerSize+payloadLen]
+		wantTag := data[headerSize+payloadLen:]
+		gotTag := c.computeAuthTag(authData, c.roc, c.authTagLen)
+		if !hmac.Equal(gotTag, wantTag) {
+			return nil, &SrtpError{SrtpErrAuthFailed, "auth tag mismatch"}
+		}
+	}
+
 	index := c.packetIndex(header.SequenceNumber)
 
 	iv := c.generateIV(header.Ssrc, index)
