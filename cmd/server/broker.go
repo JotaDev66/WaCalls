@@ -49,18 +49,20 @@ type subscriber struct {
 }
 
 type Broker struct {
-	mu      sync.RWMutex
-	subs    map[*subscriber]struct{}
-	calls   map[string]*CallRecord
-	history []CallRecord
+	mu       sync.RWMutex
+	subs     map[*subscriber]struct{}
+	calls    map[string]*CallRecord
+	reserved map[string]struct{} // owner -> in-flight outbound-call reservation
+	history  []CallRecord
 
 	SnapshotFn func() []any
 }
 
 func NewBroker() *Broker {
 	return &Broker{
-		subs:  map[*subscriber]struct{}{},
-		calls: map[string]*CallRecord{},
+		subs:     map[*subscriber]struct{}{},
+		calls:    map[string]*CallRecord{},
+		reserved: map[string]struct{}{},
 	}
 }
 
@@ -158,6 +160,34 @@ func (b *Broker) ownerActiveCall(owner string) string {
 		}
 	}
 	return ""
+}
+
+// tryReserveOwner atomically checks that owner has no active call and no
+// in-flight reservation, and if so reserves owner for an outbound call
+// being started. Call releaseReservation(owner) exactly once, however the
+// attempt ends (success or failure).
+func (b *Broker) tryReserveOwner(owner string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if owner == "" {
+		return false
+	}
+	if _, reserved := b.reserved[owner]; reserved {
+		return false
+	}
+	for _, c := range b.calls {
+		if c.Owner != nil && *c.Owner == owner && c.Status != StatusEnded {
+			return false
+		}
+	}
+	b.reserved[owner] = struct{}{}
+	return true
+}
+
+func (b *Broker) releaseReservation(owner string) {
+	b.mu.Lock()
+	delete(b.reserved, owner)
+	b.mu.Unlock()
 }
 
 func (b *Broker) endCall(id, reason string) {

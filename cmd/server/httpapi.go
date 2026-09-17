@@ -174,10 +174,12 @@ func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Reque
 		return
 	}
 	owner := clientID(r)
-	if other := s.broker.ownerActiveCall(owner); other != "" {
+	if !s.broker.tryReserveOwner(owner) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "operator already on a call"})
 		return
 	}
+	defer s.broker.releaseReservation(owner)
+
 	if max := s.sessions.maxCalls; max > 0 && sess.reg.count() >= max {
 		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": "max concurrent calls"})
 		return
