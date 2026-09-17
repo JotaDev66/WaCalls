@@ -62,6 +62,18 @@ func (r *callRegistry) setBridge(callID string, b *Bridge) (*Bridge, bool) {
 	return oldB, true
 }
 
+// bridge returns the call's current bridge under the registry lock, safe
+// to call concurrently with setBridge.
+func (r *callRegistry) bridge(callID string) (*Bridge, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ac, ok := r.calls[callID]
+	if !ok || ac.bridge == nil {
+		return nil, false
+	}
+	return ac.bridge, true
+}
+
 func (r *callRegistry) drain() []*activeCall {
 	r.mu.Lock()
 	defer r.mu.Unlock()

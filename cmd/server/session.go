@@ -89,25 +89,25 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+		b, ok := s.reg.bridge(callID)
+		if !ok {
 			return
 		}
-		_ = ac.bridge.WritePCM(pcm16)
+		_ = b.WritePCM(pcm16)
 	}
 	cm.OnPeerVideo = func(f media.VideoFrame) {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+		b, ok := s.reg.bridge(callID)
+		if !ok {
 			return
 		}
-		_ = ac.bridge.WriteVideo(f)
+		_ = b.WriteVideo(f)
 	}
 	cm.OnKeyframeRequest = func() {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+		b, ok := s.reg.bridge(callID)
+		if !ok {
 			return
 		}
-		_ = ac.bridge.RequestKeyframe()
+		_ = b.RequestKeyframe()
 	}
 }
 
