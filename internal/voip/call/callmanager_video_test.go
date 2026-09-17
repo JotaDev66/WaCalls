@@ -143,6 +143,13 @@ func TestVideoNackRetransmit(t *testing.T) {
 	if len(fr.sent) != sentBefore {
 		t.Error("seq desconhecido não devia reenviar nada")
 	}
+
+	// Um NACK que não é do nosso SSRC de vídeo não deve reenviar nada.
+	sentBefore = len(fr.sent)
+	m.handleVideoNack(m.selfVideoSsrc+1, []uint16{seqOf(first)}, m.selfVideoSsrc)
+	if len(fr.sent) != sentBefore {
+		t.Error("NACK com SSRC diferente do nosso não devia reenviar nada")
+	}
 }
 
 // TestInboundPliRequestsKeyframe prova que um RTCP PLI de entrada (decifrado

@@ -158,6 +158,13 @@ func (m *CallManager) handleVideoNack(mediaSSRC uint32, seqs []uint16, selfV uin
 	if hist == nil || len(seqs) == 0 {
 		return
 	}
+	if mediaSSRC != selfV {
+		if VideoDump {
+			m.log.Info("VDUMP rx-rtcp NACK ignorado (SSRC não é nosso vídeo)",
+				"media_ssrc", mediaSSRC, "self_video_ssrc", selfV)
+		}
+		return
+	}
 
 	var resent, missing int
 	for _, seq := range seqs {
