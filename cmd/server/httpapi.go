@@ -64,6 +64,16 @@ func clientID(r *http.Request) string {
 	return r.URL.Query().Get("clientId")
 }
 
+// callOwnerAllows reports whether owner may act on call id: true if the call
+// is unclaimed (Owner == nil) or owner is the current owner.
+func (s *server) callOwnerAllows(id, owner string) bool {
+	rec, ok := s.broker.getCall(id)
+	if !ok {
+		return true // no record yet; let the per-endpoint 404 handle it
+	}
+	return rec.Owner == nil || *rec.Owner == owner
+}
+
 func (s *server) sessionByID(w http.ResponseWriter, sid string) *Session {
 	sess, ok := s.sessions.Get(sid)
 	if !ok {
@@ -209,6 +219,11 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such call"})
 		return
 	}
+	owner := clientID(r)
+	if !s.callOwnerAllows(callID, owner) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "call claimed by another client"})
+		return
+	}
 	var body struct {
 		SDPOffer string `json:"sdp_offer"`
 	}
@@ -261,6 +276,11 @@ func (s *server) doAccept(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	owner := clientID(r)
+	if !s.callOwnerAllows(id, owner) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "call claimed by another client"})
+		return
+	}
 	if ac, ok := sess.reg.get(id); ok {
 		_ = ac.cm.RejectCall(r.Context(), id, core.EndCallReasonDeclined)
 	}
@@ -271,6 +291,11 @@ func (s *server) doReject(sess *Session, w http.ResponseWriter, r *http.Request)
 
 func (s *server) doEndCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	owner := clientID(r)
+	if !s.callOwnerAllows(id, owner) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "call claimed by another client"})
+		return
+	}
 	if ac, ok := sess.reg.get(id); ok {
 		_ = ac.cm.EndCall(r.Context(), core.EndCallReasonUserEnded)
 	}
