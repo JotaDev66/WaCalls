@@ -7,11 +7,11 @@ Feito para mídia VoIP nativa, operação multi-conta (multi-sessão) e um clien
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
-[![whatsmeow](https://img.shields.io/badge/whatsmeow-VoIP-25D366?logo=whatsapp&logoColor=white)](https://github.com/tulir/whatsmeow)
+[![meowcaller](https://img.shields.io/badge/meowcaller-VoIP-25D366?logo=whatsapp&logoColor=white)](https://github.com/purpshell/meowcaller)
 [![pion](https://img.shields.io/badge/pion-WebRTC-FF6B6B)](https://github.com/pion/webrtc)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](#licença)
 
-[Visão geral](#visão-geral) · [Arquitetura](#arquitetura) · [Videochamada](#videochamada-experimental) · [Início rápido](#início-rápido) · [API](#api) · [Segurança](#segurança)
+[Visão geral](#visão-geral) · [Arquitetura](#arquitetura) · [Videochamada](#videochamada) · [Recursos de chamada](#recursos-de-chamada) · [Início rápido](#início-rápido) · [API](#api) · [Segurança](#segurança)
 
 </div>
 
@@ -20,32 +20,34 @@ Feito para mídia VoIP nativa, operação multi-conta (multi-sessão) e um clien
 ## Visão geral
 
 O WaCalls pareia uma ou mais contas do WhatsApp via **QR code** e permite **fazer e
-receber chamadas 1:1** de qualquer navegador na LAN. O microfone do navegador é enviado
-como **PCM cru de 16 kHz por um data channel WebRTC** para o servidor Go, que codifica
-com o codec **MLow** da Meta e injeta a mídia na malha de **relay SRTP** do WhatsApp — e
-o caminho inverso traz o áudio do outro lado de volta ao navegador.
+receber chamadas de voz e vídeo** de qualquer navegador na LAN — 1:1, em grupo, com
+reações, mão levantada, hold/transferência e handoff entre agentes. O microfone (e,
+numa chamada de vídeo, a câmera) do navegador é enviado por **data channels WebRTC**
+para o servidor Go, que repassa a mídia pro [**meowcaller**](https://github.com/purpshell/meowcaller)
+— uma biblioteca de chamadas VoIP construída sobre o [**HyperMeow**](https://github.com/polymorfa/hypermeow)
+(um fork do protocolo WhatsApp Web) — e o caminho inverso traz áudio/vídeo do outro lado
+de volta ao navegador.
 
-Toda a stack VoIP roda **nativamente em Go puro**: o codec de voz MLow, a packetização
-**RTP/SRTP**, o **STUN**, o transporte **WebRTC/SCTP relay** e a sinalização `<call>`,
-integrados com o [**whatsmeow**](https://github.com/tulir/whatsmeow) e servidos a um
-cliente **React 19**. **Sem cgo e sem DLL nativa** — o codec MLow é um pacote Go puro
-vendorizado, então um `go build` simples produz um binário self-contained com áudio ao
-vivo.
+O servidor Go fica fino: `cmd/server` cuida do broker HTTP/SSE, do gerenciamento de
+sessões e da ponte WebRTC (pion) entre o navegador e a `Call` do meowcaller — toda a
+sinalização `<call>`, codec, SRTP/RTP e negociação de relay do WhatsApp ficam dentro do
+meowcaller/HyperMeow como dependência Go. Cliente **React 19**.
 
 Várias contas do WhatsApp podem ser pareadas e operadas lado a lado, cada uma com o
 próprio QR de pareamento, status de conexão e histórico. Uma mesma conta também pode
-rodar **várias chamadas 1:1 simultâneas** — uma por operador de navegador — roteadas de
-forma independente pelo call ID.
+rodar **várias chamadas simultâneas** — uma por operador de navegador — roteadas de
+forma independente pelo call ID, com suporte a hold, transferência cega e handoff de
+bridge entre agentes (ver [Recursos de chamada](#recursos-de-chamada)).
 
-**Videochamada** funciona de ponta a ponta no sentido de **entrada** (o vídeo H264 do
-outro lado é decodificado e mostrado no navegador); veja
-[Videochamada](#videochamada-experimental) para o estado atual do sentido de saída.
+**Videochamada** funciona de ponta a ponta nos dois sentidos — entrada e saída — desde
+que o quadro repassado ao navegador carregue um `Keyframe`/`TimestampMS` corretos
+(ver [Videochamada](#videochamada)).
 
-> **Estado:** a voz é estável — chamadas 1:1 de saída e de entrada chegam a `ACTIVE` com
-> áudio bidirecional, e uma conta segura várias simultâneas. A entrada de vídeo e a
-> estabilidade da chamada funcionam; o vídeo de saída (navegador → outro lado) ainda não
-> é renderizado pelo WhatsApp — veja [Videochamada](#videochamada-experimental). As
-> sessões persistem em `wacalls.db` (SQLite Go puro).
+> **Estado:** voz e vídeo são estáveis nos dois sentidos, 1:1 e em grupo. Reações
+> (emoji ou texto livre), mão levantada, hold/unhold, transferência cega com fallback
+> automático e handoff de chamada entre agentes (pickup) estão implementados —
+> ver [Recursos de chamada](#recursos-de-chamada) pro que já foi validado ao vivo vs.
+> só revisado em código. As sessões persistem em `wacalls.db` (SQLite Go puro).
 
 ---
 
@@ -54,102 +56,114 @@ outro lado é decodificado e mostrado no navegador); veja
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │                          NAVEGADOR (cliente React)                         │
-│   mic + alto-falante  ·  data channel WebRTC (PCM 16 kHz)  ·  HTTP + SSE    │
+│  mic + câmera + alto-falante  ·  data channels WebRTC (PCM/H264)  ·  SSE   │
 └───────────────────────────────┬──────────────────────────────────────────┘
                                  │  POST /api/sessions/{sid}/calls/{id}/webrtc  (SDP)
                                  │  GET  /api/events                            (SSE)
                                  ▼
 ┌──────────────────────────── SERVIDOR GO (cmd/server) ──────────────────────┐
-│  SessionManager   registro de contas (client + CallManager + bridge)       │
+│  SessionManager   registro de contas (client whatsmeow/hypermeow + meow)   │
 │  Broker           hub de SSE (sessões, auth, ciclo de vida da chamada)      │
-│  Bridge           ponte WebRTC pion (data channel PCM 16 kHz ⇄ núcleo)      │
-│                                                                            │
-│  internal/wa      adaptador VoipSocket sobre o whatsmeow                   │
-│  internal/voip    call · signaling · media · transport · core · wanode     │
-└───────────────┬──────────────────────────────────────┬────────────────────┘
-                │ sinalização <call> (Signal/USync)     │ mídia SRTP
-                ▼                                        ▼
-        ┌───────────────┐                    ┌──────────────────────┐
-        │  WhatsApp WS  │                    │   relay do WhatsApp   │
-        │  (whatsmeow)  │                    │  (SRTP sobre SCTP/DC) │
-        └───────────────┘                    └──────────────────────┘
+│  Bridge           ponte WebRTC pion (data channels ⇄ meowcaller.Call)       │
+│  callRegistry     chamadas ativas por sessão (Call + AudioSource + bridge) │
+└───────────────────────────────┬──────────────────────────────────────────┘
+                                 │ meowcaller.Client (Call/AddParticipant/
+                                 │ SendReaction/SetHandRaised/Hold/Transfer…)
+                                 ▼
+                    ┌──────────────────────────────┐
+                    │   meowcaller (sobre HyperMeow) │
+                    │  sinalização <call>, SRTP/RTP,  │
+                    │  relay SCTP, codec — tudo como  │
+                    │  dependência Go                 │
+                    └──────────────────────────────┘
 ```
+
+`internal/voip/*` era o motor de chamada feito à mão (RTP/SRTP/MLow/sinalização sobre
+whatsmeow) que o WaCalls usava antes de migrar pro meowcaller. O código ainda está no
+repo e passa em `go test ./...`, mas **não está mais no caminho servido** por
+`cmd/server` — ver `.ai/known-issues.md` pro histórico da migração.
 
 ### Layout
 
 | Caminho | Responsabilidade |
 |---|---|
-| `cmd/server` | broker HTTP/SSE, gerenciador de sessões + store, ponte WebRTC, ciclo de vida do processo |
-| `internal/wa` | `VoipSocket` — envia/recebe stanzas `<call>` via whatsmeow |
-| `internal/voip/core` | tipos de domínio, constantes, a interface `VoipSocket` |
-| `internal/voip/wanode` | helpers compartilhados de nó do WhatsApp e JID |
-| `internal/voip/media` | codec MLow (`mlow/` Go puro vendorizado), RTP, SRTP, SSRC, helpers de PCM, derivação de chave |
-| `internal/voip/transport` | relay SCTP, STUN, codificação de subscription |
-| `internal/voip/signaling` | build/parse de stanza `<call>`, cripto de call-key, parse do relay-ack |
-| `internal/voip/call` | `CallManager` — orquestra uma chamada de ponta a ponta |
+| `cmd/server` | broker HTTP/SSE, gerenciador de sessões, ponte WebRTC, registro de chamadas ativas, ciclo de vida do processo |
 | `client/` | React 19 + Vite + Tailwind v4 + shadcn/ui (dialer, cards de chamada, sessões, histórico) |
+| `client/public/api-docs.html` + `openapi.yaml` | documentação interativa da API (Swagger UI) — ver [API](#api) |
+| `internal/voip/*` | motor de chamada legado (RTP/SRTP/MLow feito à mão) — fora do caminho servido, mantido só como referência histórica |
 
 ---
 
 ## Como uma chamada flui
 
-O núcleo é o `internal/voip/call.CallManager`, que conduz a chamada de ponta a ponta.
 Sequência de uma chamada de saída:
 
 ```
-1. POST .../calls            → CallManager.StartCall(peerJid)
-                               gera um callID, monta o <call> offer, envia
+1. POST .../calls             → session.startOutgoing(peer) → meow.CallWithOptions
+                                gera um callID, meowcaller manda o <call> offer
 
-2. Navegador abre o WebRTC   → POST .../calls/{id}/webrtc (SDP offer)
-                               a ponte responde com um SDP answer (pion)
+2. Navegador abre o WebRTC    → POST .../calls/{id}/webrtc (SDP offer)
+                                Bridge (pion) responde com um SDP answer
 
-3. Outro lado aceita         → events.CallAccept → HandleCallAccept
-                               servidor recebe <relay> + chaves hop-by-hop
+3. Outro lado aceita          → meowcaller entrega o relay + inicia a mídia
+                                Call.Play(browser mic) / Call.Receive(→ bridge)
 
-4. Transporte de relay       → binding/allocate STUN nos relays do WhatsApp
-                               ICE + DTLS + SCTP DataChannel conectam (pion)
+4. Mídia fluindo              → estado vai para "connected"
+   ├── subida  (você → peer): PCM do navegador (data channel) → liveAudioSource → meowcaller → relay
+   └── descida (peer → você): relay → meowcaller → bridge.WritePCM → data channel → navegador
+   (numa chamada de vídeo, o mesmo par de caminhos existe pro data channel "vp8",
+   com Keyframe/TimestampMS carimbados em cada quadro repassado — ver Videochamada)
 
-5. Mídia SRTP fluindo        → estado vai para ACTIVE
-   ├── subida  (você → peer): PCM 16 kHz do navegador (data channel) → MLow encode → SRTP → relay
-   └── descida (peer → você): relay → SRTP → MLow decode → PCM 16 kHz (data channel) → navegador
-
-6. Encerramento             → DELETE .../calls/{id} ou events.CallTerminate
-                               CallManager.EndCall + limpeza da ponte
+5. Encerramento               → DELETE .../calls/{id} ou Call.OnEnd (peer desligou)
+                                sess.removeCall + limpeza da ponte
 ```
 
-Cada passo de protocolo (derivação de chave SRTP hop-by-hop, packetização RTP em
-`PT=120`/16 kHz, registro STUN no relay, parse do relay-ack e das stanzas `<call>`) está
-implementado e coberto por testes em `internal/voip` (`go test ./...`).
+Todo o protocolo (sinalização `<call>`, SRTP/RTP, negociação de relay, codec) fica
+dentro do meowcaller/HyperMeow como dependência — o WaCalls só liga os data channels
+WebRTC do navegador nos pontos `Call.Play`/`Call.Receive`/`Call.SendVideo`/`Call.ReceiveVideo`.
 
 ---
 
-## Videochamada (experimental)
+## Videochamada
 
 Uma videochamada adiciona um segundo **data channel `vp8`** entre o navegador e o
 servidor Go (o rótulo é histórico — o payload é **H264**). O navegador é dono do codec
-via **WebCodecs** (`VideoEncoder`/`VideoDecoder`, Annex-B, `avc1.42E01F`); o lado Go só
-empacota cada unidade de acesso em RTP (`PT=97`, FU-A/STAP-A,
-`internal/voip/media/rtph264.go`) e devolve os quadros de entrada para exibição.
+via **WebCodecs** (`VideoEncoder`/`VideoDecoder`, Annex-B, `avc1.42E01F`,
+`client/src/lib/video-pipe.ts`); o lado Go só repassa cada access unit entre o data
+channel e `Call.SendVideo`/`Call.ReceiveVideo` do meowcaller.
 
-- **Sinalização** (`internal/voip/signaling`): o `<offer>`/`<accept>` levam
-  `<video enc="h.264" dec="H264">` mais os nós `<capability>`, `<voip_settings>` e
-  `<uploadfieldstat/>` que um cliente WhatsApp Business real envia.
-- **Extensão de cabeçalho RTP**: todo pacote de vídeo carrega o bloco `0xDEBE` de 4
-  elementos que um cliente real usa (orientação CVO + um contador de sequência
-  transport-wide).
-- **RTCP / estimativa de banda** (`internal/voip/call/callmanager_rtcp.go`,
-  `internal/voip/media/{rtcp,srtcp}.go`): um compound SR/RR/REMB é enviado por SRTCP uma
-  vez por segundo. Sem ele o WhatsApp derruba a videochamada em ~7 s; com ele a chamada
-  fica estável.
+**Funciona nos dois sentidos** — entrada (peer → navegador) e saída (navegador → peer),
+decodificado e mostrado na orientação certa.
 
-**Funciona:** vídeo de entrada (peer → navegador), decodificado e mostrado na orientação
-certa; estabilidade da chamada.
+O vídeo de saída não renderizava no início da migração pro meowcaller, mesmo com o
+áudio funcionando: o decoder WebCodecs do navegador só arranca a partir de um quadro
+marcado como `keyframe`, com um timestamp real e crescente — e o código que repassava
+os quadros do meowcaller pro bridge (`cmd/server/httpapi.go`, `doWebRTC`) nunca setava
+`Keyframe`/`TimestampMS` em `media.VideoFrame`. Todo quadro chegava e era descartado em
+silêncio pelo navegador, pra sempre. Fix: detectar IDR com `rtp.AUHasIDR` (exportado
+pelo meowcaller) e carimbar `TimestampMS` com o tempo decorrido desde o início do vídeo
+na chamada. Histórico completo da investigação em `.ai/known-issues.md`.
 
-**Ainda não funciona:** o vídeo de saída (navegador → peer) é empacotado e chega ao
-WhatsApp (ele manda NACK dos nossos pacotes), mas o outro lado não renderiza. As duas
-peças que faltam são a retransmissão dos pacotes pedidos via NACK (RTX) e decodificar
-100% o RTCP de entrada não-padrão ("fast") do WhatsApp. Rode o servidor com
-`-video-dump` para logar o RTP/RTCP dos dois sentidos e comparar.
+---
+
+## Recursos de chamada
+
+Além de chamada 1:1 de voz/vídeo, o servidor expõe (via `meowcaller.Client`/`Call`):
+
+| Recurso | Rota | Notas |
+|---|---|---|
+| Reação (emoji ou texto livre) | `POST .../calls/{id}/reaction` | vai pelo canal de app-data da própria chamada, não é mensagem de chat |
+| Levantar/abaixar a mão | `POST .../calls/{id}/hand` | estado persistente do participante |
+| Adicionar participante | `POST .../calls/{id}/participants` | promove uma chamada direta pra grupo ad-hoc |
+| Chamada em grupo | `POST .../calls` com `{ group: "<jid>@g.us" }` | toca todo membro remoto do grupo (WhatsApp exige 2+ remotos) |
+| Hold / unhold | `PUT .../calls/{id}/hold` / `.../unhold` | toca um tom local de 440 Hz; `moh_url` é aceito no corpo mas não decodificado (ver `.ai/known-issues.md`) |
+| Transferência cega | `POST .../calls/{id}/transfer` | hold automático + nova chamada sainte em outra sessão; aceite encerra a original, rejeição/timeout de 60s restaura o hold |
+| Pickup (handoff entre agentes) | `POST .../calls/{id}/pickup` | fecha o bridge WebRTC atual e reatribui a chamada a quem chamar o endpoint, incondicionalmente |
+
+Compartilhamento de tela foi implementado e removido: o nó de sinalização `screen_share`
+do meowcaller só é válido dentro de uma chamada de grupo de verdade no protocolo do
+WhatsApp — numa chamada direta o servidor do WhatsApp rejeita e derruba a chamada
+inteira. Detalhes em `.ai/known-issues.md`.
 
 ---
 
@@ -158,8 +172,8 @@ peças que faltam são a retransmissão dos pacotes pedidos via NACK (RTX) e dec
 - **Go 1.26+**
 - **Node 22+** e **npm** (só para buildar/rodar o cliente React)
 
-Não precisa de compilador C, cgo ou bibliotecas nativas — o codec MLow é Go puro
-vendorizado (`internal/voip/media/mlow`).
+Não precisa de compilador C, cgo ou bibliotecas nativas — meowcaller, HyperMeow e o
+resto da stack são Go puro (`CGO_ENABLED=0 go build ./...` funciona).
 
 ---
 
@@ -183,12 +197,12 @@ cd client && npm install && cd ..
 go run ./cmd/server -addr :8080          # adicione -debug para logs verbosos
 ```
 
-O áudio ao vivo funciona de imediato — o codec MLow é Go puro, então um build simples já
-o inclui. Sem build tags, sem `CGO_ENABLED`, sem DLLs.
-
-Abra `http://localhost:8080`, clique em **New session** e escaneie o QR mostrado no
-navegador (também impresso no terminal) em **WhatsApp → Aparelhos conectados**. Adicione
-mais contas do mesmo jeito e alterne entre elas na barra lateral.
+Áudio e vídeo ao vivo funcionam de imediato — sem build tags, sem `CGO_ENABLED`, sem
+DLLs. Abra `http://localhost:8080`, clique em **New session** e escaneie o QR mostrado
+no navegador (também impresso no terminal) em **WhatsApp → Aparelhos conectados**.
+Adicione mais contas do mesmo jeito e alterne entre elas na barra lateral — o WhatsApp
+permite até 4 dispositivos vinculados na mesma conta, então dá pra testar recursos
+multiagente (pickup, transferência) pareando duas sessões no mesmo número.
 
 ### Cliente React em modo dev
 
@@ -211,31 +225,43 @@ go run ./cmd/server -static client/dist -addr :8080
 | `-addr` | `:8080` | endereço HTTP de escuta |
 | `-db` | `wacalls.db` | caminho do banco SQLite de sessões |
 | `-static` | `client/dist` | diretório do cliente estático (opcional) |
-| `-debug` | `false` | logs verbosos (inclui o log interno do whatsmeow) |
+| `-debug` | `false` | logs verbosos (inclui o log de chamada/mídia do meowcaller e do hypermeow) |
 | `-max-calls-per-session` | `8` | máx. de chamadas simultâneas por sessão (`0` = sem limite) |
-| `-video-dump` | `false` | loga o RTP/RTCP de videochamada em detalhe (depuração do vídeo de saída) |
+| `-video-dump` | `false` | flag legada do motor `internal/voip/call` (fora do caminho servido); sem efeito na stack atual |
 
 ---
 
 ## API
 
-Todas as rotas são por sessão. Os eventos chegam por um único canal SSE, marcados com o
-`sessionId` de origem.
+Documentação interativa (Swagger UI) em **`/api-docs.html`** — com "Try it out" que
+funciona de verdade contra o servidor rodando. `openapi.yaml` fica em `client/public/`,
+servido estático junto com o cliente.
+
+Todas as rotas são por sessão e aceitam o header opcional `X-Client-Id` (dono da
+chamada / filtro de eventos), mais `X-API-Key` se `WACALLS_API_KEY` estiver setado no
+ambiente. Os eventos chegam por um único canal SSE, marcados com o `sessionId` de
+origem.
 
 | Método | Rota | Propósito |
 |---|---|---|
+| `GET` | `/api/config` | limite de chamadas simultâneas configurado no servidor |
 | `GET` | `/api/sessions` | lista as contas (id, name, jid, status, paired) |
 | `POST` | `/api/sessions` | cria uma conta e começa o pareamento por QR |
 | `DELETE` | `/api/sessions/{sid}` | desloga e remove uma conta |
 | `POST` | `/api/sessions/{sid}/logout` | desconecta uma conta (mantém para re-parear) |
 | `POST` | `/api/sessions/{sid}/pair` | re-pareia uma conta (emite um QR novo) |
-| `POST` | `/api/sessions/{sid}/calls` | inicia uma chamada de saída (`{ phone, duration_ms?, record?, video? }`) |
-| `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | troca o SDP WebRTC do navegador (uma videochamada também abre um data channel `vp8`) |
-| `POST` | `/api/sessions/{sid}/calls/{id}/accept` | atende uma chamada de entrada |
-| `POST` | `/api/sessions/{sid}/calls/{id}/reject` | rejeita uma chamada de entrada |
+| `GET` | `/api/sessions/{sid}/calls` | quantas chamadas ativas a sessão tem (e o limite) |
+| `POST` | `/api/sessions/{sid}/calls` | inicia uma chamada (`{ phone \| group, video?, record? }`) |
+| `GET` | `/api/sessions/{sid}/calls/{id}` | estado de uma chamada específica |
+| `POST` | `/api/sessions/{sid}/calls/{id}/webrtc` | troca o SDP WebRTC do navegador (vídeo abre um data channel `vp8` também) |
+| `POST` | `/api/sessions/{sid}/calls/{id}/accept` \| `/reject` | atende / rejeita uma chamada de entrada |
 | `DELETE` | `/api/sessions/{sid}/calls/{id}` | encerra uma chamada ativa |
+| `PUT` | `/api/sessions/{sid}/calls/{id}/hold` \| `/unhold` | põe em espera / retoma |
+| `POST` | `/api/sessions/{sid}/calls/{id}/pickup` | handoff de bridge pra outro agente |
+| `POST` | `/api/sessions/{sid}/calls/{id}/transfer` | transferência cega com fallback |
+| `POST` | `/api/sessions/{sid}/calls/{id}/reaction` \| `/hand` \| `/participants` | reação, mão levantada, adicionar participante |
 | `GET` | `/api/sessions/{sid}/history` | histórico recente de chamadas (até 50 registros) |
-| `GET` | `/api/events` | server-sent events (sessões, auth, ciclo de vida da chamada) |
+| `GET` | `/api/events` | server-sent events (sessões, auth, ciclo de vida da chamada, hold, pickup, transferência) |
 
 ---
 
@@ -250,9 +276,11 @@ cd client && npm run build    # type-check + build de produção do cliente
 
 ## Segurança
 
-A API **não tem autenticação** — qualquer um com acesso HTTP pode criar contas, fazer
-chamadas e ler o histórico. **Rode só numa LAN confiável.** O `wacalls.db` guarda
-credenciais de sessão do WhatsApp (segredos): **não commite** e mantenha protegido.
+Por padrão a API **não tem autenticação** — qualquer um com acesso HTTP pode criar
+contas, fazer chamadas e ler o histórico. **Rode só numa LAN confiável**, ou defina
+`WACALLS_API_KEY` no ambiente pra exigir o header `X-API-Key` em toda requisição.
+O `wacalls.db` (e qualquer backup `*.db.*`) guarda credenciais de sessão do WhatsApp
+(segredos): **não commite** e mantenha protegido — ambos já cobertos pelo `.gitignore`.
 
 ---
 
@@ -276,9 +304,10 @@ Este projeto é construído sobre o trabalho de:
 
 ## Agradecimentos
 
-- [**whatsmeow**](https://github.com/tulir/whatsmeow) — biblioteca Go do protocolo WhatsApp Web
+- [**meowcaller**](https://github.com/purpshell/meowcaller) — biblioteca de chamadas VoIP (voz, vídeo, grupo, reações, hold/transferência) sobre o HyperMeow
+- [**HyperMeow**](https://github.com/polymorfa/hypermeow) — fork do [whatsmeow](https://github.com/tulir/whatsmeow), biblioteca Go do protocolo WhatsApp Web
 - [**pion/webrtc**](https://github.com/pion/webrtc) — stack WebRTC Go puro (ICE + DTLS + SCTP)
-- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) — implementação de referência do codec MLow (portada para o `internal/voip/media/mlow` Go puro vendorizado)
+- [**whatsapp-rust**](https://github.com/oxidezap/whatsapp-rust) — implementação de referência do codec MLow (usado pelo motor legado em `internal/voip/media/mlow`)
 - [**zapo**](https://github.com/w3nder/zapo) — referência de stack de mídia VoIP
 
 ---
