@@ -212,7 +212,6 @@ func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-
 func (s *server) handleReaction(w http.ResponseWriter, r *http.Request) {
 	if sess := s.sessionByID(w, r.PathValue("sid")); sess != nil {
 		s.doReaction(sess, w, r)
