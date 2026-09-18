@@ -9,6 +9,21 @@ export const startCall = (sid: string, phone: string, record: boolean, video = f
     video,
   });
 
+export const startGroupCall = (sid: string, groupJID: string, video = false) =>
+  apiPost<{ call: { callId: string } }>(`/api/sessions/${sid}/calls`, {
+    group: groupJID,
+    video,
+  });
+
+export const sendReaction = (sid: string, callId: string, text: string) =>
+  apiPost<void>(`/api/sessions/${sid}/calls/${callId}/reaction`, { text });
+
+export const setHandRaised = (sid: string, callId: string, raised: boolean) =>
+  apiPost<void>(`/api/sessions/${sid}/calls/${callId}/hand`, { raised });
+
+export const addParticipant = (sid: string, callId: string, target: string) =>
+  apiPost<void>(`/api/sessions/${sid}/calls/${callId}/participants`, { target });
+
 export const acceptCall = (sid: string, callId: string) =>
   apiPost<{ call: { callId: string } }>(`/api/sessions/${sid}/calls/${callId}/accept`, {});
 

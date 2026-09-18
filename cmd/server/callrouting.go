@@ -3,7 +3,7 @@ package main
 import (
 	"wacalls/internal/voip/signaling"
 
-	waBinary "go.mau.fi/whatsmeow/binary"
+	waBinary "github.com/polymorfa/hypermeow/binary"
 )
 
 func callIDFromNode(node *waBinary.Node) string {

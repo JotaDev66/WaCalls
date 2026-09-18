@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"sync"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	"go.mau.fi/whatsmeow/types"
-	waLog "go.mau.fi/whatsmeow/util/log"
+	"github.com/polymorfa/hypermeow"
+	"github.com/polymorfa/hypermeow/store/sqlstore"
+	"github.com/polymorfa/hypermeow/types"
+	waLog "github.com/polymorfa/hypermeow/util/log"
 )
 
 type SessionManager struct {

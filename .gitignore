@@ -8,7 +8,9 @@ run-mlow.ps1
 /dist/
 /bin/
 wacalls.db
+wacalls.db.*
 *.db
+*.db.*
 *.db-journal
 *.db-wal
 *.db-shm

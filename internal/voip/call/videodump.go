@@ -74,6 +74,11 @@ func (m *CallManager) dumpInboundAccessUnit(frame []byte, keyframe bool, ts uint
 	}
 	n := vdRxAU.Add(1)
 	nals := describeAnnexB(frame)
+	if keyframe {
+		sps, pps := spsPpsHex(frame)
+		m.log.Info("VDUMP rx-au", "n", n, "keyframe", keyframe, "ts", ts, "total_bytes", len(frame), "nals", nals, "sps_hex", sps, "pps_hex", pps)
+		return
+	}
 	m.log.Info("VDUMP rx-au", "n", n, "keyframe", keyframe, "ts", ts, "total_bytes", len(frame), "nals", nals)
 }
 
@@ -100,6 +105,102 @@ func (m *CallManager) dumpOutboundPackets(pkts []*media.RtpPacket, srcFrame []by
 			"ext_elems", describeRtpExt(p.Header.ExtensionProfile, p.Header.ExtensionData),
 			"pay_len", len(p.Payload), "pay_head", head)
 	}
+}
+
+// debugLogSrtcpKeys loga a chave/salt/authKey derivados pro SRTCP de entrada
+// (efêmero, só desta chamada) — permite testar hipóteses de descriptografia do
+// formato "fast" do WhatsApp offline, sem precisar de uma ligação nova a cada
+// tentativa. Chamada com m.mu travado (initSrtpKeysLocked/reinitSrtpLocked).
+func (m *CallManager) debugLogSrtcpKeys() {
+	if !VideoDump || m.srtcpRecv == nil {
+		return
+	}
+	key, salt, authKey := m.srtcpRecv.DebugKeyHex()
+	m.log.Info("VDUMP srtcp-recv-key", "session_key", key, "session_salt", salt, "auth_key", authKey)
+}
+
+// debugTryNackSsrcCandidates redescriptografa o mesmo SRTCP cru de um NACK
+// usando cada SSRC candidato pra derivar o IV (em vez do "sender SSRC" que
+// vem em claro no pacote, que os NACKs do WhatsApp sempre mostram como "1" —
+// suspeito de ser um placeholder do canal de feedback compacto "fast", não o
+// SSRC de verdade usado na cifra). Compara os seqs decodificados contra
+// lastSeq (o seq de verdade do último pacote de vídeo que mandamos — NÃO
+// txPkts: o H264Payloader começa de um seq aleatório, então txPkts sozinho
+// não serve de referência e já gerou falso positivo aqui antes).
+func (m *CallManager) debugTryNackSsrcCandidates(raw []byte, seqsAtual []uint16, txPkts uint32, lastSeq uint16, recv *media.SrtcpContext, candidatos map[string]uint32) {
+	if recv == nil {
+		return
+	}
+	// Candidatos extra além dos SSRCs conhecidos da chamada: zero (alguns
+	// protocolos usam 0 pra "sem stream específico"), e as variantes de
+	// byte-swap/complemento dos vídeos — cobre confusão de endianness ou
+	// um bug de sinal/complemento na ponta do WhatsApp, hipóteses baratas
+	// de testar que ainda não tínhamos coberto.
+	extra := map[string]uint32{"zero": 0}
+	if v, ok := candidatos["self_video"]; ok {
+		extra["self_video_byteswap"] = byteSwap32(v)
+		extra["self_video_complement"] = ^v
+	}
+	if v, ok := candidatos["peer_video"]; ok {
+		extra["peer_video_byteswap"] = byteSwap32(v)
+		extra["peer_video_complement"] = ^v
+	}
+	for nome, ssrc := range extra {
+		candidatos[nome] = ssrc
+	}
+
+	for nome, ssrc := range candidatos {
+		plain, err := recv.UnprotectWithSSRC(raw, ssrc, true)
+		if err != nil {
+			m.log.Info("VDUMP nack-ssrc-tentativa", "candidato", nome, "ssrc", ssrc, "erro", err)
+			continue
+		}
+		mediaSSRC, seqs, ok := media.ParseNACK(plain)
+		// Cada entrada FCI do NACK (RFC 4585) é um PID de 16 bits + bitmap dos
+		// 16 seguintes — então um NACK de 16 bytes tem só 1 PID independente
+		// de verdade (o resto de "seqs" é derivado dele, não são valores
+		// independentes). Testar "caiu numa janela plausível" nesse caso tem
+		// ~3% de chance de bater por acaso; com ~10 candidatos por pacote,
+		// falso positivo vira rotina (confirmado ao vivo: candidatos
+		// diferentes "batendo" a cada poucos segundos, sem nenhum se repetir
+		// de forma consistente). Só marcar como sinal forte quando o pacote
+		// tem 2+ entradas FCI (2+ PIDs independentes teriam que bater juntos).
+		entries := (len(plain) - 12) / 4
+		plausivel := ok && entries >= 2 && nackSeqsPlausible(seqs, lastSeq)
+		if plausivel {
+			// WARN pra destacar no meio do ruído: esse candidato decodificou
+			// 2+ PIDs independentes todos dentro de uma janela recente
+			// plausível — evidência bem mais forte que um único PID batendo.
+			m.log.Warn("VDUMP nack-ssrc-tentativa CANDIDATO PLAUSÍVEL", "candidato", nome, "ssrc_usado_no_iv", ssrc,
+				"media_ssrc_decodificado", mediaSSRC, "seqs", seqs, "fci_entries", entries, "tx_last_seq", lastSeq)
+			continue
+		}
+		m.log.Info("VDUMP nack-ssrc-tentativa", "candidato", nome, "ssrc_usado_no_iv", ssrc,
+			"parseou", ok, "media_ssrc_decodificado", mediaSSRC, "seqs", seqs, "fci_entries", entries,
+			"tx_pkts_atual", txPkts, "tx_last_seq", lastSeq)
+	}
+}
+
+func byteSwap32(v uint32) uint32 {
+	return (v>>24)&0xff | (v>>8)&0xff00 | (v<<8)&0xff0000 | (v<<24)&0xff000000
+}
+
+// nackSeqsPlausible reporta se os seqs decodificados de um NACK caem numa
+// janela recente (até 2000 pacotes) atrás do seq de verdade do último
+// pacote de vídeo que mandamos — um decode com a chave/SSRC errado produz
+// seqs efetivamente aleatórios, então cair nessa janela é sinal forte de
+// que a decifração dessa tentativa está correta. Usa aritmética uint16 com
+// wraparound (seq é de 16 bits e dá a volta).
+func nackSeqsPlausible(seqs []uint16, lastSeq uint16) bool {
+	if len(seqs) == 0 {
+		return false
+	}
+	for _, s := range seqs {
+		if lastSeq-s > 2000 {
+			return false
+		}
+	}
+	return true
 }
 
 // describeRtpExt decodifica um bloco de extensão RTP de cabeçalho de um byte
@@ -181,6 +282,37 @@ func hexN(b []byte, n int) string {
 		n = len(b)
 	}
 	return fmt.Sprintf("%x", b[:n])
+}
+
+// spsPpsHex devolve o hex do SPS e do PPS (tipos 7/8) de uma unidade de
+// acesso Annex-B, pra comparar byte a byte o profile_idc/level_idc do que a
+// gente manda (TX) contra o que o celular manda de verdade (RX, que já
+// funciona) — nunca comparamos isso diretamente.
+func spsPpsHex(frame []byte) (sps, pps string) {
+	for _, nal := range media.SplitAnnexBForDump(frame) {
+		if len(nal) == 0 {
+			continue
+		}
+		switch nal[0] & 0x1f {
+		case 7:
+			sps = fmt.Sprintf("%x", nal)
+		case 8:
+			pps = fmt.Sprintf("%x", nal)
+		}
+	}
+	return sps, pps
+}
+
+// auHasIDR reporta se a unidade de acesso Annex-B tem um NAL IDR (tipo 5) —
+// gate de FeedCapturedVideo pra nunca mandar quadro delta antes do primeiro
+// IDR de verdade (ver videoTxKeyframeRequired). Não exige lock.
+func auHasIDR(frame []byte) bool {
+	for _, nal := range media.SplitAnnexBForDump(frame) {
+		if len(nal) > 0 && nal[0]&0x1f == 5 {
+			return true
+		}
+	}
+	return false
 }
 
 // describeAnnexB devolve uma string tipo "SPS(12) PPS(4) IDR(20345)" para um

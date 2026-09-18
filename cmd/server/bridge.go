@@ -18,21 +18,29 @@ const pcmChannelLabel = "pcm"
 // media.VideoFrame's 5-byte header. Absent on audio-only calls.
 const videoChannelLabel = "vp8"
 
-// Bridge is the browser-leg adapter: it carries raw PCM (and, on a video call,
-// encoded VP8 frames) between the browser and the CallManager over WebRTC data
-// channels. The call core only ever sees []float32 PCM and media.VideoFrame, so
-// it stays unaware of the transport.
+// Bridge é o adaptador do lado do browser: carrega PCM cru (e, numa chamada
+// de vídeo, os access units H.264 codificados) entre o browser e a Call do
+// meowcaller via data channels WebRTC. O núcleo da chamada só vê []float32
+// PCM e media.VideoFrame, sem saber nada do transporte.
 type Bridge struct {
 	pc      *webrtc.PeerConnection
 	dc      atomic.Pointer[webrtc.DataChannel]
 	videoDC atomic.Pointer[webrtc.DataChannel]
 	log     *slog.Logger
 
-	// OnBrowserPCM is invoked with decoded 16 kHz mono PCM captured from the browser mic.
+	// quiet suprime o OnTerminalICE quando setado — ver CloseQuiet. É lido
+	// pela própria goroutine de estado ICE do pion, por isso precisa ser
+	// atômico em vez de um bool simples sem proteção nenhuma.
+	quiet atomic.Bool
+
+	// OnBrowserPCM é chamado com o PCM mono 16 kHz decodificado, capturado do microfone do browser.
 	OnBrowserPCM func(pcm []float32)
-	// OnBrowserVideo is invoked with each encoded VP8 frame captured from the browser camera.
+	// OnBrowserVideo é chamado com cada quadro VP8 codificado, capturado da câmera do browser.
 	OnBrowserVideo func(f media.VideoFrame)
-	// OnTerminalICE fires when the peer connection fails or closes.
+	// OnTerminalICE dispara quando a peer connection falha ou fecha (a menos
+	// que tenha fechado via CloseQuiet). Setado uma vez na criação do bridge,
+	// antes dele ser exposto a qualquer outra goroutine — nunca é alterado
+	// depois disso, então ler sem trava no callback de ICE abaixo é seguro.
 	OnTerminalICE func()
 }
 
@@ -69,7 +77,7 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
 		log.Debug("browser ice state", "state", s.String())
 		if s == webrtc.ICEConnectionStateFailed || s == webrtc.ICEConnectionStateClosed {
-			if br.OnTerminalICE != nil {
+			if br.OnTerminalICE != nil && !br.quiet.Load() {
 				br.OnTerminalICE()
 			}
 		}
@@ -130,4 +138,14 @@ func (b *Bridge) Close() {
 	if b.pc != nil {
 		_ = b.pc.Close()
 	}
+}
+
+// CloseQuiet fecha a peer connection sem disparar OnTerminalICE — para quem
+// está derrubando essa perna WebRTC de propósito enquanto a chamada
+// WhatsApp por baixo precisa continuar viva (pickup passando o bridge pra
+// outro agente). Um Close comum aqui cascatearia num hangup de verdade, como
+// se fosse uma falha de ICE iniciada pelo usuário.
+func (b *Bridge) CloseQuiet() {
+	b.quiet.Store(true)
+	b.Close()
 }

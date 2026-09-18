@@ -73,10 +73,25 @@ func TestVideoLoopbackThroughSRTP(t *testing.T) {
 		t.Fatalf("expected the frame to be broadcast as >=2 SRTP packets, got %d", len(fr.sent))
 	}
 
+	// Keyframes agora são mandados em duplicata (redundância proativa — ver
+	// FeedCapturedVideo); um receptor de verdade descarta a segunda cópia
+	// pelo seq repetido, então o loopback do teste faz o mesmo antes de
+	// realimentar, senão o depacketizer vê o mesmo fragmento duas vezes.
+	seen := make(map[string]bool, len(fr.sent))
+	deduped := fr.sent[:0]
+	for _, p := range fr.sent {
+		key := string(p)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		deduped = append(deduped, p)
+	}
+
 	// Feed the broadcast packets back in. Clear selfVideoSsrc so onRelayData
 	// does not discard them as our own loopback.
 	m.selfVideoSsrc = 0
-	for _, p := range fr.sent {
+	for _, p := range deduped {
 		m.onRelayData(p)
 	}
 

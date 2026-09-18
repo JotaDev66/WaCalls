@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { PhoneOff } from "lucide-react";
+import { Hand, PhoneOff, Send, UserPlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { attachMeter } from "@/lib/audio-meter";
 import { useCalls } from "@/stores/calls";
 import { useDevices } from "@/stores/devices";
 import { useEndCall } from "@/hooks/useEndCall";
+import { useAddParticipant, useSendReaction, useSetHandRaised } from "@/hooks/useCallActions";
 import { formatCallDuration } from "@/utils/format";
 import type { CallStatus, CallSummary } from "@/types/call";
+
+const QUICK_EMOJI = ["👍", "❤️", "😂", "😮", "👏"];
 
 const statusVariant: Record<CallStatus, "success" | "secondary" | "muted"> = {
   connected: "success",
@@ -32,15 +36,24 @@ const Meter = ({ label, db }: { label: string; db: number }) => {
 
 export const CallCard = ({ call }: { call: CallSummary }) => {
   const conn = useCalls((s) => s.ownConnections.get(call.callId));
+  const extras = useCalls((s) => s.extras.get(call.callId));
   const outDeviceId = useDevices((s) => s.outId);
   const endCall = useEndCall();
+  const sendReaction = useSendReaction();
+  const setHandRaised = useSetHandRaised();
+  const addParticipant = useAddParticipant();
   const [, force] = useState(0);
   const [micDb, setMicDb] = useState(-60);
   const [peerDb, setPeerDb] = useState(-60);
+  const [reactionText, setReactionText] = useState("");
+  const [participantInput, setParticipantInput] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const isVideo = call.media === "video";
+  const handRaised = extras?.handRaised ?? false;
+  const recentReaction =
+    extras?.lastReaction && Date.now() - extras.lastReaction.at < 5000 ? extras.lastReaction : null;
 
   useEffect(() => {
     const t = setInterval(() => force((n) => n + 1), 1000);
@@ -123,11 +136,86 @@ export const CallCard = ({ call }: { call: CallSummary }) => {
               playsInline
               muted
             />
+            {recentReaction && (
+              <div className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-1 text-lg">
+                {recentReaction.text}
+              </div>
+            )}
           </div>
         )}
         <Meter label="Mic" db={micDb} />
         <Meter label="Peer" db={peerDb} />
         <audio ref={audioRef} autoPlay />
+
+        <div className="flex flex-wrap items-center gap-1.5 border-t pt-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={handRaised ? "default" : "outline"}
+                size="icon"
+                onClick={() =>
+                  setHandRaised.mutate({ sid: call.sessionId, callId: call.callId, raised: !handRaised })
+                }
+                aria-label="Raise hand"
+              >
+                <Hand className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{handRaised ? "Lower hand" : "Raise hand"}</TooltipContent>
+          </Tooltip>
+          {QUICK_EMOJI.map((e) => (
+            <Button
+              key={e}
+              variant="outline"
+              size="icon"
+              onClick={() => sendReaction.mutate({ sid: call.sessionId, callId: call.callId, text: e })}
+              aria-label={`React ${e}`}
+            >
+              {e}
+            </Button>
+          ))}
+          <form
+            className="flex flex-1 min-w-[140px] gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const text = reactionText.trim();
+              if (!text) return;
+              sendReaction.mutate({ sid: call.sessionId, callId: call.callId, text });
+              setReactionText("");
+            }}
+          >
+            <Input
+              value={reactionText}
+              onChange={(e) => setReactionText(e.target.value)}
+              placeholder="Reaction text"
+              className="h-9"
+            />
+            <Button type="submit" variant="outline" size="icon" aria-label="Send reaction">
+              <Send className="h-4 w-4" />
+            </Button>
+          </form>
+        </div>
+
+        <form
+          className="flex gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const target = participantInput.trim();
+            if (!target) return;
+            addParticipant.mutate({ sid: call.sessionId, callId: call.callId, target });
+            setParticipantInput("");
+          }}
+        >
+          <Input
+            value={participantInput}
+            onChange={(e) => setParticipantInput(e.target.value)}
+            placeholder="Add participant (phone number)"
+            className="h-9"
+          />
+          <Button type="submit" variant="outline" size="icon" aria-label="Add participant">
+            <UserPlus className="h-4 w-4" />
+          </Button>
+        </form>
       </CardContent>
     </Card>
   );

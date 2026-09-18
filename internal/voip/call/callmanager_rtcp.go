@@ -1,7 +1,9 @@
 package call
 
 import (
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"time"
 
 	"wacalls/internal/voip/core"
@@ -9,6 +11,12 @@ import (
 )
 
 func hexBytes(b []byte) string { return hex.EncodeToString(b) }
+
+// videoProactiveKeyframeEveryTicks: a cada quantos ticks do loop de RTCP
+// (1/s) pedimos um keyframe novo por conta própria, sem esperar PLI/FIR do
+// peer. 2s é um meio-termo entre dar mais chances de um keyframe inteiro
+// chegar e não gastar banda demais mandando keyframe toda hora.
+const videoProactiveKeyframeEveryTicks = 2
 
 // startVideoRtcpLocked liga o loop de RTCP para a chamada de vídeo: a cada ~1s
 // manda um compound SRTCP com SR (nosso stream de vídeo) + RR (relatório do
@@ -61,7 +69,20 @@ func (m *CallManager) sendVideoRtcpTick() {
 		rtpTS += uint32(time.Since(m.lastVideoTxWall).Milliseconds()) * core.WAVideoClockRate / 1000
 	}
 	srtcp := m.srtcpSend
+	m.videoRtcpTicks++
+	requestKeyframeNow := m.videoRtcpTicks%videoProactiveKeyframeEveryTicks == 0
+	if requestKeyframeNow {
+		m.videoTxKeyframeRequired = true
+	}
+	kfReq := m.OnKeyframeRequest
 	m.mu.Unlock()
+
+	if requestKeyframeNow && kfReq != nil {
+		if VideoDump {
+			m.log.Info("VDUMP keyframe proativo (periódico, sem depender de PLI/FIR)")
+		}
+		kfReq()
+	}
 
 	var cumulativeLost uint32
 	// pacotes esperados = (highSeq - firstSeq); aproximamos por rxPkts vs highSeq low16.
@@ -97,27 +118,78 @@ func (m *CallManager) handleInboundRtcp(data []byte) {
 		return
 	}
 	plain, err := recv.Unprotect(data)
-	if err != nil {
+	if err != nil && !errors.Is(err, media.ErrAuthTagMismatch) {
 		if VideoDump {
-			m.log.Info("VDUMP rx-rtcp unprotect erro", "err", err, "bytes", len(data))
+			// header de 8 bytes é sempre claro (RFC 3711) mesmo quando o pacote é
+			// curto demais pro nosso authTagLen fixo — loga pra permitir engenharia
+			// reversa do formato "fast" do WhatsApp offline (tag/comprimento reais).
+			rc := byte(0)
+			pt := byte(0)
+			if len(data) >= 2 {
+				rc = data[0] & 0x1f
+				pt = data[1]
+			}
+			m.log.Info("VDUMP rx-rtcp unprotect erro", "err", err, "bytes", len(data),
+				"pt_claro", pt, "nome_claro", media.RTCPName(pt, rc), "rc_fmt_claro", rc,
+				"hex_completo", hexBytes(data))
 		}
 		return
 	}
+	if err != nil {
+		// Tag de auth não bateu, mas processamos mesmo assim: a derivação da
+		// chave do canal "fast" do WhatsApp (NACK) ainda não está confirmada,
+		// e bloquear aqui quebra a retransmissão de vídeo. Loga sempre (não só
+		// VideoDump) porque é sinal relevante até isso ser resolvido de vez.
+		rc := byte(0)
+		pt := byte(0)
+		if len(data) >= 2 {
+			rc = data[0] & 0x1f
+			pt = data[1]
+		}
+		m.log.Warn("SRTCP auth tag não bateu — processando mesmo assim (chave do canal fast ainda não confirmada)",
+			"pt_claro", pt, "nome_claro", media.RTCPName(pt, rc), "rc_fmt_claro", rc)
+	}
 	m.mu.Lock()
 	selfV := m.selfVideoSsrc
+	peerV := m.peerVideoSsrc
+	selfA := m.selfSsrc
+	peerA := firstSsrc(m.peerSsrcs)
 	kfReq := m.OnKeyframeRequest
+	txPkts := m.videoTxPkts
+	txLastSeq := m.videoTxLastSeq
+	recvCtx := m.srtcpRecv
 	m.mu.Unlock()
+
+	if VideoDump {
+		m.log.Info("VDUMP rx-rtcp bruto/decifrado", "bytes_cifrado", len(data),
+			"hex_cifrado", hexBytes(data), "bytes_claro", len(plain), "hex_claro", hexBytes(plain))
+	}
 
 	for _, sub := range media.SplitRTCPCompound(plain) {
 		if mediaSSRC, seqs, ok := media.ParseNACK(sub); ok {
+			if VideoDump {
+				m.log.Info("VDUMP rx-rtcp NACK bruto", "bytes", len(sub), "hex", hexBytes(sub))
+				var wireSenderSsrc uint32
+				if len(data) >= 8 {
+					wireSenderSsrc = binary.BigEndian.Uint32(data[4:8])
+				}
+				m.debugTryNackSsrcCandidates(data, seqs, txPkts, txLastSeq, recvCtx, map[string]uint32{
+					"wire_claro": wireSenderSsrc, "self_video": selfV, "peer_video": peerV,
+					"self_audio": selfA, "peer_audio": peerA,
+				})
+			}
 			m.handleVideoNack(mediaSSRC, seqs, selfV)
 			continue
 		}
 		if media.IsPLIOrFIR(sub) {
 			if VideoDump {
-				m.log.Info("VDUMP rx-rtcp PLI/FIR — peer pediu keyframe", "tem_callback", kfReq != nil)
+				m.log.Info("VDUMP rx-rtcp PLI/FIR — peer pediu keyframe", "tem_callback", kfReq != nil,
+					"bytes", len(sub), "hex", hexBytes(sub))
 			}
 			m.log.Debug("RTCP PLI/FIR recebido do peer — pedindo keyframe ao browser")
+			m.mu.Lock()
+			m.videoTxKeyframeRequired = true
+			m.mu.Unlock()
 			if kfReq != nil {
 				kfReq()
 			}

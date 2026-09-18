@@ -3,7 +3,7 @@ package wanode
 import (
 	"strings"
 
-	"go.mau.fi/whatsmeow/types"
+	"github.com/polymorfa/hypermeow/types"
 )
 
 func CleanJID(jid string) string {

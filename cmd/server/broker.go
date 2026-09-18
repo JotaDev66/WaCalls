@@ -10,10 +10,12 @@ import (
 type CallStatus string
 
 const (
-	StatusStarting  CallStatus = "starting"
-	StatusRinging   CallStatus = "ringing"
-	StatusConnected CallStatus = "connected"
-	StatusEnded     CallStatus = "ended"
+	StatusStarting     CallStatus = "starting"
+	StatusRinging      CallStatus = "ringing"
+	StatusConnected    CallStatus = "connected"
+	StatusHeld         CallStatus = "held"
+	StatusTransferring CallStatus = "transferring"
+	StatusEnded        CallStatus = "ended"
 )
 
 type CallRecord struct {
@@ -123,6 +125,27 @@ func (b *Broker) upsertCall(r CallRecord) {
 	})
 }
 
+// setStatus atualiza só o status de um registro de chamada existente e
+// transmite do mesmo jeito que upsertCall faz, sem o chamador precisar
+// reconstruir o resto do registro. Devolve false se a chamada é desconhecida.
+func (b *Broker) setStatus(id string, status CallStatus) (CallRecord, bool) {
+	b.mu.Lock()
+	c, ok := b.calls[id]
+	if !ok {
+		b.mu.Unlock()
+		return CallRecord{}, false
+	}
+	c.Status = status
+	cp := *c
+	b.mu.Unlock()
+	b.broadcastCallList()
+	b.broadcast(map[string]any{
+		"type": "call-status", "sessionId": cp.SessionID, "id": cp.CallID, "owner": cp.Owner,
+		"status": cp.Status, "peer": cp.Peer, "media": cp.Media, "startedAt": cp.StartedAt,
+	})
+	return cp, true
+}
+
 func (b *Broker) getCall(id string) (*CallRecord, bool) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
@@ -142,6 +165,20 @@ func (b *Broker) setOwner(id, owner string) bool {
 		return false
 	}
 	if c.Owner != nil && *c.Owner != owner {
+		return false
+	}
+	c.Owner = &owner
+	return true
+}
+
+// forceSetOwner reatribui o dono de uma chamada incondicionalmente,
+// independente de quem a detém atualmente. Usado só pelo pickup, onde outro
+// agente assumir é o objetivo inteiro — ao contrário de setOwner, nunca recusa.
+func (b *Broker) forceSetOwner(id, owner string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	c, ok := b.calls[id]
+	if !ok {
 		return false
 	}
 	c.Owner = &owner
@@ -233,6 +270,62 @@ func (b *Broker) emitIncoming(sessionID, id, peer, media string) {
 
 func (b *Broker) emitIncomingClaimed(sessionID, id, owner string) {
 	b.broadcast(map[string]any{"type": "incoming-claimed", "sessionId": sessionID, "id": id, "owner": owner})
+}
+
+// emitReaction transmite uma reação de chamada (emoji ou texto livre, pelo
+// stream de app-data da própria chamada) de um participante. sender fica
+// vazio pra uma reação nossa enviada, ou o JID do peer pra uma recebida.
+func (b *Broker) emitReaction(sessionID, callID, sender, text string) {
+	b.broadcast(map[string]any{
+		"type": "call-reaction", "sessionId": sessionID, "id": callID,
+		"sender": sender, "text": text, "at": time.Now().UnixMilli(),
+	})
+}
+
+// emitHandRaise transmite o estado persistente de "mão levantada" de um participante.
+func (b *Broker) emitHandRaise(sessionID, callID, participant string, raised bool) {
+	b.broadcast(map[string]any{
+		"type": "call-hand", "sessionId": sessionID, "id": callID,
+		"participant": participant, "raised": raised,
+	})
+}
+
+// emitCallHeld/emitCallUnheld transmitem as transições de estado de hold.
+func (b *Broker) emitCallHeld(sessionID, callID string) {
+	b.broadcast(map[string]any{"type": "call-held", "sessionId": sessionID, "id": callID})
+}
+
+func (b *Broker) emitCallUnheld(sessionID, callID string) {
+	b.broadcast(map[string]any{"type": "call-unheld", "sessionId": sessionID, "id": callID})
+}
+
+// emitCallPickedUp transmite que o bridge WebRTC de uma chamada foi fechado
+// pra outro agente poder reconectar (ver doPickup).
+func (b *Broker) emitCallPickedUp(sessionID, callID string) {
+	b.broadcast(map[string]any{"type": "call-picked-up", "sessionId": sessionID, "id": callID})
+}
+
+// emitTransferStarted/Completed/Failed transmitem o ciclo de vida de uma
+// tentativa de transferência cega (ver doTransfer).
+func (b *Broker) emitTransferStarted(sessionID, originalCallID, transferCallID string) {
+	b.broadcast(map[string]any{
+		"type": "transfer-started", "sessionId": sessionID,
+		"original_call_id": originalCallID, "transfer_call_id": transferCallID,
+	})
+}
+
+func (b *Broker) emitTransferCompleted(sessionID, originalCallID, transferCallID string) {
+	b.broadcast(map[string]any{
+		"type": "transfer-completed", "sessionId": sessionID,
+		"original_call_id": originalCallID, "transfer_call_id": transferCallID,
+	})
+}
+
+func (b *Broker) emitTransferFailed(sessionID, originalCallID, transferCallID, reason string) {
+	b.broadcast(map[string]any{
+		"type": "transfer-failed", "sessionId": sessionID,
+		"original_call_id": originalCallID, "transfer_call_id": transferCallID, "reason": reason,
+	})
 }
 
 func (b *Broker) historyRows(sessionID string, limit int) []CallRecord {

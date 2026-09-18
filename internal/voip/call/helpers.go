@@ -5,7 +5,7 @@ import (
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/wanode"
 
-	waBinary "go.mau.fi/whatsmeow/binary"
+	waBinary "github.com/polymorfa/hypermeow/binary"
 )
 
 func hasChildTag(n *waBinary.Node, tag string) bool {

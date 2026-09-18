@@ -2,6 +2,7 @@ package media
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"wacalls/internal/voip/core"
@@ -77,8 +78,17 @@ func TestSrtcpUnprotectRejectsTamperedTag(t *testing.T) {
 	tampered := append([]byte(nil), enc...)
 	tampered[len(tampered)-1] ^= 0xFF
 
-	if _, err := recv.Unprotect(tampered); err == nil {
-		t.Fatal("Unprotect must reject a packet with a tampered auth tag")
+	// Unprotect sinaliza a tag inválida via ErrAuthTagMismatch, mas não
+	// bloqueia o processamento — ainda devolve o pacote decifrado. A chave
+	// de auth do canal "fast" (NACK) do WhatsApp ainda não está confirmada,
+	// então bloquear aqui quebraria a retransmissão de vídeo real (ver
+	// callmanager_rtcp.go, que loga esse caso mas continua processando).
+	plain, err := recv.Unprotect(tampered)
+	if !errors.Is(err, ErrAuthTagMismatch) {
+		t.Fatalf("Unprotect deve sinalizar ErrAuthTagMismatch numa tag adulterada, veio: %v", err)
+	}
+	if plain == nil {
+		t.Fatal("Unprotect deve devolver o pacote decifrado mesmo com tag inválida, não bloquear")
 	}
 
 	// UnprotectWithSSRC is the diagnostic bypass and must NOT verify the

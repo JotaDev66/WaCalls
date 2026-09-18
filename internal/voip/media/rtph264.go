@@ -24,65 +24,118 @@ const (
 
 var annexBStartCode = []byte{0x00, 0x00, 0x00, 0x01}
 
+// mediaFrameInfoIDR e mediaFrameInfoDelta são os bits do id3 (junto com o CVO
+// nos 2 bits baixos) que dizem ao receptor se o quadro é um keyframe. BUG
+// CORRIGIDO (2026-09-17): mandávamos id3 sempre 0x00 (só CVO, nenhum bit de
+// tipo de quadro) — nem "é keyframe" nem "é delta", um valor que o decoder do
+// WhatsApp não reconhece como nada. É bem provável que ele use ESSE campo (não
+// só os NALs H264 crus) pra saber quando pode inicializar/resincronizar o
+// decodificador; sem ele, nenhum quadro nosso — nem um IDR de verdade com
+// SPS/PPS — nunca era tratado como keyframe do lado de lá. Valores conferidos
+// contra a implementação de referência github.com/purpshell/meowcaller
+// (rtp.VideoMediaFrameInfoIDR/Delta).
+const (
+	mediaFrameInfoIDR   byte = 0x08
+	mediaFrameInfoDelta byte = 0x20
+)
+
 // videoExtBlock monta o bloco de extensão RTP de um byte (profile 0xDEBE) que um
-// cliente WhatsApp real anexa a TODO pacote de vídeo. Capturado (2026-09-09):
+// cliente WhatsApp real anexa a TODO pacote de vídeo. Capturado (2026-09-09),
+// refinado (2026-09-17) contra github.com/purpshell/meowcaller:
 //
-//	30 0b     id 3 = CVO (orientação)
-//	51 15 2b  id 5 = 2 bytes  (uso não confirmado — placeholder zerado)
-//	61 00 30  id 6 = 2 bytes  (uso não confirmado — placeholder zerado)
-//	91 0c c5  id 9 = 2 bytes  → contador que incrementa (seq transport-wide/TWCC)
+//	30 0b        id 3, len 1 = CVO (bits 0-1) | tipo de quadro — só no 2º+ pacote da AU
+//	32 0b 00 01  id 3, len 3 = idem + número de frame (2 bytes) — só no 1º pacote da AU
+//	51 15 2b     id 5 = 2 bytes  (uso não confirmado — placeholder zerado)
+//	61 00 30     id 6 = 2 bytes  (uso não confirmado — placeholder zerado)
+//	91 0c c5     id 9 = 2 bytes  → contador que incrementa (seq transport-wide/TWCC)
 //
 // Sem esse bloco o receptor do WhatsApp parece descartar o vídeo (roda congestion
-// control e precisa do seq id 9). Total 11 bytes de elementos + 1 de padding = 12
-// (3 words de 32 bits).
-func videoExtBlock(cvo byte, twcc uint16) []byte {
-	return []byte{
-		0x30, cvo, // id 3, len 1
+// control e precisa do seq id 9). frameNum é nil em todo pacote exceto o primeiro
+// de cada unidade de acesso (onde o meowcaller sempre inclui — número de frame
+// que incrementa 1 por AU, começando em 1). Nunca replicávamos isso: mandávamos
+// SEMPRE o id3 de 1 byte, sem esse metadado.
+func videoExtBlock(mediaFrameInfo byte, frameNum *uint16, twcc uint16) []byte {
+	var out []byte
+	if frameNum != nil {
+		out = append(out, 0x32, mediaFrameInfo, byte(*frameNum>>8), byte(*frameNum))
+	} else {
+		out = append(out, 0x30, mediaFrameInfo)
+	}
+	out = append(out,
 		0x51, 0x00, 0x00, // id 5, len 2
 		0x61, 0x00, 0x00, // id 6, len 2
-		0x91, byte(twcc >> 8), byte(twcc), // id 9, len 2
-		0x00, // padding p/ múltiplo de 4
+		0x91, byte(twcc>>8), byte(twcc), // id 9, len 2
+	)
+	for len(out)%4 != 0 {
+		out = append(out, 0x00)
 	}
+	return out
 }
 
 // H264Payloader splits encoded H264 access units into RTP packets for one
 // outbound video stream. Not safe for concurrent use; the call owns one.
 type H264Payloader struct {
-	ssrc uint32
-	seq  uint16
-	twcc uint16 // contador do elemento de extensão id 9 (seq transport-wide)
+	ssrc     uint32
+	seq      uint16
+	twcc     uint16 // contador do elemento de extensão id 9 (seq transport-wide)
+	frameNum uint16 // número de frame (id 3, só no 1º pacote de cada AU) — começa em 1
 }
 
 func NewH264Payloader(ssrc uint32) *H264Payloader {
 	return &H264Payloader{
-		ssrc: ssrc,
-		seq:  uint16(randUint(1 << 16)),
-		twcc: uint16(randUint(1 << 16)),
+		ssrc:     ssrc,
+		frameNum: 1,
+		seq:      uint16(randUint(1 << 16)),
+		twcc:     uint16(randUint(1 << 16)),
 	}
 }
 
 // Packetize returns the RTP packets for one Annex-B access unit. Every packet
 // shares ts (the 90 kHz RTP timestamp); the marker bit is set on the last
 // packet of the frame only. An empty or start-code-only frame yields nothing.
-func (p *H264Payloader) Packetize(frame []byte, ts uint32) []*RtpPacket {
+//
+// EMPACOTAMENTO CORRIGIDO (2026-09-17): antes fragmentávamos cada NAL (SPS,
+// PPS, IDR...) SEPARADAMENTE via FU-A/single-NAL, seguindo RFC 6184 à risca.
+// O WhatsApp não espera isso — ele trata a unidade de acesso inteira (todos
+// os NALs, com os start codes originais entre eles) como se fosse "um NAL só"
+// pra fins de fragmentação: concatena tudo num blob e FU-A fragmenta O BLOB,
+// usando o cabeçalho do PRIMEIRO NAL (fbit/nri/type) pra reconstrução. NALs
+// pequenos (PPS) deixam de virar pacote avulso — vão embutidos dentro do
+// fragmento FU-A do blob. Sem isso, o decodificador do WhatsApp nunca
+// reconhecia nosso keyframe como válido mesmo com SPS/PPS/IDR presentes.
+// Confirmado contra a implementação de referência
+// github.com/purpshell/meowcaller (rtp.PackageH264NALU + protectAccessUnitLocked,
+// que por sua vez credita isso ao WaCalls original — mesma linhagem deste
+// projeto, mas um comportamento que nunca replicamos aqui).
+func (p *H264Payloader) Packetize(frame []byte, ts uint32, idr bool) []*RtpPacket {
 	nalus := splitAnnexB(frame)
 	if len(nalus) == 0 {
 		return nil
 	}
 
-	var payloads [][]byte
+	var packed []byte
 	for _, nalu := range nalus {
-		if len(nalu) == 0 {
+		if len(nalu) == 0 || nalu[0]&h264NalTypeMask == 9 { // pula AUD
 			continue
 		}
-		if len(nalu) <= MaxH264PayloadSize {
-			payloads = append(payloads, nalu)
-			continue
+		if len(packed) > 0 {
+			packed = append(packed, 0, 0, 0, 1)
 		}
-		// FU-A fragmentation (RFC 6184 §5.8).
-		fbitNri := nalu[0] & 0xE0
-		origType := nalu[0] & h264NalTypeMask
-		body := nalu[1:]
+		packed = append(packed, nalu...)
+	}
+	if len(packed) == 0 {
+		return nil
+	}
+
+	var payloads [][]byte
+	if len(packed) <= MaxH264PayloadSize {
+		payloads = append(payloads, packed)
+	} else {
+		// FU-A fragmentação do blob inteiro (RFC 6184 §5.8, cabeçalho do
+		// primeiro NAL do blob usado pra fbit/nri/type de reconstrução).
+		fbitNri := packed[0] & 0xE0
+		origType := packed[0] & h264NalTypeMask
+		body := packed[1:]
 		frag := MaxH264PayloadSize - 2
 		for off := 0; off < len(body); off += frag {
 			end := off + frag
@@ -107,17 +160,27 @@ func (p *H264Payloader) Packetize(frame []byte, ts uint32) []*RtpPacket {
 		return nil
 	}
 
+	mediaFrameInfo := mediaFrameInfoDelta
+	if idr {
+		mediaFrameInfo = mediaFrameInfoIDR
+	}
 	pkts := make([]*RtpPacket, 0, len(payloads))
 	for i, pl := range payloads {
 		h := NewRtpHeader(core.PayloadTypeWhatsAppH264, p.seq, ts, p.ssrc)
 		h.Marker = i == len(payloads)-1
 		h.Extension = true
 		h.ExtensionProfile = 0xDEBE
-		h.ExtensionData = videoExtBlock(0x00, p.twcc)
+		var frameNum *uint16
+		if i == 0 {
+			fn := p.frameNum
+			frameNum = &fn
+		}
+		h.ExtensionData = videoExtBlock(mediaFrameInfo, frameNum, p.twcc)
 		pkts = append(pkts, &RtpPacket{Header: h, Payload: pl})
 		p.seq++
 		p.twcc++
 	}
+	p.frameNum++
 	return pkts
 }
 

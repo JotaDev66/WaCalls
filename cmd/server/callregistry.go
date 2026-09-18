@@ -2,13 +2,20 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 
-	"wacalls/internal/voip/call"
+	meowcaller "github.com/purpshell/meowcaller"
 )
 
 type activeCall struct {
-	cm     *call.CallManager
+	call   *meowcaller.Call
+	src    *liveAudioSource
 	bridge *Bridge
+	// held controla se bridge.OnBrowserPCM empurra pra src — enquanto true,
+	// os quadros do microfone do browser são descartados em vez de
+	// bufferizados, então o unhold retoma ao vivo em vez de tocar um atraso
+	// acumulado (ver doHold/doUnhold).
+	held atomic.Bool
 }
 
 type callRegistry struct {

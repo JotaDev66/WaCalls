@@ -5,17 +5,28 @@ import { queryClient, queryKeys } from "@/lib/query";
 import type { OpenCall } from "@/lib/webrtc";
 import type { CallSummary, IncomingPayload } from "@/types/call";
 
+export type CallExtras = {
+  lastReaction: { text: string; sender: string; at: number } | null;
+  handRaised: boolean;
+};
+
+const emptyExtras: CallExtras = { lastReaction: null, handRaised: false };
+
 type State = {
   calls: CallSummary[];
   ownConnections: Map<string, OpenCall>;
   incoming: IncomingPayload | null;
+  extras: Map<string, CallExtras>;
 };
 
 export const useCalls = create<State>(() => ({
   calls: [],
   ownConnections: new Map(),
   incoming: null,
+  extras: new Map(),
 }));
+
+export const callExtras = (id: string): CallExtras => useCalls.getState().extras.get(id) ?? emptyExtras;
 
 let wired = false;
 export const ensureCallsWired = (): void => {
@@ -43,11 +54,14 @@ export const ensureCallsWired = (): void => {
       useCalls.setState((s) => {
         const conn = s.ownConnections.get(ev.id);
         if (conn) conn.close();
-        const next = new Map(s.ownConnections);
-        next.delete(ev.id);
+        const nextConn = new Map(s.ownConnections);
+        nextConn.delete(ev.id);
+        const nextExtras = new Map(s.extras);
+        nextExtras.delete(ev.id);
         return {
           calls: s.calls.filter((c) => c.callId !== ev.id),
-          ownConnections: next,
+          ownConnections: nextConn,
+          extras: nextExtras,
           incoming: s.incoming?.callId === ev.id ? null : s.incoming,
         };
       });
@@ -64,6 +78,20 @@ export const ensureCallsWired = (): void => {
       });
     } else if (ev.type === "incoming-claimed") {
       useCalls.setState((s) => (s.incoming?.callId === ev.id ? { incoming: null } : s));
+    } else if (ev.type === "call-reaction") {
+      useCalls.setState((s) => {
+        const next = new Map(s.extras);
+        const cur = next.get(ev.id) ?? emptyExtras;
+        next.set(ev.id, { ...cur, lastReaction: { text: ev.text, sender: ev.sender, at: ev.at } });
+        return { extras: next };
+      });
+    } else if (ev.type === "call-hand") {
+      useCalls.setState((s) => {
+        const next = new Map(s.extras);
+        const cur = next.get(ev.id) ?? emptyExtras;
+        next.set(ev.id, { ...cur, handRaised: ev.raised });
+        return { extras: next };
+      });
     }
   });
 };

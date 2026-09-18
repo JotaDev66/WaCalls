@@ -11,7 +11,7 @@ import (
 	"wacalls/internal/voip/transport"
 	"wacalls/internal/voip/wanode"
 
-	"go.mau.fi/whatsmeow/types"
+	"github.com/polymorfa/hypermeow/types"
 )
 
 type CallManager struct {
@@ -45,6 +45,7 @@ type CallManager struct {
 	rtcpStop       chan struct{}
 	videoTxPkts    uint32
 	videoTxOctets  uint32
+	videoTxLastSeq uint16 // seq do último pacote de vídeo enviado; ver debugTryNackSsrcCandidates
 	videoRxPkts    uint32
 	videoRxHighSeq uint32
 	// histórico dos pacotes de vídeo já protegidos, para retransmitir quando o
@@ -52,6 +53,29 @@ type CallManager struct {
 	// no decodificador dele. Ver videotxhistory.go / handleVideoNack.
 	videoTxHist    *videoTxHistory
 	videoRtxResent uint32
+	// videoTxKeyframeRequired trava a saída: enquanto true, FeedCapturedVideo
+	// descarta silenciosamente todo quadro que não tenha um IDR de verdade
+	// (mesmo que o navegador marque o quadro como "keyframe" — o browser às
+	// vezes manda o primeiro quadro sem SPS/PPS/IDR nenhum). Sem essa trava
+	// mandávamos vários quadros nonIDR antes do primeiro IDR de verdade, o
+	// que deixa o decodificador do WhatsApp sem chão pra começar. Começa
+	// true (call/plano de vídeo novo) e volta a true sempre que pedimos um
+	// keyframe (PLI/FIR ou proativo). Ideia confirmada funcionando na lib de
+	// referência github.com/purpshell/meowcaller (videoSender.keyframeRequired).
+	videoTxKeyframeRequired bool
+	// videoTxNextTs é o timestamp RTP (90kHz) da próxima unidade de acesso de
+	// vídeo, avançado por um passo FIXO (core.WAVideoClockRate/WAVideoFrameRate)
+	// por AU — NÃO o tempo real de captura do navegador (f.TimestampMS). Um
+	// passo fixo casa com o que o receptor espera (visto na lib de referência
+	// github.com/purpshell/meowcaller: browserVideoFrameDuration é constante).
+	videoTxNextTs uint32
+	// contador do loop de RTCP de vídeo (1 tick/s) — usado pra pedir um
+	// keyframe novo periodicamente e proativamente (ver sendVideoRtcpTick).
+	// Sem retransmissão por NACK (não dá pra decifrar o feedback "fast" do
+	// WhatsApp — ver VDUMP), um keyframe perdido fica perdido; pedir um novo
+	// de tempos em tempos, mesmo sem PLI/FIR, dá mais chances de um chegar
+	// inteiro.
+	videoRtcpTicks uint32
 	// último RTP timestamp de vídeo que mandamos + quando, para extrapolar o
 	// RTP timestamp do Sender Report (RFC 3550: precisa corresponder ao stream).
 	lastVideoTxTS   uint32

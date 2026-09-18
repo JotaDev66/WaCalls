@@ -26,7 +26,9 @@ export type BrokerEvent =
   | { type: "call-status"; sessionId: string; id: string; owner: string | null; status: CallStatus; peer: string; media?: RawMedia; startedAt: number }
   | { type: "call-ended"; sessionId: string; id: string; owner: string | null; reason: string; endedAt: number }
   | { type: "incoming"; sessionId: string; id: string; peer: string; media?: RawMedia; offeredAt: number }
-  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string };
+  | { type: "incoming-claimed"; sessionId: string; id: string; owner: string }
+  | { type: "call-reaction"; sessionId: string; id: string; sender: string; text: string; at: number }
+  | { type: "call-hand"; sessionId: string; id: string; participant: string; raised: boolean };
 
 export const asCallMedia = (m: RawMedia): "audio" | "video" => (m === "video" ? "video" : "audio");
 

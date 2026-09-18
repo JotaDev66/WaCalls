@@ -240,5 +240,11 @@ export const startVideoPipe = async ({ camDeviceId, onEncoded }: StartOpts): Pro
     forceKeyframe = true;
   };
 
-  return { localStream, remoteStream, pushEncodedFrame, requestKeyframe, close };
+  return {
+    localStream,
+    remoteStream,
+    pushEncodedFrame,
+    requestKeyframe,
+    close,
+  };
 };

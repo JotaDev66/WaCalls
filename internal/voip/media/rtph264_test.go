@@ -33,7 +33,7 @@ func TestH264PayloadRoundTrip(t *testing.T) {
 	frame := bytes.Join([][]byte{sc, sps, sc, idr}, nil)
 
 	pay := NewH264Payloader(0xABCD)
-	pkts := pay.Packetize(frame, 90000)
+	pkts := pay.Packetize(frame, 90000, true)
 	if len(pkts) < 3 {
 		t.Fatalf("esperava >=3 pacotes (SPS + FU-A), got %d", len(pkts))
 	}

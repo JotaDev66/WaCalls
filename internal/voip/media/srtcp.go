@@ -141,15 +141,32 @@ func (c *SrtcpContext) Protect(rtcp []byte) ([]byte, error) {
 	return out, nil
 }
 
-// Unprotect descifra um SRTCP e devolve o pacote RTCP composto em claro,
-// validando o tag de autenticação primeiro (rejeita se não bater).
-// UnprotectWithSSRC continua sem essa checagem — é ferramenta de
-// diagnóstico (-video-dump) que testa SSRCs candidatos de propósito.
+// ErrAuthTagMismatch sinaliza que o tag de autenticação não bateu. Ao
+// contrário de outros erros de Unprotect, este vem acompanhado do pacote
+// decifrado mesmo assim (não bloqueia o processamento) — a derivação da
+// chave de auth do canal "fast" de feedback do WhatsApp (NACK) ainda não
+// está confirmada, então rejeitar esses pacotes hoje quebraria a
+// retransmissão de vídeo. Quem chama decide se loga/investiga; ver
+// callmanager_rtcp.go.
+var ErrAuthTagMismatch = errors.New("srtcp: auth tag inválido")
+
+// Unprotect descifra um SRTCP e devolve o pacote RTCP composto em claro.
+// Valida o tag de autenticação, mas um tag inválido não impede o
+// processamento: devolve o pacote decifrado mesmo assim, junto com
+// ErrAuthTagMismatch, para não bloquear NACK/PLI enquanto a derivação de
+// chave do canal "fast" do WhatsApp segue sendo confirmada. UnprotectWithSSRC
+// continua sem essa checagem — é ferramenta de diagnóstico (-video-dump) que
+// testa SSRCs candidatos de propósito.
 func (c *SrtcpContext) Unprotect(data []byte) ([]byte, error) {
-	if err := c.verifyAuthTag(data); err != nil {
+	authErr := c.verifyAuthTag(data)
+	plain, err := c.UnprotectWithSSRC(data, 0, false)
+	if err != nil {
 		return nil, err
 	}
-	return c.UnprotectWithSSRC(data, 0, false)
+	if authErr != nil {
+		return plain, ErrAuthTagMismatch
+	}
+	return plain, nil
 }
 
 func (c *SrtcpContext) verifyAuthTag(data []byte) error {
