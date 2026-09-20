@@ -55,3 +55,34 @@ func TestCallRegistrySetBridgeMissing(t *testing.T) {
 		t.Fatal("setBridge on missing call must report not-found")
 	}
 }
+
+func TestCallRegistryBridgeConcurrentAccess(t *testing.T) {
+	r := newCallRegistry()
+	r.add("c1", &activeCall{})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 100; i++ {
+			r.setBridge("c1", &Bridge{})
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		r.bridge("c1")
+	}
+	<-done
+}
+
+func TestCallRegistryBridgeMissing(t *testing.T) {
+	r := newCallRegistry()
+	r.add("c1", &activeCall{})
+	if _, ok := r.bridge("c1"); ok {
+		t.Fatal("bridge should report not-found when no bridge is set yet")
+	}
+	b := &Bridge{}
+	r.setBridge("c1", b)
+	got, ok := r.bridge("c1")
+	if !ok || got != b {
+		t.Fatalf("bridge should return the set bridge: ok=%v got=%v", ok, got)
+	}
+}

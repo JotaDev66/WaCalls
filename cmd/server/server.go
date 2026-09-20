@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"log/slog"
 
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	waLog "go.mau.fi/whatsmeow/util/log"
+	"github.com/polymorfa/hypermeow/store/sqlstore"
+	waLog "github.com/polymorfa/hypermeow/util/log"
 	_ "modernc.org/sqlite"
 )
 

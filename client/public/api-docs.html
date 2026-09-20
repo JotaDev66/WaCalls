@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WaCalls — API Docs</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+    <style>
+        body { margin: 0; background: #fafafa; }
+        .topbar { display: none; }
+        #header {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 20px; background: #111827; color: #fff;
+            font-family: system-ui, sans-serif;
+        }
+        #header a { margin-left: auto; color: #93c5fd; text-decoration: none; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div id="header">
+    <strong>WaCalls API</strong>
+    <span style="opacity:.6;font-size:13px">documentação interativa</span>
+    <a href="/">← voltar ao painel</a>
+</div>
+<div id="swagger-ui"></div>
+<script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js" crossorigin></script>
+<script>
+    window.onload = () => {
+        window.ui = SwaggerUIBundle({
+            url: "/openapi.yaml",
+            dom_id: "#swagger-ui",
+            deepLinking: true,
+            presets: [SwaggerUIBundle.presets.apis],
+            layout: "BaseLayout",
+        });
+    };
+</script>
+</body>
+</html>

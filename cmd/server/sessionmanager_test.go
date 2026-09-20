@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"go.mau.fi/whatsmeow"
-	"go.mau.fi/whatsmeow/store/sqlstore"
-	waLog "go.mau.fi/whatsmeow/util/log"
+	"github.com/polymorfa/hypermeow"
+	"github.com/polymorfa/hypermeow/store/sqlstore"
+	waLog "github.com/polymorfa/hypermeow/util/log"
 )
 
 func newTestManager(t *testing.T) *SessionManager {

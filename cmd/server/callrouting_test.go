@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	waBinary "go.mau.fi/whatsmeow/binary"
+	waBinary "github.com/polymorfa/hypermeow/binary"
 )
 
 func TestCallIDFromNode(t *testing.T) {

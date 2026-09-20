@@ -160,6 +160,44 @@ func TestSrtpRoundtrip(t *testing.T) {
 	}
 }
 
+func TestSrtpUnprotectRejectsTamperedTag(t *testing.T) {
+	callKey := bytes.Repeat([]byte{0x11}, 32)
+	sendKM, _ := DerivePerJidSrtpKey(callKey, "self:0@lid")
+	recvKM, _ := DerivePerJidSrtpKey(callKey, "peer:0@lid")
+
+	sender, err := NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receiver, err := NewSrtpSession(recvKM, sendKM, core.SRTPRecvAuthTagLen, core.SRTPSendAuthTagLen)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sess := NewWhatsAppOpusSession(0xAABBCCDD)
+	payload := bytes.Repeat([]byte{0x42}, 40)
+	pkt := sess.CreatePacketWithDuration(payload, 960, true)
+
+	protected, err := sender.Protect(pkt)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tampered := append([]byte(nil), protected...)
+	tampered[len(tampered)-1] ^= 0xFF // flip the last tag byte
+
+	if _, err := receiver.Unprotect(tampered); err == nil {
+		t.Fatal("Unprotect must reject a packet with a tampered auth tag")
+	}
+
+	// A tampered payload byte (tag untouched) must also be rejected.
+	tamperedPayload := append([]byte(nil), protected...)
+	tamperedPayload[pkt.Header.Size()] ^= 0xFF
+	if _, err := receiver.Unprotect(tamperedPayload); err == nil {
+		t.Fatal("Unprotect must reject a packet with a tampered payload")
+	}
+}
+
 func TestDeriveSrtpKeyReference(t *testing.T) {
 	masterKey := bytes.Repeat([]byte{0x01}, 16)
 	masterSalt := bytes.Repeat([]byte{0x02}, 14)

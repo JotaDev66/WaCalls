@@ -1,21 +1,36 @@
 import { useState } from "react";
-import { Disc3, Phone } from "lucide-react";
+import { Disc3, Phone, Users, Video } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DeviceSelector } from "@/components/form/DeviceSelector";
 import { useStartCall } from "@/hooks/useStartCall";
+import { useStartGroupCall } from "@/hooks/useStartGroupCall";
+import { videoCallSupported } from "@/lib/video-pipe";
 import { useDevices } from "@/stores/devices";
+
+const canVideo = videoCallSupported();
 
 export const Dialer = ({ sid }: { sid: string }) => {
   const [phone, setPhone] = useState("");
   const [record, setRecord] = useState(false);
+  const [groupJID, setGroupJID] = useState("");
+  const [groupOpen, setGroupOpen] = useState(false);
   const micId = useDevices((s) => s.micId);
   const startCall = useStartCall(sid, micId);
+  const startGroupCall = useStartGroupCall(sid, micId);
 
-  const submit = () => {
+  const submit = (video: boolean) => {
     if (!phone.trim() || startCall.isPending) return;
-    startCall.mutate({ phone: phone.trim(), record }, { onSuccess: () => setPhone("") });
+    startCall.mutate({ phone: phone.trim(), record, video }, { onSuccess: () => setPhone("") });
+  };
+
+  const submitGroup = (video: boolean) => {
+    if (!groupJID.trim() || startGroupCall.isPending) return;
+    startGroupCall.mutate(
+      { groupJID: groupJID.trim(), video },
+      { onSuccess: () => setGroupJID("") },
+    );
   };
 
   return (
@@ -30,7 +45,7 @@ export const Dialer = ({ sid }: { sid: string }) => {
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") submit();
+              if (e.key === "Enter") submit(false);
             }}
             placeholder="+55 11 99999 9999"
             inputMode="tel"
@@ -46,11 +61,55 @@ export const Dialer = ({ sid }: { sid: string }) => {
             <Disc3 className="h-4 w-4" />
             Record
           </Button>
-          <Button onClick={submit} disabled={startCall.isPending || !phone.trim()}>
+          <Button onClick={() => submit(false)} disabled={startCall.isPending || !phone.trim()}>
             <Phone className="h-4 w-4" />
             {startCall.isPending ? "Calling…" : "Call"}
           </Button>
+          {canVideo && (
+            <Button
+              variant="outline"
+              onClick={() => submit(true)}
+              disabled={startCall.isPending || !phone.trim()}
+            >
+              <Video className="h-4 w-4" />
+              Video
+            </Button>
+          )}
+          <Button type="button" variant="ghost" size="sm" onClick={() => setGroupOpen((v) => !v)}>
+            <Users className="h-4 w-4" />
+            Group call
+          </Button>
         </div>
+        {groupOpen && (
+          <div className="flex flex-wrap items-center gap-2 border-t pt-3">
+            <Input
+              value={groupJID}
+              onChange={(e) => setGroupJID(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitGroup(false);
+              }}
+              placeholder="1234567890-1234567890@g.us"
+              className="min-w-[200px] flex-1"
+            />
+            <Button
+              onClick={() => submitGroup(false)}
+              disabled={startGroupCall.isPending || !groupJID.trim()}
+            >
+              <Phone className="h-4 w-4" />
+              {startGroupCall.isPending ? "Calling…" : "Call group"}
+            </Button>
+            {canVideo && (
+              <Button
+                variant="outline"
+                onClick={() => submitGroup(true)}
+                disabled={startGroupCall.isPending || !groupJID.trim()}
+              >
+                <Video className="h-4 w-4" />
+                Video
+              </Button>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

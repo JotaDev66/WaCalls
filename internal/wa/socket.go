@@ -7,9 +7,9 @@ import (
 	"wacalls/internal/voip/core"
 	"wacalls/internal/voip/signaling"
 
-	"go.mau.fi/whatsmeow"
-	waBinary "go.mau.fi/whatsmeow/binary"
-	"go.mau.fi/whatsmeow/types"
+	"github.com/polymorfa/hypermeow"
+	waBinary "github.com/polymorfa/hypermeow/binary"
+	"github.com/polymorfa/hypermeow/types"
 )
 
 type Socket struct {

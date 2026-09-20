@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Phone, PhoneIncoming, PhoneOff } from "lucide-react";
+import { Phone, PhoneIncoming, PhoneOff, Video } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useCalls } from "@/stores/calls";
@@ -54,6 +54,7 @@ export const IncomingCallModal = () => {
   const accept = useAcceptCall(micId);
   const reject = useRejectCall();
   const busy = accept.isPending || reject.isPending;
+  const isVideo = incoming?.media === "video";
 
   useEffect(() => {
     if (!incoming) return;
@@ -72,9 +73,9 @@ export const IncomingCallModal = () => {
       >
         <DialogHeader className="items-center text-center">
           <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <PhoneIncoming className="h-7 w-7" />
+            {isVideo ? <Video className="h-7 w-7" /> : <PhoneIncoming className="h-7 w-7" />}
           </div>
-          <DialogTitle>Incoming call</DialogTitle>
+          <DialogTitle>{isVideo ? "Incoming video call" : "Incoming call"}</DialogTitle>
           <DialogDescription className="truncate">{incoming?.peer}</DialogDescription>
         </DialogHeader>
         <div className="mt-2 flex items-center justify-center gap-6">
@@ -92,10 +93,13 @@ export const IncomingCallModal = () => {
             size="icon"
             className="h-14 w-14 rounded-full"
             disabled={busy}
-            onClick={() => incoming && accept.mutate({ sid: incoming.sessionId, callId: incoming.callId })}
+            onClick={() =>
+              incoming &&
+              accept.mutate({ sid: incoming.sessionId, callId: incoming.callId, video: isVideo })
+            }
             aria-label="Accept"
           >
-            <Phone className="h-6 w-6" />
+            {isVideo ? <Video className="h-6 w-6" /> : <Phone className="h-6 w-6" />}
           </Button>
         </div>
       </DialogContent>

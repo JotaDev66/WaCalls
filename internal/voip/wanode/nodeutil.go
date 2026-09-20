@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
-	waBinary "go.mau.fi/whatsmeow/binary"
+	waBinary "github.com/polymorfa/hypermeow/binary"
 )
 
 func NodeChildren(n *waBinary.Node) []waBinary.Node {

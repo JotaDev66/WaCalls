@@ -5,7 +5,7 @@ import (
 	"wacalls/internal/voip/media"
 	"wacalls/internal/voip/wanode"
 
-	"go.mau.fi/whatsmeow/types"
+	"github.com/polymorfa/hypermeow/types"
 )
 
 func (m *CallManager) initSrtpKeysLocked() {
@@ -35,13 +35,23 @@ func (m *CallManager) initSrtpKeysLocked() {
 		m.log.Error("srtp key derivation failed", "err1", err1, "err2", err2)
 		return
 	}
+	if VideoDump {
+		m.log.Info("VDUMP recv-master-key", "master_key", hexBytes(recvKM.MasterKey), "master_salt", hexBytes(recvKM.MasterSalt))
+	}
 	sess, err := media.NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen)
 	if err != nil {
 		m.log.Error("srtp session failed", "err", err)
 		return
 	}
 	m.srtpSession = sess
+	if sc, e := media.NewSrtcpContext(sendKM, media.SrtcpAuthTagLen); e == nil {
+		m.srtcpSend = sc
+	}
+	if rc, e := media.NewSrtcpContext(recvKM, media.SrtcpAuthTagLen); e == nil {
+		m.srtcpRecv = rc
+	}
 	m.log.Debug("srtp per-jid keys set", "send", ourDeviceJid, "recv", peerDeviceJid)
+	m.debugLogSrtcpKeys()
 }
 
 func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
@@ -60,8 +70,18 @@ func (m *CallManager) reinitSrtpLocked(peerKey []byte, peerJid types.JID) {
 	if err1 != nil || err2 != nil {
 		return
 	}
+	if VideoDump {
+		m.log.Info("VDUMP recv-master-key", "master_key", hexBytes(recvKM.MasterKey), "master_salt", hexBytes(recvKM.MasterSalt))
+	}
 	if sess, err := media.NewSrtpSession(sendKM, recvKM, core.SRTPSendAuthTagLen, core.SRTPRecvAuthTagLen); err == nil {
 		m.srtpSession = sess
+		if sc, e := media.NewSrtcpContext(sendKM, media.SrtcpAuthTagLen); e == nil {
+			m.srtcpSend = sc
+		}
+		if rc, e := media.NewSrtcpContext(recvKM, media.SrtcpAuthTagLen); e == nil {
+			m.srtcpRecv = rc
+		}
 		m.log.Debug("srtp re-initialized with peer call key")
+		m.debugLogSrtcpKeys()
 	}
 }

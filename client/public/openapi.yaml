@@ -1,0 +1,729 @@
+openapi: 3.0.3
+info:
+  title: WaCalls API
+  version: "1.1.0"
+  description: |
+    API HTTP do **WaCalls** — chamadas de voz e vídeo do WhatsApp pelo navegador
+    (motor: [meowcaller](https://github.com/purpshell/meowcaller) sobre HyperMeow).
+
+    ## Autenticação
+    Não há login/senha. Todas as rotas aceitam o header **`X-Client-Id`** (qualquer
+    identificador estável), usado para marcar o "dono" das chamadas e filtrar eventos.
+
+    Opcionalmente, se a variável de ambiente `WACALLS_API_KEY` estiver definida no
+    servidor, toda requisição precisa do header **`X-API-Key`** com o mesmo valor —
+    do contrário a API fica aberta (comportamento padrão).
+
+    > ⚠️ A API inicia/controla as chamadas (sinalização), mas o **áudio/vídeo** exige
+    > um cliente WebRTC (navegador) com captura de microfone/câmera — não é possível
+    > só com chamadas HTTP.
+
+    ## Limitações conhecidas desta build
+    - **Hold/transferência** tocam sempre um tom de espera local de 440 Hz; o campo
+      `moh_url` é aceito por compatibilidade de formato mas ainda não é decodificado
+      (precisaria de um decoder de áudio para arquivo remoto arbitrário).
+    - **Import/export de sessão** (credenciais Baileys `creds.json` / dump wa-web)
+      não está implementado nesta build — é um trabalho de reverse-engineering de
+      formato separado e sensível (chaves de identidade), fora do escopo desta
+      passada. As rotas correspondentes não existem aqui.
+servers:
+  - url: /
+    description: Mesma origem do painel
+
+tags:
+  - name: Sessões
+    description: Contas WhatsApp (cada sessão = um device linkado)
+  - name: Chamadas
+    description: Iniciar, atender, rejeitar, encerrar, segurar e transferir chamadas
+  - name: Recursos de chamada
+    description: Reações, levantar a mão, participantes — enviados durante uma chamada ativa
+  - name: Eventos & Histórico
+
+security:
+  - apiKeyAuth: []
+
+components:
+  securitySchemes:
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: "API key definida em WACALLS_API_KEY (vazia = sem autenticação, padrão)"
+  parameters:
+    ClientId:
+      name: X-Client-Id
+      in: header
+      required: false
+      schema: { type: string, example: meuapp }
+      description: Identificador do cliente (dono da chamada / filtro de eventos).
+    Sid:
+      name: sid
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID da sessão (conta WhatsApp).
+    CallId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: ID da chamada.
+  schemas:
+    Session:
+      type: object
+      properties:
+        id: { type: string, example: 6458cca60a17c0cefa71de9da9dc92a2 }
+        name: { type: string, example: WhatsApp }
+        jid: { type: string, example: "556192264108:13@s.whatsapp.net" }
+        state: { type: string, enum: [connecting, qr, open, logged_out], example: open }
+        paired: { type: boolean, example: true }
+    StartCallRequest:
+      type: object
+      properties:
+        phone:
+          type: string
+          example: "5561999999999"
+          description: "DDI+DDD+número — obrigatório se `group` não for informado."
+        group:
+          type: string
+          example: "120363410527421443@g.us"
+          description: |
+            JID de um grupo do WhatsApp — obrigatório se `phone` não for informado.
+            Toca todo membro remoto do grupo (mín. 2, máx. 31); o WhatsApp exige pelo
+            menos 2 alvos remotos para uma chamada de grupo de verdade.
+        duration_ms: { type: integer, example: 300000 }
+        record: { type: boolean, example: false }
+        video: { type: boolean, example: false, description: "Chamada de vídeo em vez de só áudio." }
+    CallState:
+      type: object
+      properties:
+        id: { type: string, example: "ABCDEF1234" }
+        sid: { type: string, example: "6458cca60a17c0cefa71de9da9dc92a2" }
+        peer: { type: string, example: "5561999999999@s.whatsapp.net" }
+        state:
+          type: string
+          enum: [initiating, ringing, active, held, transferring, ended]
+          example: active
+        direction:
+          type: string
+          enum: [incoming, outgoing]
+          example: outgoing
+
+paths:
+  /api/config:
+    get:
+      tags: [Sessões]
+      summary: Configuração do servidor (limite de chamadas simultâneas)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  maxCallsPerSession: { type: integer, example: 8, description: "Máx. de chamadas simultâneas por sessão (0 = ilimitado)" }
+
+  /api/sessions:
+    get:
+      tags: [Sessões]
+      summary: Lista as contas
+      parameters: [{ $ref: "#/components/parameters/ClientId" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+    post:
+      tags: [Sessões]
+      summary: Cria uma conta (inicia pareamento por QR code)
+      parameters: [{ $ref: "#/components/parameters/ClientId" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, example: "Minha conta" }
+      responses:
+        "200":
+          description: Criada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { id: { type: string } }
+
+  /api/sessions/{sid}:
+    delete:
+      tags: [Sessões]
+      summary: Remove a conta
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "204": { description: Removida }
+        "404": { description: Sessão não encontrada }
+
+  /api/sessions/{sid}/logout:
+    post:
+      tags: [Sessões]
+      summary: Desconecta a conta (mantém a sessão, permite repareamento)
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "204": { description: Desconectada }
+        "404": { description: Sessão não encontrada }
+
+  /api/sessions/{sid}/pair:
+    post:
+      tags: [Sessões]
+      summary: Reinicia o pareamento (QR sai via SSE)
+      description: Gera um novo QR Code; acompanhe os eventos `session-qr` / `auth-state` em `/api/events`.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "204": { description: Pareamento iniciado }
+        "400": { description: Sessão já pareada }
+
+  /api/sessions/{sid}/calls:
+    get:
+      tags: [Chamadas]
+      summary: Quantas chamadas ativas a sessão tem (e o limite)
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active: { type: integer, example: 2 }
+                  maxCallsPerSession: { type: integer, example: 8 }
+    post:
+      tags: [Chamadas]
+      summary: Inicia uma chamada (número ou grupo)
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartCallRequest" }
+      responses:
+        "200":
+          description: Chamada iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  call:
+                    type: object
+                    properties: { callId: { type: string } }
+        "400": { description: "phone ou group ausente" }
+        "409": { description: "Operador já está em outra chamada" }
+        "429": { description: "Limite de chamadas simultâneas atingido" }
+        "503": { description: Conta não pareada }
+
+  /api/sessions/{sid}/calls/{id}:
+    get:
+      tags: [Chamadas]
+      summary: Consulta o estado de uma chamada específica
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CallState" }
+        "404": { description: Chamada não encontrada }
+    delete:
+      tags: [Chamadas]
+      summary: Encerra a chamada
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "204": { description: Encerrada }
+        "409": { description: Chamada de outro cliente }
+
+  /api/sessions/{sid}/calls/{id}/accept:
+    post:
+      tags: [Chamadas]
+      summary: Atende uma chamada recebida
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: Atendida
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  call:
+                    type: object
+                    properties: { callId: { type: string } }
+        "404": { description: Chamada não encontrada }
+        "409": { description: "Operador já em outra chamada, ou chamada reclamada por outro cliente" }
+
+  /api/sessions/{sid}/calls/{id}/reject:
+    post:
+      tags: [Chamadas]
+      summary: Rejeita uma chamada recebida
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200": { description: Rejeitada }
+        "409": { description: Chamada de outro cliente }
+
+  /api/sessions/{sid}/calls/{id}/webrtc:
+    post:
+      tags: [Chamadas]
+      summary: Conecta (ou reconecta) o canal WebRTC do agente à chamada ativa
+      description: |
+        Abre (ou substitui) o bridge WebRTC entre o browser do agente e a chamada
+        WhatsApp em curso. Se já existir um bridge ativo, ele é fechado e substituído.
+
+        Uso típico pós-pickup: chame `POST .../pickup` primeiro, pegue o `sessionId`
+        real da resposta, e conecte aqui usando **esse** `sid`.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp_offer]
+              properties:
+                sdp_offer:
+                  type: string
+                  description: SDP offer gerado pelo RTCPeerConnection do browser.
+      responses:
+        "200":
+          description: Bridge WebRTC estabelecido
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdp_answer:
+                    type: string
+                    description: SDP answer para completar a negociação no browser.
+        "400": { description: sdp_offer ausente }
+        "404": { description: Chamada não encontrada na sessão }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha ao criar bridge WebRTC }
+
+  /api/sessions/{sid}/calls/{id}/webrtc/renegotiate:
+    post:
+      tags: [Chamadas]
+      summary: Renegocia a peer connection já aberta (upgrade de áudio pra vídeo no meio da chamada)
+      description: |
+        Aplica uma nova oferta SDP na MESMA peer connection já conectada por
+        `POST .../webrtc` — ao contrário daquele endpoint, não cria um bridge
+        novo (isso cortaria o áudio já fluindo). Usado pelo browser quando
+        adiciona o data channel `vp8` numa chamada que começou só de áudio.
+
+        Fluxo de upgrade pra vídeo:
+        1. Browser abre a câmera e cria o data channel `vp8` na peer connection existente.
+        2. `POST` aqui com a nova oferta SDP (agora incluindo o canal de vídeo).
+        3. `POST .../video/start` pra sinalizar o upgrade pro WhatsApp.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sdp_offer]
+              properties:
+                sdp_offer:
+                  type: string
+                  description: Nova SDP offer, incluindo o data channel adicionado.
+      responses:
+        "200":
+          description: Renegociação concluída
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sdp_answer: { type: string }
+        "400": { description: sdp_offer ausente }
+        "404": { description: "Nenhum bridge conectado ainda pra essa chamada (chame POST .../webrtc primeiro)" }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha na renegociação }
+
+  /api/sessions/{sid}/calls/{id}/video/start:
+    post:
+      tags: [Chamadas]
+      summary: Pede o upgrade de áudio pra vídeo no protocolo do WhatsApp
+      description: |
+        Chame depois de `POST .../webrtc/renegotiate` ter aberto o canal de
+        vídeo no browser. O vídeo de saída fica represado internamente até o
+        peer confirmar a transição (evento SSE `call-peer-video`). O `media`
+        da chamada (refletido em `call-status`) muda pra `video` de imediato.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200": { description: Upgrade pedido }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha ao pedir o upgrade }
+
+  /api/sessions/{sid}/calls/{id}/video/stop:
+    post:
+      tags: [Chamadas]
+      summary: Para o vídeo de saída, preservando áudio e o vídeo do peer
+      description: |
+        A chamada continua normalmente, só a nossa câmera para de mandar
+        quadros — o vídeo do peer (se ele também estiver em vídeo) continua
+        chegando. `media` volta pra `audio`.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200": { description: Vídeo de saída parado }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha ao parar o vídeo }
+
+  /api/sessions/{sid}/calls/{id}/video/accept:
+    post:
+      tags: [Chamadas]
+      summary: Aceita um upgrade de vídeo pedido pelo peer (nunca automático)
+      description: |
+        Quando o peer troca pra vídeo do lado dele no meio da chamada
+        (evento SSE `call-peer-video` com `upgrade: true`), o servidor NUNCA
+        aceita sozinho — só notifica. Este endpoint é o aceite explícito,
+        disparado pela UI quando o operador confirma. Chama
+        `Call.AcceptVideo()` (libera receber o vídeo do peer) e também
+        `Call.StartVideo()` (libera nosso próprio vídeo de saída, já que
+        aceitar reabre nossa câmera e manda quadros de verdade).
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200": { description: Upgrade aceito }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha ao aceitar o upgrade }
+
+  /api/sessions/{sid}/calls/{id}/hold:
+    put:
+      tags: [Chamadas]
+      summary: Coloca a chamada em espera (hold)
+      description: |
+        Pausa o áudio do browser → peer e começa a injetar um tom de espera local
+        (440 Hz) no stream para o peer. A chamada WhatsApp permanece ativa.
+
+        `moh_url` é aceito no corpo por compatibilidade de formato, mas **ainda não
+        é decodificado** nesta build — o tom de 440 Hz sempre toca, independente do
+        valor enviado.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                moh_url:
+                  type: string
+                  format: uri
+                  description: "Aceito por compatibilidade; não implementado nesta build (ver descrição)."
+                  example: "https://example.com/hold.mp3"
+      responses:
+        "200":
+          description: Chamada em hold
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  state: { type: string, example: held }
+        "404": { description: Chamada não encontrada }
+        "409": { description: "Chamada não está em estado ativo, ou é de outro cliente" }
+
+  /api/sessions/{sid}/calls/{id}/unhold:
+    put:
+      tags: [Chamadas]
+      summary: Remove o hold — retoma áudio normal
+      description: |
+        Para o tom de espera e retoma o bridge WebRTC normal (microfone do browser
+        → peer, peer → browser), sem perder o áudio acumulado nesse meio-tempo (o
+        buffer do microfone é descartado durante o hold, não reproduzido em atraso).
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: Chamada ativa novamente
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  state: { type: string, example: active }
+        "404": { description: Chamada não encontrada }
+        "409": { description: "Chamada não está em estado held, ou é de outro cliente" }
+
+  /api/sessions/{sid}/calls/{id}/pickup:
+    post:
+      tags: [Chamadas]
+      summary: Transfere o bridge WebRTC da chamada para o cliente que chamar este endpoint
+      description: |
+        Handoff de chamada entre agentes/dispositivos sem encerrar a chamada WhatsApp.
+
+        O servidor resolve a sessão real da chamada via broker — o `{sid}` no path
+        pode ser qualquer sessão válida. A chamada **nunca muda de sessão**; apenas
+        o bridge WebRTC é fechado (o chamador reconecta em seguida) e o dono lógico
+        da chamada passa a ser quem chamou este endpoint, **incondicionalmente** —
+        diferente das outras rotas de chamada, pickup não exige ser o dono atual.
+
+        Fluxo:
+        1. **Agente B** chama `POST /api/sessions/{qualquer-sid}/calls/{id}/pickup`.
+        2. O servidor fecha o bridge WebRTC do Agente A e reatribui o dono a B.
+        3. Evento SSE `call-picked-up` é emitido com o `sessionId` real da chamada.
+        4. **Agente B** conecta o áudio: `POST /api/sessions/{sessionId}/calls/{id}/webrtc`.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: Bridge anterior fechado; agente pode conectar via /webrtc
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  state: { type: string, example: active }
+                  sessionId: { type: string }
+        "404": { description: Chamada não encontrada em nenhuma sessão }
+
+  /api/sessions/{sid}/calls/{id}/transfer:
+    post:
+      tags: [Chamadas]
+      summary: Transferência cega com fallback automático
+      description: |
+        Sequência:
+        1. Coloca `{id}` em hold automaticamente (tom de espera local).
+        2. Na sessão `target_sid`, inicia uma chamada sainte para o mesmo peer.
+        3. Retorna imediatamente com o `transfer_call_id`.
+        4. Monitora assincronamente, em segundo plano:
+           - **Peer atende** (`OnPeerAccept` da nova perna) → encerra a chamada
+             original; emite SSE `transfer-completed`.
+           - **Peer rejeita / encerra antes de atender, ou timeout (60 s)** → encerra
+             a nova perna se ainda estiver tocando, restaura o hold (unhold
+             automático) na chamada original; emite SSE `transfer-failed`.
+
+        `moh_url` é aceito por compatibilidade de formato mas não implementado (ver
+        a limitação documentada em `/calls/{id}/hold`).
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_sid]
+              properties:
+                target_sid:
+                  type: string
+                  description: ID da sessão de destino (deve ser diferente de `{sid}` e estar pareada).
+                  example: "abc123"
+                moh_url:
+                  type: string
+                  format: uri
+                  description: "Aceito por compatibilidade; não implementado nesta build."
+                  example: "https://example.com/hold.mp3"
+      responses:
+        "200":
+          description: Transferência iniciada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  original_call_id: { type: string }
+                  transfer_call_id: { type: string }
+                  target_sid: { type: string }
+                  state: { type: string, example: transferring }
+        "400": { description: "Parâmetros inválidos, ou target_sid igual ao sid de origem" }
+        "404": { description: "Chamada ou sessão destino não encontrada" }
+        "409": { description: "Chamada não está ativa, ou é de outro cliente" }
+        "503": { description: Sessão destino não pareada }
+
+  /api/sessions/{sid}/calls/{id}/reaction:
+    post:
+      tags: [Recursos de chamada]
+      summary: Envia uma reação (emoji ou texto livre) na chamada
+      description: |
+        Vai pelo canal de app-data da própria chamada (RTC), não é uma mensagem de
+        chat. Aceita qualquer texto, não só emoji — o WhatsApp original só manda
+        emoji por esse canal, mas nada na sinalização impede texto livre.
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string, example: "👍" }
+      responses:
+        "200": { description: Enviada }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+
+  /api/sessions/{sid}/calls/{id}/hand:
+    post:
+      tags: [Recursos de chamada]
+      summary: Levanta ou abaixa a mão (estado persistente do participante)
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [raised]
+              properties:
+                raised: { type: boolean, example: true }
+      responses:
+        "200": { description: Estado atualizado }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+
+  /api/sessions/{sid}/calls/{id}/participants:
+    post:
+      tags: [Recursos de chamada]
+      summary: Adiciona um participante à chamada em curso
+      description: |
+        Convida mais uma pessoa pra uma chamada já estabelecida (uma chamada direta
+        vira uma chamada de grupo ad-hoc através deste endpoint).
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/CallId" }
+        - { $ref: "#/components/parameters/ClientId" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target]
+              properties:
+                target: { type: string, example: "5561999999999", description: "Número de telefone (DDI+DDD+número)" }
+      responses:
+        "200": { description: Convite enviado }
+        "400": { description: target ausente }
+        "404": { description: Chamada não encontrada }
+        "409": { description: Chamada de outro cliente }
+        "500": { description: Falha ao convidar (ex. limite de participantes)}
+
+  /api/sessions/{sid}/history:
+    get:
+      tags: [Eventos & Histórico]
+      summary: Histórico de chamadas da conta (últimas 50)
+      parameters:
+        - { $ref: "#/components/parameters/Sid" }
+        - { $ref: "#/components/parameters/ClientId" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rows:
+                    type: array
+                    items: { type: object }
+
+  /api/events:
+    get:
+      tags: [Eventos & Histórico]
+      summary: Stream de eventos em tempo real (SSE)
+      description: |
+        Server-Sent Events. Tipos:
+
+        | Tipo | Campos | Descrição |
+        |---|---|---|
+        | `session-list` | `sessions[]` | Snapshot completo das contas |
+        | `session-qr` | `sessionId`, `qr` | Novo QR code de pareamento |
+        | `auth-state` | `sessionId`, `paired`, `state`, `qr?` | Mudança de estado de autenticação |
+        | `call-list` | `calls[]` | Snapshot completo das chamadas ativas |
+        | `call-status` | `sessionId`, `id`, `owner`, `status`, `peer`, `media`, `startedAt` | Chamada mudou de estado |
+        | `call-ended` | `sessionId`, `id`, `owner`, `reason`, `endedAt` | Chamada encerrada |
+        | `incoming` | `sessionId`, `id`, `peer`, `media`, `offeredAt` | Chamada recebida chegando |
+        | `incoming-claimed` | `sessionId`, `id`, `owner` | Um cliente reclamou a chamada recebida |
+        | `call-reaction` | `sessionId`, `id`, `sender`, `text`, `at` | Reação recebida ou enviada (`sender` vazio = nossa) |
+        | `call-hand` | `sessionId`, `id`, `participant`, `raised` | Estado de "mão levantada" mudou |
+        | `call-peer-video` | `sessionId`, `id`, `active`, `upgrade`, `orientation` | Estado de vídeo do peer mudou (câmera ligada/desligada, ou ele pediu upgrade) |
+        | `call-held` | `sessionId`, `id` | Chamada entrou em hold |
+        | `call-unheld` | `sessionId`, `id` | Hold removido, áudio normal retomado |
+        | `call-picked-up` | `sessionId`, `id` | Bridge anterior fechado; novo agente pode conectar via /webrtc |
+        | `transfer-started` | `sessionId`, `original_call_id`, `transfer_call_id` | Transferência iniciada |
+        | `transfer-completed` | `sessionId`, `original_call_id`, `transfer_call_id` | Peer atendeu; chamada original encerrada |
+        | `transfer-failed` | `sessionId`, `original_call_id`, `transfer_call_id`, `reason` (`rejected`\|`timeout`) | Transferência falhou; unhold automático |
+      parameters:
+        - name: clientId
+          in: query
+          schema: { type: string }
+          description: Identificador do cliente.
+      responses:
+        "200":
+          description: Stream text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }

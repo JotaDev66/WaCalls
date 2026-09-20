@@ -31,6 +31,20 @@ func BuildSenderSubscriptions(ssrc uint32) []byte {
 	return encodeProtobufLengthDelimited(1, inner)
 }
 
+// BuildSenderSubscriptionsMulti concatenates one sender-subscription entry per
+// non-zero SSRC (audio + video). With a single non-zero SSRC it is
+// byte-identical to BuildSenderSubscriptions.
+func BuildSenderSubscriptionsMulti(ssrcs ...uint32) []byte {
+	var out []byte
+	for _, ssrc := range ssrcs {
+		if ssrc == 0 {
+			continue
+		}
+		out = append(out, BuildSenderSubscriptions(ssrc)...)
+	}
+	return out
+}
+
 func BuildSSRCSubscriptionList(selfSsrcs, peerSsrcs []uint32, selfPid, peerPid int) []byte {
 	var entries [][]byte
 	for _, ssrc := range selfSsrcs {

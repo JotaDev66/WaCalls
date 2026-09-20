@@ -1,15 +1,27 @@
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { openCall } from "@/lib/webrtc";
-import { startCall } from "@/services/calls";
+import { startCall, endCall } from "@/services/calls";
+import { useDevices } from "@/stores/devices";
 import { registerOwnConnection } from "@/stores/calls";
 
-export const useStartCall = (sid: string, micId: string | null) =>
-  useMutation({
-    mutationFn: async (vars: { phone: string; record: boolean }) => {
-      const { call } = await startCall(sid, vars.phone, vars.record);
-      const conn = await openCall(sid, call.callId, micId);
-      registerOwnConnection(call.callId, conn);
+export const useStartCall = (sid: string, micId: string | null) => {
+  const camId = useDevices((s) => s.camId);
+  return useMutation({
+    mutationFn: async (vars: { phone: string; record: boolean; video?: boolean }) => {
+      const { call } = await startCall(sid, vars.phone, vars.record, vars.video);
+      try {
+        const conn = await openCall(sid, call.callId, micId, {
+          video: vars.video,
+          camDeviceId: camId,
+        });
+        registerOwnConnection(call.callId, conn);
+      } catch (wrtcErr) {
+        try {
+          await endCall(sid, call.callId);
+        } catch {}
+        throw wrtcErr;
+      }
       return call.callId;
     },
     onError: (e: Error) => {
@@ -19,3 +31,4 @@ export const useStartCall = (sid: string, micId: string | null) =>
       else toast.error(m);
     },
   });
+};

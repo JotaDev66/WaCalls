@@ -7,18 +7,22 @@ import (
 	"sync"
 	"time"
 
-	"wacalls/internal/voip/call"
-	"wacalls/internal/voip/core"
-	"wacalls/internal/voip/signaling"
-	"wacalls/internal/voip/wanode"
-	"wacalls/internal/wa"
-
 	"github.com/mdp/qrterminal/v3"
-	"go.mau.fi/whatsmeow"
-	waBinary "go.mau.fi/whatsmeow/binary"
-	"go.mau.fi/whatsmeow/types"
-	"go.mau.fi/whatsmeow/types/events"
+	"github.com/polymorfa/hypermeow"
+	"github.com/polymorfa/hypermeow/types"
+	"github.com/polymorfa/hypermeow/types/events"
+	meowcaller "github.com/purpshell/meowcaller"
+	"github.com/rs/zerolog"
 )
+
+// meowLogger manda os próprios diagnósticos de chamada/mídia do meowcaller
+// pro stderr (onde o wacalls-run.log já captura tudo mais) — sem isso o
+// meowcaller usa um logger no-op por padrão, deixando todo o pipeline de
+// chamada/mídia invisível.
+func meowLogger() zerolog.Logger {
+	return zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "15:04:05.000"}).
+		Level(zerolog.DebugLevel).With().Timestamp().Logger()
+}
 
 type Session struct {
 	id   string
@@ -27,6 +31,7 @@ type Session struct {
 	log  *slog.Logger
 
 	client *whatsmeow.Client
+	meow   *meowcaller.Client
 	reg    *callRegistry
 
 	mu   sync.Mutex
@@ -40,111 +45,151 @@ func newSession(mgr *SessionManager, id, name string, client *whatsmeow.Client) 
 		mgr:    mgr,
 		log:    mgr.log.With("session", id),
 		client: client,
+		meow:   meowcaller.NewClient(client, meowcaller.WithLogger(meowLogger())),
 		auth:   AuthSnapshot{State: "connecting"},
 		reg:    newCallRegistry(),
 	}
 	client.AddEventHandler(s.handleEvent)
+	s.meow.OnIncomingCall(s.handleIncomingCall)
 	return s
 }
 
-func (s *Session) createCall(callID string) *call.CallManager {
-	cm := call.NewCallManager(wa.NewSocket(s.client), s.log)
-	s.wireCall(cm, callID)
-	s.reg.add(callID, &activeCall{cm: cm})
-	return cm
+// mediaKind devolve "video" pra uma chamada de vídeo e "audio" caso
+// contrário, pros registros do broker e eventos SSE.
+func mediaKind(isVideo bool) string {
+	if isVideo {
+		return "video"
+	}
+	return "audio"
 }
 
-func (s *Session) wireCall(cm *call.CallManager, callID string) {
-	cm.OnIncoming = func(c *call.CallInfo) {
-		s.mgr.broker.upsertCall(CallRecord{
-			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
-			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
-		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid)
+func mapCallPhase(p meowcaller.CallPhase) CallStatus {
+	switch p {
+	case meowcaller.CallPhaseActive:
+		return StatusConnected
+	case meowcaller.CallPhaseEnded:
+		return StatusEnded
+	case meowcaller.CallPhaseCalling:
+		return StatusStarting
+	default:
+		return StatusRinging
 	}
-	cm.OnStateChange = func(c *call.CallInfo) {
-		if c.IsEnded() {
-			s.removeCall(c.CallID)
-			s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
-			return
-		}
-		dir := "outbound"
-		if c.Direction == core.CallDirectionIncoming {
-			dir = "inbound"
-		}
-		existing, _ := s.mgr.broker.getCall(c.CallID)
-		rec := CallRecord{
-			SessionID: s.id, CallID: c.CallID, Direction: dir, Peer: c.PeerJid,
-			StartedAt: time.Now().UnixMilli(), Status: mapStatus(c.StateData.State),
+}
+
+// wireCall conecta os callbacks de ciclo de vida/mídia que toda chamada
+// (recebida ou feita) precisa, e registra ela no registro de chamadas da
+// sessão. direction é "inbound" ou "outbound" — a Call do meowcaller não
+// rastreia isso sozinha, quem chama (startOutgoing / handleIncomingCall) já
+// sabe pelo contexto.
+// extraOnEnd, se não-nil, roda além da contabilidade padrão do broker quando
+// a chamada acaba — doTransfer usa isso pra observar uma perna sainte
+// específica sem um segundo mecanismo de ciclo de vida (OnEnd/OnStateChange
+// do meowcaller só guardam um callback cada, então isso é passado adiante em
+// vez de registrado de novo, o que substituiria silenciosamente o do wireCall).
+func (s *Session) wireCall(c *meowcaller.Call, direction string, extraOnEnd func(reason string)) {
+	callID := c.ID()
+	src := newLiveAudioSource()
+	// videoSink é plugado no meowcaller AGORA, mesmo sem bridge do browser
+	// ainda — senão uma chamada que já nasce em vídeo perde a orientação do
+	// primeiro pacote antes do doWebRTC terminar a negociação WebRTC (ver
+	// orientedVideoSink em bridge.go).
+	videoSink := newOrientedVideoSink()
+	s.reg.add(callID, &activeCall{call: c, src: src, videoSink: videoSink})
+	c.ReceiveVideo(videoSink)
+
+	rec := func(status CallStatus) CallRecord {
+		existing, _ := s.mgr.broker.getCall(callID)
+		r := CallRecord{
+			SessionID: s.id, CallID: callID, Direction: direction, Peer: c.Peer().String(),
+			Media: mediaKind(c.IsVideo()), StartedAt: time.Now().UnixMilli(), Status: status,
 		}
 		if existing != nil {
-			rec.Owner = existing.Owner
-			rec.StartedAt = existing.StartedAt
+			r.Owner = existing.Owner
+			r.StartedAt = existing.StartedAt
 		}
-		s.mgr.broker.upsertCall(rec)
+		return r
 	}
-	cm.OnEnded = func(c *call.CallInfo) {
-		s.removeCall(c.CallID)
-		s.mgr.broker.endCall(c.CallID, string(c.StateData.EndReason))
-	}
-	cm.OnPeerAudio = func(pcm16 []float32) {
-		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+
+	c.OnStateChange(func(p meowcaller.CallPhase) {
+		if p == meowcaller.CallPhaseEnded {
+			s.removeCall(callID)
+			s.mgr.broker.endCall(callID, "ended")
+			if extraOnEnd != nil {
+				extraOnEnd("ended")
+			}
 			return
 		}
-		_ = ac.bridge.WritePCM(pcm16)
-	}
+		s.mgr.broker.upsertCall(rec(mapCallPhase(p)))
+	})
+	c.OnEnd(func(reason string) {
+		s.removeCall(callID)
+		s.mgr.broker.endCall(callID, reason)
+		if extraOnEnd != nil {
+			extraOnEnd(reason)
+		}
+	})
+	c.OnVideoKeyframeRequest(func() {
+		if b, ok := s.reg.bridge(callID); ok {
+			_ = b.RequestKeyframe()
+		}
+	})
+	c.OnReaction(func(r meowcaller.CallReaction) {
+		s.mgr.broker.emitReaction(s.id, callID, r.Sender.String(), r.Emoji)
+	})
+	c.OnHandRaise(func(h meowcaller.HandRaiseState) {
+		s.mgr.broker.emitHandRaise(s.id, callID, h.Participant.String(), h.Raised)
+	})
+	c.OnVideoState(func(v meowcaller.VideoState) {
+		// Só emite o evento (o frontend decide se mostra uma notificação de
+		// aceitar/recusar) — não aceita sozinho. Ver doVideoAccept em
+		// httpapi.go pro aceite explícito.
+		s.mgr.broker.emitPeerVideoState(s.id, callID, v.Active, v.Upgrade, v.Orientation)
+	})
 }
 
-func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool) (string, error) {
-	callID := signaling.GenerateCallID()
-	cm := s.createCall(callID)
-	if err := cm.StartCall(ctx, callID, peer, isVideo); err != nil {
-		s.removeCall(callID)
+// handleIncomingCall é o único ponto de entrada de chamada recebida do
+// meowcaller — substitui o tratamento manual antigo de XML <call>
+// offer/accept/transport/terminate, que o meowcaller agora faz internamente.
+func (s *Session) handleIncomingCall(c *meowcaller.Call) {
+	if max := s.mgr.maxCalls; max > 0 && s.reg.count() >= max {
+		s.log.Info("inbound call rejected: session at capacity", "call_id", c.ID())
+		_ = c.Reject()
+		return
+	}
+	s.wireCall(c, "inbound", nil)
+	s.mgr.broker.upsertCall(CallRecord{
+		SessionID: s.id, CallID: c.ID(), Direction: "inbound", Peer: c.Peer().String(),
+		Media: mediaKind(c.IsVideo()), StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
+	})
+	s.mgr.broker.emitIncoming(s.id, c.ID(), c.Peer().String(), mediaKind(c.IsVideo()))
+}
+
+// extraOnEnd é opcional (nil no caso normal) — ver a doc de wireCall.
+func (s *Session) startOutgoing(ctx context.Context, peer types.JID, isVideo bool, extraOnEnd func(reason string)) (string, error) {
+	c, err := s.meow.CallWithOptions(ctx, peer.String(), meowcaller.CallOptions{Video: isVideo})
+	if err != nil {
 		return "", err
 	}
-	return callID, nil
+	s.wireCall(c, "outbound", extraOnEnd)
+	return c.ID(), nil
 }
 
-func (s *Session) callForEvent(from types.JID, data *waBinary.Node) (*activeCall, bool) {
-	callID := callIDFromNode(wrapCall(from, data))
-	if callID == "" {
-		return nil, false
+// startOutgoingGroup faz uma chamada vinculada a um grupo do WhatsApp
+// (groupJID tipo "1234567890-1234567890@g.us"), tocando pra todo membro
+// atual do grupo.
+func (s *Session) startOutgoingGroup(ctx context.Context, groupJID string, isVideo bool) (string, error) {
+	c, err := s.meow.GroupCallByIDWithOptions(ctx, groupJID, meowcaller.GroupCallOptions{
+		GroupJID: groupJID, Video: isVideo,
+	})
+	if err != nil {
+		return "", err
 	}
-	return s.reg.get(callID)
-}
-
-func (s *Session) onIncomingOffer(ctx context.Context, evt *events.CallOffer) {
-	node := wrapCall(evt.From, evt.Data)
-	callID := callIDFromNode(node)
-	if callID == "" {
-		return
-	}
-	if max := s.mgr.maxCalls; max > 0 && s.reg.count() >= max {
-		s.rejectOffer(ctx, node, evt.From)
-		return
-	}
-	cm := s.createCall(callID)
-	cm.HandleCallOffer(ctx, node, evt.From)
-}
-
-func (s *Session) rejectOffer(ctx context.Context, node *waBinary.Node, from types.JID) {
-	info := signaling.ExtractNodeInfo(node)
-	if info == nil {
-		return
-	}
-	creator := wanode.AttrString(info.InnerNode.Attrs, "call-creator")
-	if creator == "" {
-		creator = from.String()
-	}
-	reject := signaling.BuildRejectStanza(from, info.CallID, wanode.MustJID(creator))
-	_ = wa.NewSocket(s.client).SendNode(ctx, reject)
-	s.log.Info("inbound call rejected: session at capacity", "call_id", info.CallID)
+	s.wireCall(c, "outbound", nil)
+	return c.ID(), nil
 }
 
 func (s *Session) handleEvent(rawEvt any) {
-	ctx := context.Background()
-	switch evt := rawEvt.(type) {
+	switch rawEvt.(type) {
 	case *events.Connected:
 		if id := s.client.Store.ID; id != nil {
 			_ = s.mgr.store.setJID(s.mgr.appCtx, s.id, id.String())
@@ -152,24 +197,6 @@ func (s *Session) handleEvent(rawEvt any) {
 		s.setAuth(AuthSnapshot{State: "open", Paired: true})
 	case *events.LoggedOut:
 		s.setAuth(AuthSnapshot{State: "logged_out", Paired: false})
-	case *events.CallOffer:
-		s.onIncomingOffer(ctx, evt)
-	case *events.CallAccept:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallAccept(ctx, wrapCall(evt.From, evt.Data), evt.From)
-		}
-	case *events.CallTransport:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTransport(ctx, wrapCall(evt.From, evt.Data), evt.From)
-		}
-	case *events.CallTerminate:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTerminate(wrapCall(evt.From, evt.Data))
-		}
-	case *events.CallReject:
-		if ac, ok := s.callForEvent(evt.From, evt.Data); ok {
-			ac.cm.HandleCallTerminate(wrapCall(evt.From, evt.Data))
-		}
 	}
 }
 
@@ -235,7 +262,12 @@ func (s *Session) setBridge(callID string, b *Bridge) {
 		return
 	}
 	if oldB != nil {
-		oldB.Close()
+		// oldB está sendo substituído por um bridge novo pra mesma chamada
+		// (reconexão — reload do browser, instabilidade de rede, ou pickup
+		// em outro lugar), não abandonado. CloseQuiet evita cascatear num
+		// hangup de verdade via OnTerminalICE do oldB, que doWebRTC conecta
+		// a terminateCall.
+		oldB.CloseQuiet()
 	}
 }
 
@@ -244,22 +276,29 @@ func (s *Session) removeCall(callID string) {
 	if !ok {
 		return
 	}
+	if ac.src != nil {
+		_ = ac.src.Close()
+	}
 	if ac.bridge != nil {
 		ac.bridge.Close()
 	}
 }
 
-func (s *Session) terminateCall(callID string, reason core.EndCallReason) {
+func (s *Session) terminateCall(callID string, reason string) {
 	ac, ok := s.reg.get(callID)
 	if !ok {
 		return
 	}
-	_ = ac.cm.EndCall(context.Background(), reason)
+	_ = reason
+	_ = ac.call.Hangup()
 }
 
 func (s *Session) teardownAllCalls() {
 	for _, ac := range s.reg.drain() {
-		_ = ac.cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
+		_ = ac.call.Hangup()
+		if ac.src != nil {
+			_ = ac.src.Close()
+		}
 		if ac.bridge != nil {
 			ac.bridge.Close()
 		}
@@ -270,23 +309,12 @@ func (s *Session) replaceClient(client *whatsmeow.Client) {
 	s.teardownAllCalls()
 	s.client.Disconnect()
 	s.client = client
+	s.meow = meowcaller.NewClient(client, meowcaller.WithLogger(meowLogger()))
 	client.AddEventHandler(s.handleEvent)
+	s.meow.OnIncomingCall(s.handleIncomingCall)
 }
 
 func (s *Session) shutdown() {
 	s.teardownAllCalls()
 	s.client.Disconnect()
-}
-
-func mapStatus(state core.CallState) CallStatus {
-	switch state {
-	case core.CallStateActive:
-		return StatusConnected
-	case core.CallStateEnded:
-		return StatusEnded
-	case core.CallStateInitiating:
-		return StatusStarting
-	default:
-		return StatusRinging
-	}
 }

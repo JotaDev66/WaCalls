@@ -2,13 +2,24 @@ package main
 
 import (
 	"sync"
+	"sync/atomic"
 
-	"wacalls/internal/voip/call"
+	meowcaller "github.com/purpshell/meowcaller"
 )
 
 type activeCall struct {
-	cm     *call.CallManager
+	call   *meowcaller.Call
+	src    *liveAudioSource
 	bridge *Bridge
+	// videoSink é registrado em Call.ReceiveVideo já em wireCall, antes do
+	// bridge WebRTC do browser existir — ver o comentário em
+	// orientedVideoSink (bridge.go) pra saber por quê.
+	videoSink *orientedVideoSink
+	// held controla se bridge.OnBrowserPCM empurra pra src — enquanto true,
+	// os quadros do microfone do browser são descartados em vez de
+	// bufferizados, então o unhold retoma ao vivo em vez de tocar um atraso
+	// acumulado (ver doHold/doUnhold).
+	held atomic.Bool
 }
 
 type callRegistry struct {
@@ -60,6 +71,18 @@ func (r *callRegistry) setBridge(callID string, b *Bridge) (*Bridge, bool) {
 	oldB := ac.bridge
 	ac.bridge = b
 	return oldB, true
+}
+
+// bridge returns the call's current bridge under the registry lock, safe
+// to call concurrently with setBridge.
+func (r *callRegistry) bridge(callID string) (*Bridge, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ac, ok := r.calls[callID]
+	if !ok || ac.bridge == nil {
+		return nil, false
+	}
+	return ac.bridge, true
 }
 
 func (r *callRegistry) drain() []*activeCall {
