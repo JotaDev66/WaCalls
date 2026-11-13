@@ -821,6 +821,11 @@ components:
         peerPhotoUrl:
           type: string
           description: Cached WhatsApp profile-picture URL for the peer, when known
+        peerPhone:
+          type: string
+          description: >-
+            Phone-number JID the offer claimed for a @lid peer (caller_pn). Not verified, live
+            only (not kept in history); `peer` remains the caller's identity.
         startedAt:
           type: integer
           format: int64
@@ -960,6 +965,11 @@ components:
           type: string
         peer:
           type: string
+        peerPhone:
+          type: string
+          description: >-
+            Phone-number JID the offer claims for a @lid peer the session cannot resolve (the
+            offer's caller_pn). Not verified; `peer` remains the caller's identity.
         offeredAt:
           type: integer
           format: int64

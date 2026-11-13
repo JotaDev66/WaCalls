@@ -95,14 +95,15 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		raw, _ := types.ParseJID(c.PeerJid)
 		pj := resolvePeerJID(context.Background(), s.client, raw)
 		peer := pj.String()
+		peerPhone := claimedPhone(pj, c.CallerPn)
 		peerName := resolvePeerName(context.Background(), s.client, pj)
 		photoURL := cachedPhotoURL(context.Background(), s.mgr.photos, s.id, peer)
 		s.mgr.broker.UpsertCall(events.CallRecord{
 			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: peer,
-			PeerName: peerName, PeerPhotoURL: photoURL,
+			PeerName: peerName, PeerPhotoURL: photoURL, PeerPhone: peerPhone,
 			StartedAt: time.Now().UnixMilli(), Status: events.StatusRinging,
 		})
-		s.mgr.broker.EmitIncoming(s.id, c.CallID, peer, peerName, photoURL)
+		s.mgr.broker.EmitIncoming(s.id, c.CallID, peer, peerName, photoURL, peerPhone)
 		s.mgr.tracer.StartCall(c.CallID, telemetry.CallAttrs{Session: s.id, Peer: c.PeerJid, Direction: "inbound"})
 		go s.fetchPeerPhoto(pj, c.CallID)
 	}
@@ -134,6 +135,7 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			rec.Peer = existing.Peer
 			rec.PeerName = existing.PeerName
 			rec.PeerPhotoURL = existing.PeerPhotoURL
+			rec.PeerPhone = existing.PeerPhone
 		}
 		s.mgr.broker.UpsertCall(rec)
 	}

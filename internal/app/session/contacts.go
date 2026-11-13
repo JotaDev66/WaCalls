@@ -62,6 +62,21 @@ func resolvePeerJID(ctx context.Context, cli *whatsmeow.Client, raw types.JID) t
 	return pn
 }
 
+// claimedPhone is the phone-number JID an incoming offer says a @lid caller has (its caller_pn),
+// for a caller the LID store cannot resolve. It is not verified, so it never replaces the peer:
+// it is reported in a separate field, and it is not used for name or photo lookups, history or the
+// LID store (a stored LID↔PN pair would also steer later outbound calls to that number).
+func claimedPhone(peer types.JID, callerPn string) string {
+	if peer.Server != types.HiddenUserServer || callerPn == "" {
+		return ""
+	}
+	pn, err := types.ParseJID(callerPn)
+	if err != nil || pn.Server != types.DefaultUserServer || pn.User == "" {
+		return ""
+	}
+	return pn.ToNonAD().String()
+}
+
 func resolvePeerName(ctx context.Context, cli *whatsmeow.Client, jid types.JID) string {
 	if cli == nil || cli.Store == nil || cli.Store.Contacts == nil {
 		return ""
