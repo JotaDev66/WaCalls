@@ -41,7 +41,10 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 	mediaType := core.CallMediaTypeAudio
 
 	m.mu.Lock()
-	call := NewIncomingCall(callID, peerJid.String(), creator, "", mediaType)
+	// caller_pn: the phone-number JID the offer says the caller has, sent alongside a @lid creator.
+	// Not verified here, so it is reported apart from the caller's identity (see claimedPhone).
+	callerPn := wanode.AttrString(info.InnerNode.Attrs, "caller_pn")
+	call := NewIncomingCall(callID, peerJid.String(), creator, callerPn, mediaType)
 	if callKey != nil {
 		call.EncryptionKey = callKey
 	}

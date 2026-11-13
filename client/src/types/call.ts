@@ -9,6 +9,8 @@ export type CallSummary = {
   peer: string;
   peerName?: string;
   peerPhotoUrl?: string;
+  /** Unverified phone number the offer claimed for a @lid peer. */
+  peerPhone?: string;
   startedAt: number;
   status: CallStatus;
 };
@@ -19,6 +21,8 @@ export type IncomingPayload = {
   peer: string;
   peerName?: string;
   peerPhotoUrl?: string;
+  /** Unverified phone number the offer claimed for a @lid peer. */
+  peerPhone?: string;
   offeredAt: number;
 };
 

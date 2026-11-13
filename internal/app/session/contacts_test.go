@@ -136,6 +136,27 @@ func TestResolvePeerJID(t *testing.T) {
 	}
 }
 
+func TestClaimedPhone(t *testing.T) {
+	lid := types.NewADJID("77770000", 0, 28)
+	lid.Server = types.HiddenUserServer
+	pn := mkJID("5511999998888", types.DefaultUserServer)
+
+	if got := claimedPhone(lid, "5521988887777@s.whatsapp.net"); got != "5521988887777@s.whatsapp.net" {
+		t.Fatalf("an unresolved @lid with caller_pn should report it, got %q", got)
+	}
+	if got := claimedPhone(lid, "5521988887777:3@s.whatsapp.net"); got != "5521988887777@s.whatsapp.net" {
+		t.Fatalf("the device suffix is dropped, got %q", got)
+	}
+	if got := claimedPhone(pn, "5521988887777@s.whatsapp.net"); got != "" {
+		t.Fatalf("a resolved phone-number peer needs no claim, got %q", got)
+	}
+	for _, bad := range []string{"", "123@lid", "not a jid@@"} {
+		if got := claimedPhone(lid, bad); got != "" {
+			t.Fatalf("caller_pn %q is not a phone-number JID and must be ignored, got %q", bad, got)
+		}
+	}
+}
+
 func TestResolvePeerName(t *testing.T) {
 	jid := mkJID("5511", types.DefaultUserServer)
 	cli := &whatsmeow.Client{Store: &store.Device{Contacts: fakeContacts{all: map[types.JID]types.ContactInfo{

@@ -130,12 +130,16 @@ func (b *Broker) EmitSessionQR(sessionID, qr string) {
 	b.broadcast(map[string]any{"type": "session-qr", "sessionId": sessionID, "qr": qr})
 }
 
-func (b *Broker) EmitIncoming(sessionID, id, peer, peerName, peerPhotoURL string) {
-	b.broadcast(map[string]any{
+func (b *Broker) EmitIncoming(sessionID, id, peer, peerName, peerPhotoURL, peerPhone string) {
+	ev := map[string]any{
 		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer,
 		"peerName": peerName, "peerPhotoUrl": peerPhotoURL,
 		"offeredAt": time.Now().UnixMilli(),
-	})
+	}
+	if peerPhone != "" {
+		ev["peerPhone"] = peerPhone
+	}
+	b.broadcast(ev)
 }
 
 func (b *Broker) EmitIncomingClaimed(sessionID, id, owner string) {

@@ -120,6 +120,27 @@ func TestHandleOfferRejectsUndecryptableKey(t *testing.T) {
 	}
 }
 
+func TestHandleOfferCallerPnReachesCall(t *testing.T) {
+	sock := &keyedSock{key: bytes.Repeat([]byte{0x42}, 32)}
+	c := NewClient(sock, slog.Default(), func() []engine.Extension { return nil }, 0,
+		func(string, *CallManager) {}, nil)
+
+	lid := types.NewJID("62440234549366", types.HiddenUserServer)
+	node := offerNodeWithEnc("CALL2", lid)
+	inner := node.Content.([]waBinary.Node)
+	inner[0].Attrs["caller_pn"] = types.NewJID("5511999998888", types.DefaultUserServer)
+	c.HandleOffer(context.Background(), node, lid)
+	defer func() { _ = c.EndCall(context.Background(), "CALL2", core.EndCallReasonUserEnded) }()
+
+	cm, ok := c.Get("CALL2")
+	if !ok {
+		t.Fatal("offer must register a call manager")
+	}
+	if got := cm.CurrentCall().CallerPn; got != "5511999998888@s.whatsapp.net" {
+		t.Fatalf("CallerPn = %q, want the offer's caller_pn", got)
+	}
+}
+
 func TestHandleOfferKeyReachesCall(t *testing.T) {
 	key := bytes.Repeat([]byte{0x42}, 32)
 	sock := &keyedSock{key: key}

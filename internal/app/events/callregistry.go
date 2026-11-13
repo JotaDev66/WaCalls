@@ -21,17 +21,20 @@ const (
 )
 
 type CallRecord struct {
-	SessionID    string     `json:"sessionId"`
-	CallID       string     `json:"callId"`
-	Owner        *string    `json:"owner"`
-	Direction    string     `json:"direction"`
-	Peer         string     `json:"peer"`
-	PeerName     string     `json:"peerName,omitempty"`
-	PeerPhotoURL string     `json:"peerPhotoUrl,omitempty"`
-	StartedAt    int64      `json:"startedAt"`
-	Status       CallStatus `json:"status"`
-	EndedAt      *int64     `json:"endedAt,omitempty"`
-	EndReason    string     `json:"endReason,omitempty"`
+	SessionID    string  `json:"sessionId"`
+	CallID       string  `json:"callId"`
+	Owner        *string `json:"owner"`
+	Direction    string  `json:"direction"`
+	Peer         string  `json:"peer"`
+	PeerName     string  `json:"peerName,omitempty"`
+	PeerPhotoURL string  `json:"peerPhotoUrl,omitempty"`
+	// PeerPhone is the phone-number JID the offer claims for a @lid peer (caller_pn). Unverified;
+	// Peer stays the caller's identity. Live only: not persisted to history.
+	PeerPhone string     `json:"peerPhone,omitempty"`
+	StartedAt int64      `json:"startedAt"`
+	Status    CallStatus `json:"status"`
+	EndedAt   *int64     `json:"endedAt,omitempty"`
+	EndReason string     `json:"endReason,omitempty"`
 }
 
 func OwnerRef(owner string) *string {
